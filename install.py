@@ -26,7 +26,7 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py"]
+HOOKS = ["session_start.py", "game_context.py", "game_route.py", "mcp_guard.py", "mcp_log.py"]
 
 
 def link(src, dst):
@@ -90,6 +90,7 @@ def settings_snippet():
     mcp_log = cmd("mcp_log.py", 10, {"async": True})
     return {"hooks": {
         "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
+        "UserPromptSubmit": [{"hooks": [cmd("game_route.py", 5)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
         "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]}],
         "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]}],

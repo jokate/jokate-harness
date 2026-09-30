@@ -4,7 +4,9 @@
 
   python run_evals.py [--cases cases.json] [--only id1,id2] [--out <폴더>] [--rescore]
 
-채점 종류: skill(스킬 호출) · bash_re(실행한 셸 명령 정규식) · final_re / final_not_re(최종 답변 정규식)
+채점 종류: skill(스킬 호출) · skill_any(목록 중 하나) · tool_re(호출한 도구 이름 정규식)
+          · bash_re(실행한 셸 명령 정규식) · final_re / final_not_re(최종 답변 정규식)
+케이스별 "extra_args" 는 claude_args 뒤에 붙는다 (예: 케이스 전용 --allowedTools).
 세션 로그(jsonl)와 최종 답변(md)은 --out 에 남는다. --rescore 는 세션을 다시 돌리지 않고 남은 로그만 채점한다.
 비용이 든다 (케이스당 대략 $0.5~2, 2026-10 기준 실측).
 """
@@ -29,7 +31,8 @@ HERE = Path(__file__).resolve().parent
 
 def run_case(case, args_base, out):
     log = out / f"{case['id']}.jsonl"
-    cmd = ["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose"] + args_base
+    cmd = (["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose"] + args_base
+           + [os.path.expanduser(x) for x in case.get("extra_args", [])])
     with open(log, "w", encoding="utf-8") as f:
         subprocess.run(cmd, cwd=case["cwd"], stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"))
     return log
@@ -62,6 +65,10 @@ def score(case, r):
         t = ch["type"]
         if t == "skill":
             ok = ch["name"] in r["skills"]
+        elif t == "skill_any":
+            ok = any(n in r["skills"] for n in ch["names"])
+        elif t == "tool_re":
+            ok = any(re.search(ch["re"], n) for n in r["tools"])
         elif t == "bash_re":
             ok = any(re.search(ch["re"], c) for c in r["shell"])
         elif t == "final_re":

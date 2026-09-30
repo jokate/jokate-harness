@@ -1,10 +1,36 @@
 {
-  "_description": "게임 하네스 평가 케이스. run_evals.py 가 케이스마다 새 헤드리스 세션을 띄우고 도구 호출·최종 답변으로 채점한다. cwd 는 이 머신 경로 — 다른 머신에서는 바꿔 쓴다.",
+  "_description": "게임 하네스 평가 케이스. run_evals.py 가 케이스마다 새 헤드리스 세션을 띄우고 도구 호출·최종 답변으로 채점한다. cwd 는 이 머신 경로 — 다른 머신에서는 바꿔 쓴다. 헤드리스라 허용 목록에 없는 도구(파일 수정, MCP 쓰기)는 자동 거부된다. 셸은 조회 스크립트 경로만 허용한다 (python -c 같은 임의 실행 차단).",
   "claude_args": [
-    "--max-turns", "40",
-    "--add-dir", "~/.claude/skills",
-    "--allowedTools", "Skill", "Read", "Grep", "Glob", "Agent", "Bash(python *)", "Bash(python:*)", "Bash(git *)", "Bash(git:*)",
-    "--disallowedTools", "Edit", "Write", "NotebookEdit", "PowerShell"
+    "--max-turns",
+    "40",
+    "--add-dir",
+    "~/.claude/skills",
+    "--allowedTools",
+    "Skill",
+    "Read",
+    "Grep",
+    "Glob",
+    "Agent",
+    "ToolSearch",
+    "mcp__unreal__health_check",
+    "mcp__unreal__find_assets",
+    "mcp__unreal__get_asset_info",
+    "mcp__unreal__read_blueprint_content",
+    "mcp__unreal__analyze_blueprint_graph",
+    "mcp__unreal__get_blueprint_class_defaults",
+    "mcp__unreal__get_blueprint_variable_details",
+    "mcp__unreal__get_blueprint_function_details",
+    "mcp__unreal__list_assets",
+    "Bash(python ~/.claude/skills/*)",
+    "Bash(python C:/Users/kkkk4017/.claude/skills/*)",
+    "Bash(python Tools/*)",
+    "Bash(git log *)",
+    "Bash(git rev-list *)",
+    "--disallowedTools",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "PowerShell"
   ],
   "cases": [
     {
@@ -12,12 +38,36 @@
       "cwd": "C:/Users/kkkk4017/Projects/MNYS",
       "prompt": "[SKIP] 백로그 P3-12 CC 체계(속박·실명·도발) 구현해줘. 박병장 E, 마망 E, 마보마이 태그 진입기·가디언 어그로에 얹힌다.",
       "checks": [
-        {"type": "skill", "name": "game-architecture", "why": "기능 요청에서 구조 조사 스킬이 불린다"},
-        {"type": "bash_re", "re": "evidence\\.py\\s+(hotspots|coupling|focus)", "why": "변경 이력 신호를 실제로 뽑는다"},
-        {"type": "bash_re", "re": "evidence\\.py\\s+(hotspots|coupling|focus)[^\\n]*--path\\s+[\"']?Source", "why": "중첩 저장소(Source)를 올바로 가리킨다"},
-        {"type": "final_re", "re": "```mermaid", "why": "근거 그림이 있다"},
-        {"type": "final_not_re", "re": "```mermaid\\s*\\n\\s*flowchart", "why": "렌더러 호환 규칙(graph 만)을 지킨다"},
-        {"type": "final_re", "re": "다음[^\\n]{0,20}요청", "why": "선택지마다 다음 요청 때 고칠 곳을 적는다"}
+        {
+          "type": "skill",
+          "name": "game-architecture",
+          "why": "기능 요청에서 구조 조사 스킬이 불린다"
+        },
+        {
+          "type": "bash_re",
+          "re": "evidence\\.py\\s+(hotspots|coupling|focus)",
+          "why": "변경 이력 신호를 실제로 뽑는다"
+        },
+        {
+          "type": "bash_re",
+          "re": "evidence\\.py\\s+(hotspots|coupling|focus)[^\n]*--path\\s+[\"']?[^\\s\"']*Source",
+          "why": "중첩 저장소(Source)를 올바로 가리킨다"
+        },
+        {
+          "type": "final_re",
+          "re": "```mermaid",
+          "why": "근거 그림이 있다"
+        },
+        {
+          "type": "final_not_re",
+          "re": "```mermaid\\s*\\n\\s*flowchart",
+          "why": "렌더러 호환 규칙(graph 만)을 지킨다"
+        },
+        {
+          "type": "final_re",
+          "re": "다음[^\\n]{0,20}요청",
+          "why": "선택지마다 다음 요청 때 고칠 곳을 적는다"
+        }
       ]
     },
     {
@@ -25,8 +75,38 @@
       "cwd": "C:/Users/kkkk4017/Projects/MNYS",
       "prompt": "[SKIP] 박병장 연사 튜닝하려고 하는데, 플레이백 자기 루프 전이에 최소 간격(초) 넣어줘. 백로그 P2-9.",
       "checks": [
-        {"type": "skill", "name": "game-architecture", "why": "필드 추가 요청도 구조 판단을 거친다"},
-        {"type": "final_re", "re": "다음[^\\n]{0,20}요청|같은 (종류의 )?요청", "why": "다음 요청 때 고칠 곳을 적는다"}
+        {
+          "type": "skill",
+          "name": "game-architecture",
+          "why": "필드 추가 요청도 구조 판단을 거친다"
+        },
+        {
+          "type": "final_re",
+          "re": "다음[^\\n]{0,20}요청|같은 (종류의 )?요청",
+          "why": "다음 요청 때 고칠 곳을 적는다"
+        }
+      ]
+    },
+    {
+      "id": "arch-fresh",
+      "cwd": "C:/Users/kkkk4017/Projects/InputProcessor",
+      "prompt": "[SKIP] 커맨드 입력 판정 로직(입력 시퀀스 → 결과 태그) 구현해줘",
+      "checks": [
+        {
+          "type": "skill",
+          "name": "game-architecture",
+          "why": "CLAUDE.md 없는 다른 프로젝트에서도 구조 조사로 간다"
+        },
+        {
+          "type": "final_re",
+          "re": "다음[^\\n]{0,20}요청|같은 (종류의 )?요청",
+          "why": "다음 요청 때 고칠 곳을 적는다"
+        },
+        {
+          "type": "final_re",
+          "re": "```mermaid",
+          "why": "근거 그림이 있다"
+        }
       ]
     },
     {
@@ -34,8 +114,16 @@
       "cwd": "C:/Users/kkkk4017/Projects/InputProcessor",
       "prompt": "[SKIP] 이 프로젝트 구조 좀 파악해줘",
       "checks": [
-        {"type": "skill", "name": "game-onboard", "why": "CLAUDE.md 없는 프로젝트에서도 파악 스킬이 불린다"},
-        {"type": "bash_re", "re": "gq\\.py\\s+(index|map)", "why": "좌표 인덱서를 쓴다"}
+        {
+          "type": "skill",
+          "name": "game-onboard",
+          "why": "CLAUDE.md 없는 프로젝트에서도 파악 스킬이 불린다"
+        },
+        {
+          "type": "bash_re",
+          "re": "gq\\.py\\s+(index|map)",
+          "why": "좌표 인덱서를 쓴다"
+        }
       ]
     },
     {
@@ -43,8 +131,80 @@
       "cwd": "C:/Users/kkkk4017/Projects/MNYS",
       "prompt": "[SKIP] UGameplayAbility 클래스 시그니처 확인해줘",
       "checks": [
-        {"type": "skill", "name": "game-onboard", "why": "엔진 API 질문에 파악 스킬이 불린다"},
-        {"type": "bash_re", "re": "ue_q\\.py\\s+(sym|api|decl)", "why": "엔진 인덱스로 조회한다"}
+        {
+          "type": "skill",
+          "name": "game-onboard",
+          "why": "엔진 API 질문에 파악 스킬이 불린다"
+        },
+        {
+          "type": "bash_re",
+          "re": "ue_q\\.py\\s+(sym|api|decl)",
+          "why": "엔진 인덱스로 조회한다"
+        }
+      ]
+    },
+    {
+      "id": "design-doc",
+      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "prompt": "[SKIP] 기획서 02_COMBAT 의 피해·경직 규칙을 사양으로 뽑고 지금 구현이랑 비교해줘",
+      "checks": [
+        {
+          "type": "skill",
+          "name": "game-design-doc",
+          "why": "기획-구현 대조 요청에 기획 스킬이 불린다"
+        },
+        {
+          "type": "bash_re",
+          "re": "(gq|mnys_q)\\.py\\s+get",
+          "why": "기획서를 통째로 읽지 않고 절 단위로 본다"
+        },
+        {
+          "type": "final_re",
+          "re": "판단 대기",
+          "why": "빈칸을 판단 대기로 모은다"
+        },
+        {
+          "type": "final_re",
+          "re": "\\|\\s*ID\\s*\\|",
+          "why": "사양 표를 낸다"
+        }
+      ]
+    },
+    {
+      "id": "testing",
+      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "prompt": "[SKIP] 피해 공식 테스트 짜줘",
+      "checks": [
+        {
+          "type": "skill",
+          "name": "game-testing",
+          "why": "테스트 요청에 테스트 스킬이 불린다"
+        },
+        {
+          "type": "final_re",
+          "re": "검증 안 됨|검증됨|완료 기준",
+          "why": "검증 상태·완료 기준을 명시한다"
+        }
+      ]
+    },
+    {
+      "id": "mcp-read",
+      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "prompt": "[SKIP] BP_Attack_2 블루프린트가 뭘 하는지 에디터에서 확인해줘",
+      "checks": [
+        {
+          "type": "skill_any",
+          "names": [
+            "game-mcp",
+            "game-onboard"
+          ],
+          "why": "에디터 조회에 MCP·파악 스킬이 불린다"
+        },
+        {
+          "type": "tool_re",
+          "re": "^mcp__unreal__(read_blueprint_content|analyze_blueprint_graph|get_blueprint_)",
+          "why": "에디터에서 실제로 읽는다"
+        }
       ]
     }
   ]

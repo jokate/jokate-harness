@@ -41,6 +41,7 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 |---|---|---|
 | SessionStart | `session_start.py` | `.claude/session_start.json` (없으면 아무것도 안 함) |
 | SessionStart | `game_context.py` | 없음 — `.uproject`/Unity 프로젝트면 엔진·소스 저장소·스킬 라우팅 주입 |
+| UserPromptSubmit | `game_route.py` | 없음 — 게임 프로젝트에서 요청을 키워드로 분류해 맞는 스킬을 요청 옆에 안내 (규칙은 스크립트의 RULES) |
 | PreToolUse `mcp__.*` | `mcp_guard.py` | `.claude/mcp_guards.json` (없으면 아무것도 안 함) |
 | PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl` |
 
