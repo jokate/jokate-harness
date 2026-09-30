@@ -18,7 +18,8 @@ skills/
   game-patterns/      2층 · 패턴 카탈로그 + UE/Unity 관용구
   game-testing/       3층 · 검증 기준·테스트
   game-mcp/           4층 · 에디터 MCP 운용
-install.py / .bat    스킬·훅 설치, settings 조각 출력 (bat 는 더블클릭용 래퍼)
+install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
+bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 ```
 
 ## 빠른 시작
@@ -29,7 +30,10 @@ install.py / .bat    스킬·훅 설치, settings 조각 출력 (bat 는 더블�
 python install.py            # 또는 --link (저장소 수정이 바로 반영)
 ```
 
-출력된 hooks 조각을 `~/.claude/settings.json` 에 합치고, 프로젝트에서 `/game-bootstrap`.
+출력된 hooks 조각을 `~/.claude/settings.json` 에 합친다.
+
+그다음 **프로젝트마다 한 번**: 프로젝트 폴더를 `bootstrap.bat` 위에 끌어다 놓는다 (또는 Claude Code 에서 `/game-bootstrap`).
+프로젝트 규칙 파일이 없으면 스킬이 거의 불리지 않는다 — 평가로 확인한 사실이다 ([검증 기록](docs/VERIFICATION.md)).
 
 ## 요구
 

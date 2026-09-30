@@ -58,26 +58,28 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 출력된 `hooks` 조각을 `~/.claude/settings.json` 에 합친다 (자동으로 고치지 않는다).
 
-**프로젝트마다**
+**프로젝트마다 — 이걸 안 하면 하네스가 사실상 꺼져 있다 (4절)**
 
-Claude Code 에서 `/game-bootstrap` → 감지 결과 확인 → 규칙 모듈 선택 → 생성 승인.
-사내 저장소면 개인 선호는 `CLAUDE.local.md`(커밋 안 함), 팀 합의만 `CLAUDE.md`.
+- 빠른 길: 프로젝트 폴더를 `bootstrap.bat` 위에 끌어다 놓는다. `CLAUDE.local.md`(커밋 안 됨)와 인덱스 갱신 선언이 생긴다.
+  팀 규칙으로 커밋하려면 `bootstrap.bat <폴더> --team` → `CLAUDE.md`. 미리보기는 `--dry-run`.
+- 대화형: Claude Code 에서 `/game-bootstrap` → 감지 결과 확인 → 선택 모듈(답변 형식, 가설 우선 등) 고르기 → 생성 승인.
+- 이미 있는 파일은 덮어쓰지 않는다. 사내 저장소면 개인 선호는 `CLAUDE.local.md`, 팀 합의만 `CLAUDE.md`.
 
 ## 4. 언제 무엇이 적용되나
 
-2026-10-01 헤드리스 세션으로 실측한 결과 (`docs/VERIFICATION.md`).
+2026-10-01 헤드리스 세션 평가로 실측한 결과 (`docs/VERIFICATION.md`).
 
 | 구성 | 적용 시점 | 상태 |
 |---|---|---|
 | 스킬 목록 등록 | 세션 시작 | 검증됨 |
-| 라우팅 안내 (`[game-harness]` 줄) | 세션 시작, `.uproject`/Unity 프로젝트일 때만 | 검증됨. 단독으로는 CLAUDE.md 없는 프로젝트의 트리거를 못 올렸다 |
+| **프로젝트 규칙 파일** (CLAUDE.md / CLAUDE.local.md) | 세션 시작 | **스킬 호출의 실질적 스위치.** 있으면 9/9 케이스에서 맞는 스킬이 불렸다 |
+| 라우팅 안내 (`[game-harness]` 줄) | 세션 시작, `.uproject`/Unity 프로젝트일 때만 | 동작하지만 규칙 파일 없이는 트리거를 못 올렸다. 소스 저장소 위치 안내로 남겨 둔다 |
 | 프로젝트 인덱스 갱신 | 세션 시작, `.claude/session_start.json` 이 있을 때만 | 검증됨 |
-| 스킬 자동 트리거 | 요청이 description 과 맞을 때 모델이 판단 | **확률적.** 첫 평가에서 4건 중 CC·엔진·테스트는 걸렸고, 작은 필드 추가·CLAUDE.md 없는 프로젝트는 안 걸림 |
-| `game-bootstrap` | 직접 호출할 때만 | 설계상 |
+| `game-bootstrap` | 직접 호출할 때만 (`bootstrap.bat` 도 같은 일) | 설계상 |
 | MCP 가드·로그 | MCP 호출마다 | 기존부터 동작 |
 
-실측에서 얻은 가장 중요한 사실: **실질적인 스위치는 프로젝트 CLAUDE.md 였다.** CLAUDE.md 에 "기능 요청은 구조부터" 규칙이 있는
-프로젝트는 스킬이 안 불려도 구조 판단으로 갔고, 없는 프로젝트는 스킬도 안 불렸다. 그래서 새 프로젝트는 bootstrap 부터.
+가장 중요한 실측 사실: **훅이 넣는 안내(세션 시작·요청 시점 모두)와 유저 레벨 `~/.claude/CLAUDE.md` 는 스킬 호출을 올리지 못했다.
+프로젝트 규칙 파일은 CLAUDE.md 든 CLAUDE.local.md 든 올렸다.** 그래서 새 프로젝트는 bootstrap 부터.
 
 ## 5. Claude 에게 지시하는 법
 
@@ -157,7 +159,7 @@ Claude Code 에서 `/game-bootstrap` → 감지 결과 확인 → 규칙 모듈 
 
 | 실패 | 고칠 곳 |
 |---|---|
-| 스킬이 안 불림 | 그 스킬 description 앞쪽 트리거 문구, 또는 프로젝트 CLAUDE.md 에 라우팅 한 줄 |
+| 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 그 파일의 라우팅 줄, 그다음 스킬 description 트리거 문구 |
 | 스킬은 불렸는데 절차를 건너뜀 | SKILL.md 본문 (references 는 안 읽힐 수 있다 — 핵심 규칙은 본문으로) |
 | 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 |
 | 조회 도구가 틀린 좌표·누락 | `gq.py` / `ue_q.py` 스크립트, 제외 경로는 `.claude/gq.json` |
