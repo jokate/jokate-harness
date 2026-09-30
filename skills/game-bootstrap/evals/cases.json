@@ -88,14 +88,13 @@
       ]
     },
     {
-      "id": "arch-fresh",
-      "cwd": "C:/Users/kkkk4017/Projects/InputProcessor",
+      "id": "arch-new",
       "prompt": "[SKIP] 커맨드 입력 판정 로직(입력 시퀀스 → 결과 태그) 구현해줘",
       "checks": [
         {
           "type": "skill",
           "name": "game-architecture",
-          "why": "CLAUDE.md 없는 다른 프로젝트에서도 구조 조사로 간다"
+          "why": "bootstrap 만 한 새 프로젝트에서 구조 조사로 간다"
         },
         {
           "type": "final_re",
@@ -107,17 +106,59 @@
           "re": "```mermaid",
           "why": "근거 그림이 있다"
         }
-      ]
+      ],
+      "fixture": {
+        "from": "C:/Users/kkkk4017/Projects/InputProcessor",
+        "copy": [
+          "InputProcessor.uproject",
+          "Source",
+          "Config"
+        ],
+        "bootstrap": true
+      }
     },
     {
-      "id": "onboard-fresh",
-      "cwd": "C:/Users/kkkk4017/Projects/InputProcessor",
+      "id": "onboard-new",
       "prompt": "[SKIP] 이 프로젝트 구조 좀 파악해줘",
       "checks": [
         {
           "type": "skill",
           "name": "game-onboard",
-          "why": "CLAUDE.md 없는 프로젝트에서도 파악 스킬이 불린다"
+          "why": "bootstrap 만 한 새 프로젝트에서 파악 스킬이 불린다"
+        },
+        {
+          "type": "bash_re",
+          "re": "gq\\.py\\s+(index|map)",
+          "why": "좌표 인덱서를 쓴다"
+        }
+      ],
+      "fixture": {
+        "from": "C:/Users/kkkk4017/Projects/InputProcessor",
+        "copy": [
+          "InputProcessor.uproject",
+          "Source",
+          "Config"
+        ],
+        "bootstrap": true
+      }
+    },
+    {
+      "id": "onboard-ue53",
+      "fixture": {
+        "from": "C:/Users/kkkk4017/Projects/MoonU",
+        "copy": [
+          "MoonU.uproject",
+          "Source",
+          "Config"
+        ],
+        "bootstrap": true
+      },
+      "prompt": "[SKIP] 이 프로젝트 구조 좀 파악해줘",
+      "checks": [
+        {
+          "type": "skill",
+          "name": "game-onboard",
+          "why": "다른 엔진 버전(5.3) 새 프로젝트에서도 파악 스킬이 불린다"
         },
         {
           "type": "bash_re",
@@ -155,8 +196,8 @@
         },
         {
           "type": "bash_re",
-          "re": "(gq|mnys_q)\\.py\\s+get",
-          "why": "기획서를 통째로 읽지 않고 절 단위로 본다"
+          "re": "(gq|mnys_q)\\.py\\s+(get|map|find)",
+          "why": "기획서를 좌표 인덱스로 찾는다"
         },
         {
           "type": "final_re",

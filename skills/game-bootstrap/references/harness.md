@@ -31,10 +31,6 @@
                  {"type": "command", "command": "<PYTHON>",
                   "args": ["<HOME>/.claude/hooks/game_context.py"], "timeout": 15}]}
     ],
-    "UserPromptSubmit": [
-      {"hooks": [{"type": "command", "command": "<PYTHON>",
-                  "args": ["<HOME>/.claude/hooks/game_route.py"], "timeout": 5}]}
-    ],
     "PreToolUse": [
       {"matcher": "mcp__.*",
        "hooks": [{"type": "command", "command": "<PYTHON>",

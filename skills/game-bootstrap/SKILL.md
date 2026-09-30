@@ -41,7 +41,6 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 |---|---|---|
 | SessionStart | `session_start.py` | `.claude/session_start.json` (없으면 아무것도 안 함) |
 | SessionStart | `game_context.py` | 없음 — `.uproject`/Unity 프로젝트면 엔진·소스 저장소·스킬 라우팅 주입 |
-| UserPromptSubmit | `game_route.py` | 없음 — 게임 프로젝트에서 요청을 키워드로 분류해 맞는 스킬을 요청 옆에 안내 (규칙은 스크립트의 RULES) |
 | PreToolUse `mcp__.*` | `mcp_guard.py` | `.claude/mcp_guards.json` (없으면 아무것도 안 함) |
 | PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl` |
 
@@ -58,6 +57,9 @@ AskUserQuestion 으로 묻는다 (기본값 없이 — 고르는 것은 사용�
 SVN 은 `CLAUDE.local.md` 를 무시하려면 `svn:ignore` 속성이 필요하다 — VCS 변경이라 사용자가 직접 하도록 명령만 알려준다.
 
 ### 4. 생성 (승인 후)
+
+`python ~/.claude/skills/game-bootstrap/scripts/bootstrap.py <루트> [--team] [--modules <인터뷰에서 고른 선택 모듈>]` 로 만든다.
+먼저 `--dry-run` 으로 미리보기를 보여주고 승인받는다. 기본은 `CLAUDE.local.md`(커밋 안 됨), 팀 규칙이면 `--team`.
 
 | 파일 | 내용 |
 |---|---|

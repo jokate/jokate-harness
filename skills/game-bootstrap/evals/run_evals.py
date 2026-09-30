@@ -7,6 +7,7 @@
 채점 종류: skill(스킬 호출) · skill_any(목록 중 하나) · tool_re(호출한 도구 이름 정규식)
           · bash_re(실행한 셸 명령 정규식) · final_re / final_not_re(최종 답변 정규식)
 케이스별 "extra_args" 는 claude_args 뒤에 붙는다 (예: 케이스 전용 --allowedTools).
+케이스별 "fixture" 는 원본 프로젝트 일부를 --out/fixtures/<id> 로 복사하고(선택: bootstrap.py 적용) 거기서 돌린다.
 세션 로그(jsonl)와 최종 답변(md)은 --out 에 남는다. --rescore 는 세션을 다시 돌리지 않고 남은 로그만 채점한다.
 비용이 든다 (케이스당 대략 $0.5~2, 2026-10 기준 실측).
 """
@@ -14,6 +15,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -29,12 +31,32 @@ for _s in (sys.stdout, sys.stderr):
 HERE = Path(__file__).resolve().parent
 
 
+def prepare_fixture(case, out):
+    """"fixture": {"from": 원본, "copy": [항목...], "bootstrap": true} — 원본을 건드리지 않고 사본에서 돌린다."""
+    fx = case.get("fixture")
+    if not fx:
+        return case["cwd"]
+    dst = out / "fixtures" / case["id"]
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.mkdir(parents=True)
+    src = Path(fx["from"])
+    for item in fx["copy"]:
+        s = src / item
+        (shutil.copytree if s.is_dir() else shutil.copy2)(s, dst / item)
+    if fx.get("bootstrap"):
+        subprocess.run([sys.executable, str(HERE.parent / "scripts" / "bootstrap.py"), str(dst)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return str(dst)
+
+
 def run_case(case, args_base, out):
     log = out / f"{case['id']}.jsonl"
+    cwd = prepare_fixture(case, out)
     cmd = (["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose"] + args_base
            + [os.path.expanduser(x) for x in case.get("extra_args", [])])
     with open(log, "w", encoding="utf-8") as f:
-        subprocess.run(cmd, cwd=case["cwd"], stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"))
+        subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"))
     return log
 
 
