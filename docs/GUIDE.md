@@ -63,6 +63,8 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 빠른 길: 프로젝트 폴더를 `bootstrap.bat` 위에 끌어다 놓는다. `CLAUDE.local.md`(커밋 안 됨)와 인덱스 갱신 선언이 생긴다.
   팀 규칙으로 커밋하려면 `bootstrap.bat <폴더> --team` → `CLAUDE.md`. 미리보기는 `--dry-run`.
 - 대화형: Claude Code 에서 `/game-bootstrap` → 감지 결과 확인 → 선택 모듈(답변 형식, 가설 우선 등) 고르기 → 생성 승인.
+- **이미 CLAUDE.md 가 있는 프로젝트**: `bootstrap.bat <폴더> --routing-only` — 스킬 라우팅 한 절만 `CLAUDE.local.md` 로 넣는다.
+  기본값대로 만들면 기존 규칙과 겹치거나(전제·범위·정직) 충돌한다(조회 도구). 미리보기(`--dry-run`)가 겹침을 경고한다.
 - 이미 있는 파일은 덮어쓰지 않는다. 사내 저장소면 개인 선호는 `CLAUDE.local.md`, 팀 합의만 `CLAUDE.md`.
 
 ## 4. 언제 무엇이 적용되나

@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """프로젝트 최소 세팅 (비대화식). /game-bootstrap 스킬의 생성 단계이자 단독 실행용.
 
-  python bootstrap.py [프로젝트경로] [--team] [--modules 답변 형식,가설 우선] [--dry-run]
+  python bootstrap.py [프로젝트경로] [--team] [--modules 답변 형식,가설 우선] [--only 스킬 라우팅] [--dry-run]
+
+기존 CLAUDE.md 가 있는 프로젝트는 --only 로 겹치지 않는 모듈만 넣는다 (최소: 스킬 라우팅).
 
 만드는 것 (이미 있으면 건너뛴다 — 덮어쓰지 않는다):
   CLAUDE.local.md (기본, VCS 에 안 올라감) 또는 CLAUDE.md (--team)
@@ -55,13 +57,19 @@ def describe_vcs(root):
     return f"{k}. 소스 저장소: {where}. 커밋·푸시는 요청받을 때만."
 
 
-def render(root, kind, marker, modules):
+def render(root, kind, marker, modules, only=None, fname="CLAUDE.md"):
     title, sections = template_sections()
     engine = {"ue": "Unreal Engine", "unity": "Unity"}.get(kind, "미감지")
     ver = engine_version(kind, marker) if marker else "?"
-    lines = [title.replace("<프로젝트>", root.name), ""]
+    title = title.replace("<프로젝트>", root.name).replace("CLAUDE.md", fname)
+    if only is not None:
+        title = title.replace("작업 규칙", "추가 규칙 (game-harness)")
+    lines = [title, ""]
     for name, tag, body in sections:
-        if not (tag == "필수" or tag == "선택: 권장" or name in modules):
+        if only is not None:
+            if name not in only:
+                continue
+        elif not (tag == "필수" or tag == "선택: 권장" or name in modules):
             continue
         body = body.replace("<사람/팀>", "사용자")  # 템플릿: "<사람/팀>다"
         body = re.sub(r"- 엔진: <[^>]+>", f"- 엔진: {engine} {ver}", body)
@@ -86,6 +94,8 @@ def main():
     ap.add_argument("project", nargs="?", default=".")
     ap.add_argument("--team", action="store_true", help="CLAUDE.md 로 만든다 (VCS 에 커밋할 팀 규칙)")
     ap.add_argument("--modules", default="", help="추가할 [선택] 모듈 이름, 쉼표 구분 (예: 답변 형식,가설 우선)")
+    ap.add_argument("--only", default=None, help="이 모듈만 넣는다, 쉼표 구분 (기존 규칙 파일이 있을 때. 예: 스킬 라우팅)")
+    ap.add_argument("--routing-only", action="store_true", help="= --only 스킬 라우팅 (기존 규칙 파일이 있는 프로젝트용, bat 에서 쓰기 쉬운 ASCII 플래그)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -97,9 +107,16 @@ def main():
 
     rules = root / ("CLAUDE.md" if a.team else "CLAUDE.local.md")
     other = root / ("CLAUDE.local.md" if a.team else "CLAUDE.md")
-    if other.exists():
-        print(f"  참고: {other.name} 가 이미 있다. 두 파일은 합쳐서 로드된다 — 중복 규칙이 없는지 확인.")
-    text = render(root, kind, marker, modules)
+    if a.routing_only:
+        a.only = "스킬 라우팅"
+    only = {m.strip() for m in a.only.split(",") if m.strip()} if a.only is not None else None
+    names = [n for n, _, _ in template_sections()[1]]
+    if only and (only - set(names)):
+        raise SystemExit(f"없는 모듈: {', '.join(sorted(only - set(names)))}. 템플릿 모듈: {', '.join(names)}")
+    if other.exists() and only is None:
+        print(f"  참고: {other.name} 가 이미 있다. 두 파일은 합쳐서 로드된다 — 규칙이 겹치거나 충돌하면 "
+              f"--only 로 필요한 모듈만 넣는다 (최소: --routing-only). 모듈: {', '.join(names)}")
+    text = render(root, kind, marker, modules, only, rules.name)
     write(rules, text, a.dry_run)
     decl = {"commands": [{"run": ["~/.claude/skills/game-onboard/scripts/gq.py", "index", "--quiet"], "timeout": 60}]}
     write(root / ".claude" / "session_start.json", json.dumps(decl, ensure_ascii=False, indent=2) + "\n", a.dry_run)

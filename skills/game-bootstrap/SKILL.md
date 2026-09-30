@@ -59,6 +59,7 @@ SVN 은 `CLAUDE.local.md` 를 무시하려면 `svn:ignore` 속성이 필요하�
 ### 4. 생성 (승인 후)
 
 `python ~/.claude/skills/game-bootstrap/scripts/bootstrap.py <루트> [--team] [--modules <인터뷰에서 고른 선택 모듈>]` 로 만든다.
+기존 CLAUDE.md 가 있으면 겹치는 모듈을 표로 보여주고 `--routing-only`(또는 `--only <모듈>`)를 제안한다.
 먼저 `--dry-run` 으로 미리보기를 보여주고 승인받는다. 기본은 `CLAUDE.local.md`(커밋 안 됨), 팀 규칙이면 `--team`.
 
 | 파일 | 내용 |
