@@ -19,6 +19,7 @@ skills/
   game-testing/       3층 · 검증 기준·테스트
   game-mcp/           4층 · 에디터 MCP 운용
 setup.bat             한 번에: 설치 + 훅 등록 + 프로젝트 세팅 + 사용법 출력
+uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 ```
@@ -36,6 +37,15 @@ PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하�
 
 나눠서 하려면 `install.bat`(머신) + `bootstrap.bat`(프로젝트). 프로젝트 규칙 파일이 없으면 스킬이 거의 불리지 않는다 —
 평가로 확인한 사실이다 ([검증 기록](docs/VERIFICATION.md)).
+
+## 제거
+
+`uninstall.bat` 더블클릭 — 또는 세팅했던 프로젝트 폴더를 그 위에 끌어다 놓는다. 미리보기는 `--dry-run`.
+
+- 머신: `~/.claude/skills/game-*`(링크만 끊는다), 설치한 훅 파일, `settings.json` 의 해당 훅 항목(원본은 `.bak`, 다른 훅은 그대로)
+- 프로젝트: `CLAUDE.local.md` 는 `CLAUDE.local.md.removed` 로 이름만 바꾼다. 인덱스 선언·HandOff·프로젝트 인덱스는 지운다. `CLAUDE.md` 는 건드리지 않는다
+- 한 프로젝트에서만 빼려면 `uninstall.bat "<폴더>" --project-only`
+- 이 저장소 폴더는 남는다. 다시 쓰려면 `setup.bat`
 
 ## 요구
 

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-rem 한 번에 세팅. 더블클릭하거나 프로젝트 폴더를 이 파일 위에 끌어다 놓는다. 하는 일은 setup.py 참고.
+rem 제거. 더블클릭하거나 프로젝트 폴더를 이 파일 위에 끌어다 놓는다. 하는 일은 uninstall.py 참고.
 
 cd /d "%~dp0"
 
@@ -15,5 +15,5 @@ if not defined PY (
     exit /b 1
 )
 
-%PY% "%~dp0setup.py" %*
+%PY% "%~dp0uninstall.py" %*
 exit /b %ERRORLEVEL%
