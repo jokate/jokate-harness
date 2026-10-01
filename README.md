@@ -18,22 +18,24 @@ skills/
   game-patterns/      2층 · 패턴 카탈로그 + UE/Unity 관용구
   game-testing/       3층 · 검증 기준·테스트
   game-mcp/           4층 · 에디터 MCP 운용
+setup.bat             한 번에: 설치 + 훅 등록 + 프로젝트 세팅 + 사용법 출력
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 ```
 
 ## 빠른 시작
 
-`install.bat` 더블클릭 (Windows). 또는
+`setup.bat` 더블클릭 (Windows) — 또는 게임 프로젝트 폴더를 `setup.bat` 위에 끌어다 놓는다. 한 번에:
 
-```
-python install.py            # 또는 --link (저장소 수정이 바로 반영)
-```
+1. 스킬·훅을 `~/.claude` 에 설치하고 `settings.json` 에 훅을 등록한다 (원본은 `settings.json.bak`)
+2. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다)
+3. 사용법을 출력한다
 
-출력된 hooks 조각을 `~/.claude/settings.json` 에 합친다.
+PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하다 — 다른 프로젝트를 추가할 때도 같은 파일.
+그 뒤에는 그 프로젝트에서 Claude Code 를 **새로** 열고 평소처럼 요청하면 된다.
 
-그다음 **프로젝트마다 한 번**: 프로젝트 폴더를 `bootstrap.bat` 위에 끌어다 놓는다 (또는 Claude Code 에서 `/game-bootstrap`).
-프로젝트 규칙 파일이 없으면 스킬이 거의 불리지 않는다 — 평가로 확인한 사실이다 ([검증 기록](docs/VERIFICATION.md)).
+나눠서 하려면 `install.bat`(머신) + `bootstrap.bat`(프로젝트). 프로젝트 규칙 파일이 없으면 스킬이 거의 불리지 않는다 —
+평가로 확인한 사실이다 ([검증 기록](docs/VERIFICATION.md)).
 
 ## 요구
 

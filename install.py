@@ -6,7 +6,9 @@
   python install.py --link     # 스킬을 저장소로 링크 (Windows 정션 / 그 외 심볼릭 링크)
   python install.py --dry-run  # 무엇을 할지만 출력
 
-settings.json 은 고치지 않는다. 출력된 조각을 직접 합친다.
+  python install.py --apply-settings  # settings.json 에 훅까지 등록 (setup.bat 이 쓰는 방식)
+
+--apply-settings 없이는 settings.json 을 고치지 않는다. 출력된 조각을 직접 합친다.
 같은 이름이 이미 있으면 건너뛴다 (--force 로 덮어쓰기, 기존 것은 .bak 로 남긴다).
 """
 import argparse
@@ -100,6 +102,42 @@ def settings_snippet():
     }}
 
 
+def apply_settings(dry):
+    """settings.json 의 hooks 에 빠진 훅만 추가한다. 기존 항목은 건드리지 않는다. 원본은 settings.json.bak 으로 남긴다."""
+    path = CLAUDE / "settings.json"
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except ValueError as e:
+        print(f"  ! settings.json 을 읽지 못했다 ({e}). 고치지 않는다 — 아래 조각을 직접 합친다.")
+        return False
+    hooks = settings.setdefault("hooks", {})
+    added = []
+    for event, groups in settings_snippet()["hooks"].items():
+        cur = hooks.setdefault(event, [])
+        have = {os.path.basename(arg) for g in cur for h in g.get("hooks", []) for arg in h.get("args", [])}
+        have |= {n for g in cur for h in g.get("hooks", []) for n in HOOKS if n in str(h.get("command", ""))}
+        for g in groups:
+            new = [h for h in g["hooks"] if os.path.basename(h["args"][0]) not in have]
+            if not new:
+                continue
+            same = [c for c in cur if c.get("matcher") == g.get("matcher")]
+            if same:
+                same[0].setdefault("hooks", []).extend(new)
+            else:
+                cur.append({**g, "hooks": new})
+            added += [f"{event}:{os.path.basename(h['args'][0])}" for h in new]
+    if not added:
+        print("  = settings.json 훅 이미 등록됨")
+        return True
+    print("  + settings.json 훅 등록:", ", ".join(added))
+    if not dry:
+        if path.exists():
+            shutil.copy2(path, str(path) + ".bak")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
 def check_settings():
     try:
         s = (CLAUDE / "settings.json").read_text(encoding="utf-8")
@@ -113,11 +151,16 @@ def main():
     ap.add_argument("--link", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--apply-settings", action="store_true", help="settings.json 에 훅을 직접 등록한다 (백업 후, 빠진 것만)")
     a = ap.parse_args()
     print("스킬 →", CLAUDE / "skills")
     install_skills(a)
     print("훅 →", CLAUDE / "hooks")
     install_hooks(a)
+    if a.apply_settings:
+        print("설정 →", CLAUDE / "settings.json")
+        if apply_settings(a.dry_run):
+            return 0
     missing = check_settings()
     if missing:
         print("\n~/.claude/settings.json 에 등록 안 된 훅:", ", ".join(missing))
