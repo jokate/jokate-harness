@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Markdown(+Mermaid) → 단일 HTML. SVN 처럼 .md 를 렌더하지 않는 환경에서 브라우저로 연다.
 
-  python render.py <입력.md> [-o 출력.html] [--js-dir <폴더>]
+  python render.py <입력.md> [-o 출력.html] [--js-dir <폴더>] [--open]
 
 기본은 CDN 의 marked·mermaid 를 쓴다. 사내망에서 CDN 이 막히면 두 파일을 받아 둔 폴더를
 --js-dir 로 준다 (marked.min.js, mermaid.min.js). 스크립트를 못 불러오면 원문을 그대로 보인다.
@@ -11,7 +11,9 @@
 import argparse
 import html
 import json
+import os
 import sys
+import webbrowser
 from pathlib import Path
 
 CDN = {"marked": "https://cdn.jsdelivr.net/npm/marked@12/marked.min.js",
@@ -49,6 +51,7 @@ def main():
     ap.add_argument("src")
     ap.add_argument("-o", "--out")
     ap.add_argument("--js-dir")
+    ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
     a = ap.parse_args()
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
@@ -61,6 +64,14 @@ def main():
     out.write_text(PAGE.format(title=html.escape(title), raw=html.escape(md), md_json=json.dumps(md).replace("</", "<\\/"),
                                marked=js["marked"], mermaid=js["mermaid"]), encoding="utf-8")
     print(out)
+    if a.open:
+        try:
+            if os.name == "nt":
+                os.startfile(str(out.resolve()))  # noqa: S606 — 기본 브라우저로 연다
+            else:
+                webbrowser.open(out.resolve().as_uri())
+        except OSError as e:
+            print(f"열지 못했다 ({e}). 위 경로를 브라우저로 직접 연다.")
     return 0
 
 

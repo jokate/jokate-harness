@@ -76,8 +76,13 @@ description: 게임 프로젝트(UE / Unity)에서 기능을 구현하거나 구
 3. **신호 표** — hotspot·co-change 상위 (evidence.py 출력 그대로)
 4. 이벤트·델리게이트·SO 채널 흐름이 핵심이면 sequence 다이어그램 1장 추가
 
-형식: Mermaid 가 원본. GitHub/GitLab 은 `.md` 그대로, SVN 등 렌더링 안 되는 곳은
-`python ~/.claude/skills/game-architecture/scripts/render.py <파일.md>` 로 단일 HTML 을 만든다. 파일은 사용자가 위치를 정할 때만 저장한다.
+**그림은 반드시 렌더해서 보여 준다.** Claude Code 대화창은 Mermaid 를 그리지 않고 코드로만 보인다 — 코드 블록만 내면 사용자는 그림을 못 본다.
+1. 답변 전체(아래 출력 형식 그대로, mermaid 블록 포함)를 `<프로젝트>/Saved/ClaudeArch/<YYYYMMDD>-<주제>.md` 로 저장한다 (Unity 는 `Library/ClaudeArch/`. 프로젝트 인덱스와 같은, VCS 가 무시하는 폴더다).
+2. `python ~/.claude/skills/game-architecture/scripts/render.py <그 파일.md> --open` — 단일 HTML 을 만들고 브라우저로 연다.
+3. 대화창에는 mermaid 코드를 다시 붙이지 않는다. 선택지 요약(각 세 줄)과 HTML 경로만 적는다.
+
+파일 쓰기가 막혀 있으면(읽기 전용 세션) mermaid 블록을 대화에 내고, 그림으로 보려면 저장 후 render.py 를 돌리라고 한 줄 적는다.
+사용자가 다른 위치를 정하면 거기에 저장한다.
 
 ## 5. 멈춘다
 
