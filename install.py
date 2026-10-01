@@ -26,7 +26,7 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py"]
+HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "handoff.py", "stuck_watch.py"]
 
 
 def link(src, dst):
@@ -88,11 +88,15 @@ def settings_snippet():
         return d
 
     mcp_log = cmd("mcp_log.py", 10, {"async": True})
+    stuck = cmd("stuck_watch.py", 5)
     return {"hooks": {
-        "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
+        "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15), cmd("handoff.py", 10)]}],
+        "UserPromptSubmit": [{"hooks": [cmd("handoff.py", 180)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
-        "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]}],
-        "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]}],
+        "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
+                        {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [stuck]}],
+        "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
+                               {"matcher": "Bash|PowerShell", "hooks": [stuck]}],
     }}
 
 

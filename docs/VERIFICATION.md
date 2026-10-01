@@ -62,6 +62,24 @@ CLAUDE.md 없는 프로젝트(InputProcessor)에서 스킬이 전혀 불리지 �
 헤드리스가 허용 목록 밖 도구를 자동 거부해 **파일은 바뀌지 않았다**(수정 시각 확인). 이후 평가는 원본 대신 fixture 사본에서 돌리고,
 셸 허용을 조회 스크립트 경로로 좁혔다. 읽기 전용 명령(ls·find·cat)은 허용 목록 밖이어도 실행된다.
 
+## 2026-10-01 — 매몰 감지와 HandOff (`stuck_watch.py`, `handoff.py`)
+
+Claude Code 2.1.285, 헤드리스. 임계값을 2로 낮춘 임시 프로젝트에서.
+
+| 확인 | 결과 |
+|---|---|
+| 같은 파일 2회 수정 → 경고 | PostToolUse 훅의 `systemMessage` 가 사용자 채널 알림(`system/informational`, notice)으로 나옴 |
+| 셸 명령 연속 2회 실패 → 경고 | Bash 의 0 아닌 종료 코드에서 PostToolUseFailure 발화, 같은 알림 |
+| `[RESET]` → HandOff 작성 | UserPromptSubmit 훅이 `.claude/handoff.md` 를 쓰고 프롬프트를 막음, 안내문이 사용자에게 나옴. 짧은 세션 15초 |
+| 긴 세션 (기록 5.3MB → 발췌 81KB) | haiku 80초. 형식은 지켰으나 수치 1건 틀림, 기록에 없는 문장 1건 — 읽고 나서 `/clear` |
+| 다음 세션 주입 | SessionStart 가 문서를 넣고 `handoff.used.md` 로 바꿈. 새 세션이 '원래 요청'을 그대로 되읽음 |
+| 실제 `~/.claude/settings.json` 등록 후 | 위 경고·작성 재확인 |
+
+첫 판 HandOff 는 도구 호출을 못 봐서 끝난 일을 "남은 일"로 적었다 → 발췌에 도구 호출 한 줄(실패 표시 포함)을 넣었다.
+
+검증 안 됨: 데스크톱 앱·대화형 터미널에서 알림이 어떻게 보이는지 · `/clear`·`/compact` 뒤 주입(헤드리스는 새 세션 시작으로만 확인) ·
+임계값(5·3)이 실제 매몰을 잘 가르는지 · HandOff 로 시작한 세션이 실제로 매몰에서 벗어나는지.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

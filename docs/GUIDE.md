@@ -120,6 +120,18 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 구현 후 "새 컨텍스트로 이 diff 리뷰해라". 단, 리뷰 지적을 전부 따르면 과설계로 간다.
 - 스킬을 콕 집어 부르고 싶으면 이름을 말한다 ("game-architecture 로"). 자동 트리거는 확률적이다.
 
+### 매몰됐을 때 — `[RESET]`
+
+매몰된 모델은 자기 매몰을 못 알아챈다. 그래서 감지와 요약을 세션 밖에 둔다.
+
+1. `[매몰 신호]` 경고가 뜨거나(같은 파일 5회 수정, 셸 명령 연속 3회 실패) 답이 이상하다 싶으면 `[RESET]` 을 친다.
+2. 훅이 대화 기록을 별도 모델(haiku)에 넘겨 `<프로젝트>/.claude/handoff.md` 를 쓴다 (긴 세션은 1분 남짓). 세션의 모델은 관여하지 않는다.
+3. 문서를 읽어 보고 `/clear`. 새 세션이 그 문서로 시작하고, 작업을 잇기 전에 무엇을 할지 먼저 확인받는다.
+
+- 임계값: `<프로젝트>/.claude/stuck_watch.json` 에 `{"edit": 8, "fail": 4}`. 0 이면 끈다.
+- 한계: 반복이 없는 방향 이탈은 카운터가 못 잡는다 — 사람이 건다. HandOff 는 요약이라 틀릴 수 있다 — `/clear` 전에 읽는다.
+- `.claude/handoff.md`, `handoff.used.md` 는 커밋하지 않는다.
+
 ## 6. 요청 템플릿
 
 **기능 구현**
@@ -166,6 +178,8 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 |
 | 조회 도구가 틀린 좌표·누락 | `gq.py` / `ue_q.py` 스크립트, 제외 경로는 `.claude/gq.json` |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
+| 매몰을 놓쳤다 / 경고가 너무 잦다 | `stuck_watch.py` 의 `SIGNALS` 에 신호 한 줄, 임계값은 프로젝트 `.claude/stuck_watch.json` |
+| HandOff 가 틀리거나 빠뜨림 | `handoff.py` 의 `INSTRUCTION` (형식), `extract` (무엇을 넘기나) |
 | 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `run_evals.py` |
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.
