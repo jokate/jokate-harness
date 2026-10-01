@@ -1,4 +1,4 @@
-# game-harness
+# jokate-harness
 
 게임 프로젝트(Unreal Engine / Unity)용 Claude Code 하네스. 어느 프로젝트에 들어가도
 엔진·프로젝트·기획을 좌표로 빠르게 파악하고, 기능 요청에서 한 기능에 매몰되지 않고
