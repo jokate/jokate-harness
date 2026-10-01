@@ -80,6 +80,35 @@ def install_hooks(a):
             shutil.copy2(src, dst)
 
 
+RULES_BEGIN = "<!-- game-harness:begin (install.py 가 관리한다. 고치려면 저장소의 rules/common.md) -->"
+RULES_END = "<!-- game-harness:end -->"
+
+
+def rules_block_span(text):
+    i = text.find("<!-- game-harness:begin")
+    j = text.find(RULES_END)
+    return (i, j + len(RULES_END)) if i != -1 and j > i else None
+
+
+def install_rules(a):
+    """rules/common.md 를 ~/.claude/CLAUDE.md 의 표시 구간에 넣는다. 구간 밖의 내용은 건드리지 않는다."""
+    src = REPO / "rules" / "common.md"
+    if not src.is_file():
+        return
+    dst = CLAUDE / "CLAUDE.md"
+    block = f"{RULES_BEGIN}\n{src.read_text(encoding='utf-8').strip()}\n{RULES_END}"
+    cur = dst.read_text(encoding="utf-8") if dst.exists() else ""
+    span = rules_block_span(cur)
+    new = cur[:span[0]] + block + cur[span[1]:] if span else (cur.rstrip() + "\n\n" if cur.strip() else "") + block + "\n"
+    if new == cur:
+        print("  = CLAUDE.md 공용 규칙")
+        return
+    print(f"  + {dst} 공용 규칙 ({'갱신' if span else '추가'})")
+    if not a.dry_run:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(new, encoding="utf-8")
+
+
 def settings_snippet():
     py = sys.executable
     h = str(CLAUDE / "hooks")
@@ -157,6 +186,8 @@ def main():
     install_skills(a)
     print("훅 →", CLAUDE / "hooks")
     install_hooks(a)
+    print("공용 규칙 →", CLAUDE / "CLAUDE.md")
+    install_rules(a)
     if a.apply_settings:
         print("설정 →", CLAUDE / "settings.json")
         if apply_settings(a.dry_run):

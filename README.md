@@ -20,6 +20,7 @@ skills/
   game-mcp/           4층 · 에디터 MCP 운용
 setup.bat             한 번에: 설치 + 훅 등록 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
+rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 ```

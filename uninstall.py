@@ -35,7 +35,7 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 sys.path.insert(0, str(REPO))
-from install import HOOKS  # noqa: E402
+from install import HOOKS, rules_block_span  # noqa: E402
 
 
 def is_link(p):
@@ -107,6 +107,23 @@ def clean_settings(dry):
     if not dry:
         shutil.copy2(path, str(path) + ".bak")
         path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def remove_rules(dry):
+    path = CLAUDE / "CLAUDE.md"
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8")
+    span = rules_block_span(text)
+    if not span:
+        return
+    rest = (text[:span[0]].rstrip() + "\n" + text[span[1]:].lstrip()).strip()
+    print(f"  - {path} 공용 규칙 구간" + (" (남는 내용이 없어 파일도 지운다)" if not rest else ""))
+    if not dry:
+        if rest:
+            path.write_text(rest + "\n", encoding="utf-8")
+        else:
+            path.unlink()
 
 
 def remove_tree(p, dry, note=""):
@@ -184,6 +201,7 @@ def main():
         remove_hooks(a.dry_run)
         print("설정 →", CLAUDE / "settings.json")
         clean_settings(a.dry_run)
+        remove_rules(a.dry_run)
         remove_tree(CLAUDE / "cache" / "stuck", a.dry_run)
         ue = CLAUDE / "cache" / "ue_index"
         if a.purge:
