@@ -469,6 +469,7 @@ def declared_matrix(declared, sizes, focus, limit):
 
 class App:
     def __init__(self, root):
+        ue_q.engine_source.cache_clear()  # 웹뷰가 떠 있는 동안 저장한 엔진 경로(index_build --engine-root)도 반영
         self.root, kind, _ = gq.detect(root) if root else (None, None, None)
         if self.root is None:
             self.root, kind = Path(root).resolve(), None
@@ -481,6 +482,28 @@ class App:
             for src in cindex.view_sources(self.root, kind):
                 self.sources[src.name] = src
         self.events = _harness_events()
+        self.sig = self.signature()
+
+    def index_files(self):
+        """소스가 읽는 인덱스 파일. 엔진 쪽 경로는 엔진 경로에 따라 달라서 매번 다시 푼다."""
+        ue_q.engine_source.cache_clear()
+        paths = [gq.index_dir(self.root, self.kind) / "meta.json"] if self.root else []
+        if self.kind == "ue":
+            paths.append(ue_q.db_path(self.root))
+        if cindex is not None:
+            paths += [cindex.db_for(s, self.root, self.kind) for s in ("project", "engine")]
+        return [p for p in paths if p]
+
+    def signature(self):
+        """인덱스 파일의 있음·수정 시각·크기. 웹뷰를 띄운 뒤 인덱스를 만들거나 다시 만들면 바뀐다."""
+        out = []
+        for p in self.index_files():
+            try:
+                st = p.stat()
+                out.append((str(p), st.st_mtime_ns, st.st_size))
+            except OSError:
+                out.append((str(p), None, None))
+        return tuple(out)
 
     def info(self):
         return {"root": str(self.root), "kind": self.kind,
@@ -598,6 +621,10 @@ def make_handler(state):
             if host not in ("127.0.0.1", "localhost", "::1"):
                 return self._send(403, b"forbidden host", "text/plain")
             app = state["app"]
+            if u.path == "/api/info" and app.signature() != app.sig:
+                # 소스의 있음/없음·연결은 App 을 만들 때 정해진다 → 인덱스가 바뀌었으면 다시 만든다 (화면을 새로 열 때마다 확인)
+                app = state["app"] = App(str(app.root))
+                print("인덱스가 바뀌어 다시 읽었다 · 소스 " + ", ".join(s.name for s in app.sources.values() if s.available), flush=True)
             if u.path == "/api/projects":
                 body = {"current": str(app.root), "projects": recent_projects(app.events, app.root)}
                 return self._send(200, json.dumps(body, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")

@@ -170,6 +170,7 @@ clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트�
 10. RIFF 는 clangd 버전과 묶인 형식이다. 리더(`clangd_riff.py`)는 버전 20(clangd 20.1~23.1, 검증), 19(소스 비교), 21(llvm main, 소스만 보고 짬 — 미검증)을 읽는다. 모르는 버전이면 `--format yaml` 로 돌린다.
 11. `--mode bg` 는 오류 줄 수와 `.generated.h` 관련 오류를 세지 못한다 (clangd 로그에 진단이 안 나온다). 샤드의 HadErrors 표시로 "오류 있던 TU" 만 센다 — 0 이 아니면 indexer 모드로 한 번 돌려 원인을 본다.
 9. `--filter` 는 LLVM 정규식(POSIX ERE)이라 `(?i)` 같은 플래그가 없다. 기본 필터는 구분자 `/`·`\` 와 드라이브 문자 대소문자를 둘 다 받게 만든다.
+12. **Windows: 다른 프로세스가 연 DB 는 바꿔치기가 안 된다.** SQLite 는 파일을 FILE_SHARE_DELETE 없이 열어, 웹뷰가 떠 있거나 조회 중이면 `build` 의 새 DB 바꿔치기(os.replace)가 거부된다. 그때는 SQLite backup API 로 내용을 기존 파일에 덮어쓴다 (`swap_in` — DB 크기만큼 복사라 바꿔치기보다 느리다).
 
 ## 7. 검증 상태
 
