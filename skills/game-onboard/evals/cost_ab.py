@@ -51,8 +51,10 @@ def sys_b():
     return SYS_A + f"""
 추가로 인덱스 조회 CLI 가 있다 (프로젝트 폴더에서 실행):
 - `{py} {s}/cindex.py <명령> <이름>` — clangd 의미 인덱스. 명령: sym · refs · callers · callees · bases · derived · overrides ·
-  members · impact · file. `--db project`(기본) = 프로젝트 TU + 그것이 포함한 엔진 헤더, `--db engine` = 엔진 TU 전체.
-  같은 이름이 여럿이면 A::B 로 좁힌다. 출력은 4KB 에서 끊긴다 (--full 로 푼다).
+  members · impact · file. 기본으로 프로젝트와 엔진 인덱스를 같이 본다 — 엔진 클래스도 이름 그대로 묻는다.
+  bases·derived·overrides 는 끝까지 따라간 트리를 한 번에 준다. impact 는 파생·재정의·참조 함수·파일 (타입이면 멤버 사용 포함).
+  이름이 정확히 맞지 않으면 비슷한 후보만 보여 준다 → 그중 하나로 다시. 같은 이름이 여럿이면 A::B 로 좁힌다.
+  출력은 4KB 에서 끊긴다 (--full 로 푼다).
 - `{py} {s}/ue_q.py sym|api <이름>` — 엔진 선언 좌표·시그니처 (정규식 인덱스).
 - `{py} {s}/gq.py sym <이름>` — 프로젝트 선언 좌표.
 인덱스는 grep 을 대체하지 않는다 — 문자열·주석·설정은 rg."""

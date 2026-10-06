@@ -20,15 +20,16 @@
   python cindex.py refs <이름> [--kind decl|def|ref]
   python cindex.py callers <이름>           # 이 심볼을 참조하는 함수 (참조의 Container 기준)
   python cindex.py callees <이름>           # 이 함수 안에서 참조하는 함수·메서드
-  python cindex.py bases <이름> · derived <이름> · overrides <이름>
+  python cindex.py bases <이름> · derived <이름> · overrides <이름>   # 전 단계 트리 (--depth N 으로 제한)
   python cindex.py members <클래스>         # 멤버와 선언 줄 원문 (clangd 는 멤버 시그니처를 기록하지 않는다)
-  python cindex.py impact <이름>            # 바꾸면 같이 볼 곳: 파생 타입·재정의·참조하는 함수·파일·모듈
+  python cindex.py impact <이름>            # 바꾸면 같이 볼 곳: 파생 타입·재정의(전 단계)·참조하는 함수·파일·모듈 (타입이면 멤버 사용 포함)
   python cindex.py file <경로 조각>          # 파일에 선언된 심볼
   python cindex.py eval                      # 정규식 인덱스와 대조 + 질의 세트 (index_view.py 검증 탭과 같은 계산)
 
 인덱스 위치: --scope project → UE Saved/ClaudeIndex/clangd.sqlite (그 외 .claude/index/clangd.sqlite)
             --scope engine  → ~/.claude/cache/ue_index/<엔진경로>/clangd.sqlite (ue.sqlite 옆)
---db engine|project|<경로> 로 조회할 인덱스를 고른다 (기본 project, 없으면 engine).
+조회는 기본으로 있는 인덱스를 모두 같이 본다 (프로젝트 + 엔진, 심볼 ID 로 합침). --db engine|project|<경로> 면 그 하나만.
+이름이 정확히 맞지 않으면 추측하지 않고 비슷한 이름 후보를 보여 준다. bases·derived·overrides 는 끝까지 따라간다 (--depth N).
 clangd-indexer 위치: --indexer > 환경 변수 CLANGD_INDEXER > PATH > ~/.claude/tools/clangd/bin
 clangd(--mode bg) 위치: --clangd > 환경 변수 CLANGD > PATH > ~/.claude/tools/clangd/bin > clangd-indexer 옆
 출력은 기본 4KB 에서 끊는다 (--full 로 푼다).
@@ -913,18 +914,26 @@ class Index:
                 "deprecated": bool((r[14] or 0) & FLAG_DEPRECATED), "refs": r[15], "module": r[16] or "",
                 "abs_path": r[17], "abs_def_path": r[18], "tpl_args": r[19], "doc": r[20]}
 
-    def find(self, name, limit=200, kinds=None):
+    def find_exact(self, name, kinds=None):
         name = name.strip()
         rows = self.q(self.SYM + "WHERE s.qname = ? OR (s.name = ? AND ? NOT LIKE '%::%')", (name, name, name))
-        if not rows:
-            rows = self.q(self.SYM + "WHERE s.name LIKE ? OR s.qname LIKE ? LIMIT ?", (f"%{name}%", f"%{name}%", limit * 4))
         out = [self.row(r) for r in rows]
-        if kinds:
-            out = [s for s in out if s["kind"] in kinds]
-        pref = {k: i for i, k in enumerate(TYPE_KINDS + FUNC_KINDS)}
-        out.sort(key=lambda s: (s["name"].lower() != name.split("::")[-1].lower(), pref.get(s["kind"], 50),
-                                s["tpl_args"] != "", len(s["scope"]), s["path"]))
-        return out[:limit]
+        return [s for s in out if s["kind"] in kinds] if kinds else out
+
+    def find_fuzzy(self, name, limit=200, kinds=None):
+        name = name.strip()
+        rows = self.q(self.SYM + "WHERE s.name LIKE ? OR s.qname LIKE ? LIMIT ?", (f"%{name}%", f"%{name}%", limit * 4))
+        out = [self.row(r) for r in rows]
+        return [s for s in out if s["kind"] in kinds] if kinds else out
+
+    def find(self, name, limit=200, kinds=None):
+        """정확히 맞는 것(한정 이름 또는 이름)이 있으면 그것만, 없으면 부분 일치. 웹뷰 검색이 쓴다."""
+        out = self.find_exact(name, kinds) or self.find_fuzzy(name, limit, kinds)
+        return rank(out, name)[:limit]
+
+    def file_syms(self, pattern, limit):
+        return [self.row(r) for r in self.q(self.SYM + "WHERE df.rel LIKE ? ORDER BY df.rel, s.decl_line LIMIT ?",
+                                            (f"%{pattern}%", limit))]
 
     def by_id(self, sid):
         r = self.q(self.SYM + "WHERE s.id = ?", (sid,))
@@ -938,11 +947,11 @@ class Index:
         return out
 
     def refs(self, sid, mask=None, limit=500):
-        rows = self.q("SELECT r.kind, f.rel, f.root, r.line, r.col, r.container, f.path FROM refs r "
-                      "LEFT JOIN files f ON f.id=r.file WHERE r.sym=? ORDER BY f.rel, r.line LIMIT ?", (sid, limit * 3))
-        out = [{"kind": k, "path": ("[E] " if root == "engine" else "") + (rel or ""), "line": ln, "col": c,
-                "container": cont, "abs_path": ap} for k, rel, root, ln, c, cont, ap in rows if not mask or k & mask]
-        return out[:limit]
+        rows = self.q("SELECT r.kind, f.rel, f.root, r.line, r.col, r.container, f.path, f.module FROM refs r "
+                      "LEFT JOIN files f ON f.id=r.file WHERE r.sym=? AND (? = 0 OR (r.kind & ?) != 0) "
+                      "ORDER BY f.rel, r.line LIMIT ?", (sid, mask or 0, mask or 0, limit))
+        return [{"kind": k, "path": ("[E] " if root == "engine" else "") + (rel or ""), "line": ln, "col": c,
+                 "container": cont, "abs_path": ap, "module": mod or ""} for k, rel, root, ln, c, cont, ap, mod in rows]
 
     def callers(self, sid):
         rows = self.q("SELECT container, COUNT(*) FROM refs WHERE sym=? AND (kind & ?) != 0 GROUP BY container "
@@ -987,6 +996,124 @@ class Index:
         return self.related(sid, BASE_OF, True)
 
 
+def rank(syms, name):
+    pref = {k: i for i, k in enumerate(TYPE_KINDS + FUNC_KINDS)}
+    last = name.strip().split("::")[-1].lower()
+    return sorted(syms, key=lambda s: (s["name"].lower() != last, pref.get(s["kind"], 50), s["tpl_args"] != "",
+                                       len(s["scope"]), s["path"]))
+
+
+class MultiIndex:
+    """프로젝트 범위 + 엔진 범위 인덱스를 한 번에 본다 (기본). 심볼 ID 는 clangd USR 해시라 두 인덱스에서 같다 → ID 로 합치고,
+    참조는 위치로 중복을 뺀다. 엔진 TU 의 참조는 엔진 인덱스에만, 프로젝트 TU 의 참조는 프로젝트 인덱스에만 있어서
+    한쪽만 보면 호출자·참조가 빠지고, 없는 이름을 비슷한 이름으로 잘못 고른다 (2026-10-06 탐색 비용 A/B 에서 드러남)."""
+
+    def __init__(self, ixs):
+        self.ixs = ixs
+        self.path = " + ".join(str(i.path) for i in ixs)
+        self.meta = ixs[0].meta
+
+    @staticmethod
+    def _merge(lists):
+        out = {}
+        for s in (x for lst in lists for x in lst):
+            cur = out.get(s["id"])
+            if cur is None or (not cur["def_path"] and s["def_path"]):
+                out[s["id"]] = s
+        return list(out.values())
+
+    def find_exact(self, name, kinds=None):
+        return self._merge(ix.find_exact(name, kinds) for ix in self.ixs)
+
+    def find_fuzzy(self, name, limit=200, kinds=None):
+        return self._merge(ix.find_fuzzy(name, limit, kinds) for ix in self.ixs)
+
+    def find(self, name, limit=200, kinds=None):
+        return rank(self.find_exact(name, kinds) or self.find_fuzzy(name, limit, kinds), name)[:limit]
+
+    def file_syms(self, pattern, limit):
+        return sorted(self._merge(ix.file_syms(pattern, limit) for ix in self.ixs), key=lambda s: (s["path"], s["line"] or 0))[:limit]
+
+    def by_id(self, sid):
+        found = [s for s in (ix.by_id(sid) for ix in self.ixs) if s]
+        return self._merge([found])[0] if found else None
+
+    def names(self, ids):
+        return {sid: (self.by_id(sid) if sid and sid != NULL_ID else None) for sid in ids}
+
+    def refs(self, sid, mask=None, limit=500):
+        seen, out = set(), []
+        for ix in self.ixs:
+            for r in ix.refs(sid, mask, 1_000_000):
+                k = (r["path"], r["line"], r["col"], r["kind"])
+                if k not in seen:
+                    seen.add(k)
+                    out.append(r)
+        out.sort(key=lambda r: (r["path"], r["line"] or 0))
+        return out[:limit]
+
+    def callers(self, sid):
+        n = {}
+        for r in self.refs(sid, REF, 1_000_000):
+            n[r["container"]] = n.get(r["container"], 0) + 1
+        return [(self.by_id(c) if c != NULL_ID else None, k) for c, k in sorted(n.items(), key=lambda x: -x[1])]
+
+    def caller_sites(self, sid, limit):
+        first, n = {}, {}
+        for r in self.refs(sid, REF, 1_000_000):
+            n[r["container"]] = n.get(r["container"], 0) + 1
+            first.setdefault(r["container"], r)
+        top = sorted(n.items(), key=lambda x: -x[1])[:limit]
+        return [(self.by_id(c) if c != NULL_ID else None, k, first[c]) for c, k in top]
+
+    def members(self, s):
+        return sorted(self._merge(ix.members(s) for ix in self.ixs), key=lambda m: (m["path"], m["line"] or 0))
+
+    def callees(self, sid):
+        best = {}
+        for ix in self.ixs:
+            for x, k in ix.callees(sid):
+                if x and k > best.get(x["id"], (None, 0))[1]:
+                    best[x["id"]] = (x, k)
+        return sorted(best.values(), key=lambda p: -p[1])
+
+    def related(self, sid, predicate, forward):
+        return self._merge(ix.related(sid, predicate, forward) for ix in self.ixs)
+
+    def bases(self, sid):
+        return self.related(sid, BASE_OF, False)
+
+    def derived(self, sid):
+        return self.related(sid, BASE_OF, True)
+
+
+def tree(ix, sid, predicate, forward, max_depth=0):
+    """관계를 끝까지 따라간다 (깊이 우선, 들여쓰기용 깊이 포함). [(깊이, 심볼)] — 같은 심볼은 한 번만."""
+    seen, out = {sid}, []
+
+    def walk(cur, d):
+        if max_depth and d > max_depth:
+            return
+        for x in sorted(ix.related(cur, predicate, forward), key=lambda s: s["scope"] + s["name"]):
+            if x["id"] in seen:
+                continue
+            seen.add(x["id"])
+            out.append((d, x))
+            walk(x["id"], d + 1)
+    walk(sid, 1)
+    return out
+
+
+def tree_lines(title, items):
+    if not items:
+        return [f"## {title} 0"]
+    per = {}
+    for d, _ in items:
+        per[d] = per.get(d, 0) + 1
+    head = f"## {title} {len(items)} (" + " · ".join(f"{d}단계 {n}" for d, n in sorted(per.items())) + ")"
+    return [head] + [f"  {'  ' * (d - 1)}{fmt(x)}" for d, x in items]
+
+
 class LineCache:
     """참조마다 그 줄 원문을 붙인다 — 위치만 주면 에이전트가 파일을 다시 연다 (references/indexing-research.md)."""
 
@@ -1022,43 +1149,37 @@ def impact_lines(ix, s, limit):
     """이 심볼을 바꾸면 같이 봐야 할 곳: 파생 타입(3단계), 재정의, 참조하는 함수, 참조가 있는 파일·모듈."""
     out = []
     if s["kind"] in TYPE_KINDS:
-        seen, frontier = {}, [s["id"]]
-        for depth in range(1, 4):
-            nxt = []
-            for sid in frontier:
-                for d in ix.derived(sid):
-                    if d["id"] not in seen:
-                        seen[d["id"]] = (depth, d)
-                        nxt.append(d["id"])
-            frontier = nxt
-        out.append(f"## 파생 타입 {len(seen)}")
-        out += [f"  {'  ' * (dep - 1)}{fmt(d)}" for dep, d in sorted(seen.values(), key=lambda x: x[0])[:limit]]
+        out += tree_lines("파생 타입 (전 단계)", tree(ix, s["id"], BASE_OF, True)[:limit * 2])
     if s["kind"] in FUNC_KINDS:
-        seen, frontier = {}, [s["id"]]
-        for depth in range(1, 4):
-            nxt = []
-            for sid in frontier:
-                for d in ix.related(sid, OVERRIDDEN_BY, True):
-                    if d["id"] not in seen:
-                        seen[d["id"]] = (depth, d)
-                        nxt.append(d["id"])
-            frontier = nxt
-        out.append(f"## 재정의한 쪽 {len(seen)} (3단계까지)")
-        out += [f"  {'  ' * (dep - 1)}{fmt(d)}" for dep, d in sorted(seen.values(), key=lambda x: x[0])[:limit]]
-    callers = [(x, n) for x, n in ix.callers(s["id"])]
-    out.append(f"## 참조하는 함수·범위 {len(callers)}")
+        out += tree_lines("재정의한 쪽 (전 단계)", tree(ix, s["id"], OVERRIDDEN_BY, True)[:limit * 2])
+    # 타입이면 멤버(메서드·필드) 사용도 센다 — Peer->Tick() 처럼 멤버만 부르는 곳도 그 타입을 바꾸면 영향받는다
+    ids = [s["id"]] + ([m["id"] for m in ix.members(s)] if s["kind"] in TYPE_KINDS else [])
+    refs = [r for i in ids for r in ix.refs(i, REF, 1_000_000)]
+    by_fn = {}
+    for r in refs:
+        by_fn[r["container"]] = by_fn.get(r["container"], 0) + 1
+    callers = [(ix.by_id(c) if c != NULL_ID else None, n) for c, n in sorted(by_fn.items(), key=lambda x: -x[1])]
+    member_note = " (타입 이름 + 멤버 사용)" if len(ids) > 1 else ""
+    out.append(f"## 참조하는 함수·범위 {len(callers)}{member_note}")
     out += [f"  {n:>4}× {fmt(x)}" for x, n in callers[:limit]]
-    rows = ix.q("SELECT f.module, f.rel, COUNT(*) FROM refs r JOIN files f ON f.id=r.file WHERE r.sym=? AND (r.kind & ?) != 0 "
-                "GROUP BY f.id ORDER BY COUNT(*) DESC", (s["id"], REF))
-    mods = {}
-    for m, _, n in rows:
-        mods[m or "(모듈 없음)"] = mods.get(m or "(모듈 없음)", 0) + n
-    out.append(f"## 참조가 있는 파일 {len(rows)} · 모듈 {len(mods)}: " + ", ".join(f"{m} {n}" for m, n in sorted(mods.items(), key=lambda x: -x[1])))
-    out += [f"  {n:>4}× {rel}" for _, rel, n in rows[:limit]]
+    files, mods = {}, {}
+    for r in refs:
+        files[r["path"]] = files.get(r["path"], 0) + 1
+        m = r.get("module") or "(모듈 없음)"
+        mods[m] = mods.get(m, 0) + 1
+    out.append(f"## 참조가 있는 파일 {len(files)}{member_note} · 모듈 {len(mods)}: " + ", ".join(f"{m} {n}" for m, n in sorted(mods.items(), key=lambda x: -x[1])))
+    out += [f"  {n:>4}× {rel}" for rel, n in sorted(files.items(), key=lambda x: -x[1])[:limit]]
     return out
 
 
 def open_index(a, root, kind):
+    """--db 가 없으면 있는 인덱스를 다 같이 본다 (프로젝트 + 엔진). --db project|engine|경로 면 그 하나만."""
+    if not a.db:
+        dbs = [p for p in (db_for("project", root, kind), db_for("engine", root, kind)) if p and p.exists()]
+        if len(dbs) > 1:
+            return MultiIndex([Index(p) for p in dbs])
+        if dbs:
+            return Index(dbs[0])
     db = pick_db(a.db, root, kind)
     if not db or not db.exists():
         print(f"clangd 인덱스 없음: {db}. `cindex.py build` 를 먼저 돌린다.")
@@ -1067,11 +1188,29 @@ def open_index(a, root, kind):
 
 
 def pick_one(ix, name, kinds=None):
-    cands = ix.find(name, limit=20, kinds=kinds)
-    if not cands:
-        print(f"없음: {name!r}")
-        return None, []
-    return cands[0], cands[1:]
+    """정확히 맞는 심볼만 고른다. 없으면 고르지 않고 비슷한 이름 후보를 보여 준다 — 근사 결과를 답처럼 내지 않는다."""
+    cands = rank(ix.find_exact(name, kinds), name)
+    if cands:
+        return cands[0], cands[1:]
+    near = rank(ix.find_fuzzy(name, 40, kinds), name)[:12]
+    print(f"정확히 일치하는 심볼 없음: {name!r}" + (" — 비슷한 이름 (이 중 하나로 다시 묻는다):" if near else ""))
+    for s in near:
+        print("  " + fmt(s))
+    return None, []
+
+
+def cmd_status(ix):
+    counts = json.loads(ix.meta.get("counts", "{}"))
+    errors = json.loads(ix.meta.get("errors", '{"count": 0}')) if ix.meta.get("errors") else {"count": "?"}
+    print(f"인덱스 {ix.path} · {ix.meta.get('generated_at')} · 심볼 {counts.get('symbols')} · 참조 {counts.get('refs')} · "
+          f"관계 {counts.get('relations')} · 파일 {counts.get('files')}")
+    print(f"출처 {ix.meta.get('source')} · cdb {ix.meta.get('cdb', '-')} · 필터 {ix.meta.get('filter', '-') or '-'} · "
+          f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
+          + (f" (.generated.h 관련 {errors.get('generated_h')})" if errors.get("generated_h") else ""))
+    stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
+             if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
+    print(f"[낡음] 표본 파일 {len(stale)}개가 인덱스 뒤 바뀌었다 → build" if stale else "신선도: 표본 300 파일 OK")
+    return 0
 
 
 def cmd_query(a, root, kind):
@@ -1079,28 +1218,24 @@ def cmd_query(a, root, kind):
     if ix is None:
         return 1
     c, arg = a.command, " ".join(a.arg).strip()
-    if c == "status":
-        counts = json.loads(ix.meta.get("counts", "{}"))
-        errors = json.loads(ix.meta.get("errors", '{"count": 0}')) if ix.meta.get("errors") else {"count": "?"}
-        print(f"인덱스 {ix.path} · {ix.meta.get('generated_at')} · 심볼 {counts.get('symbols')} · 참조 {counts.get('refs')} · "
-              f"관계 {counts.get('relations')} · 파일 {counts.get('files')}")
-        print(f"출처 {ix.meta.get('source')} · cdb {ix.meta.get('cdb', '-')} · 필터 {ix.meta.get('filter', '-') or '-'} · "
-              f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
-              + (f" (.generated.h 관련 {errors.get('generated_h')})" if errors.get("generated_h") else ""))
-        stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
-                 if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
-        print(f"[낡음] 표본 파일 {len(stale)}개가 인덱스 뒤 바뀌었다 → build" if stale else "신선도: 표본 300 파일 OK")
+    if c == "status" and isinstance(ix, MultiIndex):
+        for sub in ix.ixs:
+            print(f"--- {'엔진' if 'ue_index' in str(sub.path) else '프로젝트'} 범위")
+            cmd_status(sub)
         return 0
+    if c == "status":
+        return cmd_status(ix)
     if not arg:
         raise SystemExit(f"{c} 는 인자가 필요하다.")
     if c == "sym":
-        rows = ix.find(arg, limit=a.limit)
-        emit([fmt(s) + (f"\n    정의 {s['def_path']}:{s['def_line']}" if s["def_path"] and s["def_path"] != s["path"] else "")
-              for s in rows] or [f"없음: {arg!r}"], a.full)
+        exact = rank(ix.find_exact(arg), arg)
+        rows = exact or rank(ix.find_fuzzy(arg, a.limit), arg)
+        head = [] if exact else [f"# 정확히 일치하는 심볼 없음: {arg!r} — 이름이 비슷한 것"]
+        emit(head + [fmt(s) + (f"\n    정의 {s['def_path']}:{s['def_line']}" if s["def_path"] and s["def_path"] != s["path"] else "")
+                     for s in rows[:a.limit]] or [f"없음: {arg!r}"], a.full)
         return 0
     if c == "file":
-        rows = ix.q(Index.SYM + "WHERE df.rel LIKE ? ORDER BY df.rel, s.decl_line LIMIT ?", (f"%{arg}%", a.limit * 4))
-        emit([fmt(Index.row(r)) for r in rows] or [f"없음: {arg!r}"], a.full)
+        emit([fmt(s) for s in ix.file_syms(arg, a.limit * 4)] or [f"없음: {arg!r}"], a.full)
         return 0
     kinds = FUNC_KINDS if c in ("callees", "overrides") else (TYPE_KINDS if c in ("bases", "derived", "members") else None)
     s, others = pick_one(ix, arg, kinds)
@@ -1127,12 +1262,13 @@ def cmd_query(a, root, kind):
         emit(head + impact_lines(ix, s, a.limit), a.full)
     elif c == "callees":
         emit(head + [f"{n:>4}× {fmt(x)}" for x, n in ix.callees(s["id"])[:a.limit]] or ["없음"], a.full)
-    elif c in ("bases", "derived"):
-        emit(head + [fmt(x) for x in (ix.bases if c == "bases" else ix.derived)(s["id"])] or ["없음"], a.full)
+    elif c == "bases":
+        emit(head + tree_lines("부모 (위로, 전 단계)", tree(ix, s["id"], BASE_OF, False, a.depth)), a.full)
+    elif c == "derived":
+        emit(head + tree_lines("파생 (아래로, 전 단계)", tree(ix, s["id"], BASE_OF, True, a.depth)), a.full)
     elif c == "overrides":
-        up = ix.related(s["id"], OVERRIDDEN_BY, False)
-        down = ix.related(s["id"], OVERRIDDEN_BY, True)
-        emit(head + [f"재정의 대상(위) {fmt(x)}" for x in up] + [f"재정의한 쪽(아래) {fmt(x)}" for x in down] or ["없음"], a.full)
+        emit(head + tree_lines("재정의 대상 (위로)", tree(ix, s["id"], OVERRIDDEN_BY, False, a.depth))
+             + tree_lines("재정의한 쪽 (아래로, 전 단계)", tree(ix, s["id"], OVERRIDDEN_BY, True, a.depth)), a.full)
     return 0
 
 
@@ -1371,8 +1507,10 @@ class CindexSource:
             hits = ix.find(name, 5)
             sid = hits[0]["id"] if hits else None
         if not sid:
+            # 재정의 관계가 가장 많은 메서드 (Symbol.References 는 배경 색인 빌드에서 0 이라 쓰지 않는다)
             row = ix.q("SELECT s.id FROM symbols s JOIN relations r ON r.subject=s.id AND r.predicate=? "
-                       "WHERE s.nrefs > 0 GROUP BY s.id ORDER BY COUNT(*) DESC, s.nrefs DESC LIMIT 1", (OVERRIDDEN_BY,))
+                       "GROUP BY s.id ORDER BY COUNT(*) DESC, (SELECT COUNT(*) FROM refs x WHERE x.sym=s.id) DESC LIMIT 1",
+                       (OVERRIDDEN_BY,))
             if not row:
                 row = ix.q("SELECT sym FROM refs GROUP BY sym ORDER BY COUNT(*) DESC LIMIT 1")
             sid = row[0][0] if row else None
@@ -1671,6 +1809,7 @@ def main():
     ap.add_argument("--timeout", type=int, default=0, help="build --mode bg: 초 (0 = 없음)")
     ap.add_argument("--kind", default=None, choices=["decl", "def", "ref"])
     ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--depth", type=int, default=0, help="bases·derived·overrides: 따라갈 단계 (0 = 끝까지)")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--target", default=None)
     ap.add_argument("--platform", default="Win64")

@@ -39,7 +39,7 @@ grep 만으로는 절반만 본다. 그리고 엔진과 프로젝트는 변하�
 | UE 엔진 심볼 → 선언 → 시그니처 | `python ~/.claude/skills/game-onboard/scripts/ue_q.py sym X` → `api X` / `decl X --max 60` |
 | UE 엔진 모듈·의존 / 본문 검색 | `python ~/.claude/skills/game-onboard/scripts/ue_q.py module X` · `deps X` · `rg "패턴" --module X` |
 | 부르는 쪽 / 부르는 함수 (참조 줄 원문 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py callers X` · `callees X` · `refs X` |
-| 자식 · 재정의 · 바꾸면 같이 볼 곳 | `python ~/.claude/skills/game-onboard/scripts/cindex.py derived X` · `overrides X` · `impact X` |
+| 자식 · 재정의 (전 단계 트리) · 바꾸면 같이 볼 곳 (멤버 사용 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py derived X` · `overrides X` · `impact X` |
 | 의미 인덱스 만들기 / 상태 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine] [--mode bg] [--unity 8]` · `status` |
 | 인덱스 웹뷰 (검색·그래프·검증·하네스 기록) | `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` |
 
