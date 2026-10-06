@@ -53,7 +53,12 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   | 5.4 | `-Filter=` 는 받지만 적용 안 됨, `-NoExecCodeGenActions`(UHT 기본 켜짐), `-OutputDir=` |
   | 5.5–5.6 | `-Include=` / `-Exclude=`, `-OutputFilename=`, `-OutputDir=`(기본 엔진 루트) |
 
-  5.4+ 는 유니티 빌드·PCH 를 끄고 UHT(코드 생성)를 먼저 돈다 → `.generated.h` 가 생긴다. 항목은 `clang-cl.exe @rsp` 형태.
+  5.4+ 는 유니티 빌드·PCH 를 끄고 UHT(코드 생성)를 먼저 돈다 → `.generated.h` 가 생긴다.
+  **컴파일러**: 5.5·5.6 의 `GenerateClangDatabase` 는 `-Compiler=` 가 없으면 `-Compiler=Clang` 을 붙인다 → Visual Studio 의
+  Clang(LLVM) 구성 요소가 없으면 실패한다. 그래서 `cdb` 는 Win64 에서 기본으로 `-Compiler=Default`(평소 빌드와 같은 컴파일러, 보통 MSVC)를
+  넘긴다 — 항목은 `cl.exe @rsp` 형태가 되고 clangd 는 실행 파일 이름으로 cl 모드를 고른다 (cl.exe + rsp 는 실험실에서 색인 확인, UE 로는 안 해 봤다).
+  clang-cl 로 만들려면 `--compiler Clang`, 예전처럼 아무것도 안 넘기려면 `--compiler ""`. 유효한 값은 `WindowsCompiler` 열거형
+  (`Default`·`Clang`·`VisualStudio2022` 등 — `VisualStudio` 단독은 없다).
 - **런처 설치 엔진**: 엔진 모듈이 미리 빌드돼 있어 위 데이터베이스에는 **프로젝트 파일만** 나온다. 엔진 cpp 까지 색인하려면
   VS Code 프로젝트 생성기의 `.vscode/compileCommands_<이름>.json` (cl.exe + 모듈별 rsp, 엔진 모듈 포함)을 쓴다.
   `/std` 가 빠져 있으니 `--extra-arg=/std:c++20` 을 준다. `cindex.py build` 는 이 파일을 자동으로 찾아 `compile_commands.json` 이름으로 복사해 넘긴다.
