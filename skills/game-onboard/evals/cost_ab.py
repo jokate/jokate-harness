@@ -141,7 +141,7 @@ def pick_tasks(t):
     der = next((c for c in classes if 8 <= len(t.derived_all(c)) <= 14), None)
     if der:
         tasks.append({"id": "derived", "kind": "names", "subject": der, "expect": sorted(t.derived_all(der)),
-                      "q": f"{der} 를 상속한 클래스를 손자 이하까지 모두 찾아라 (엔진과 프로젝트 전체)."})
+                      "q": f"{der} 를 상속한 클래스를 모두 찾아라 — 직접 자식과 그 아래(손자·증손…) 전부, 엔진과 프로젝트 전체."})
     meths = [r[0] for r in q("SELECT qname FROM symbols WHERE kind='InstanceMethod' AND name LIKE 'Do%' ORDER BY qname")]
     cal = next((m for m in meths if 6 <= len(t.callers(m)) <= 9), None)
     if cal:
@@ -165,7 +165,7 @@ def pick_tasks(t):
     if ovr:
         m = ovr + "::BeginPlay"
         tasks.append({"id": "overrides", "kind": "names", "subject": m, "expect": sorted(t.overrides_all(m)),
-                      "q": f"{m} 를 재정의한 메서드를 손자 이하까지 모두 찾아라 (엔진과 프로젝트 전체)."})
+                      "q": f"{m} 를 재정의한 메서드를 모두 찾아라 — 직접 재정의한 것과 그 아래(손자·증손…) 전부, 엔진과 프로젝트 전체."})
     return tasks
 
 
@@ -185,6 +185,8 @@ def run_one(task, arm, rep, a, out, engine):
     cmd = ["claude", "-p", prompt_of(task, engine), "--output-format", "stream-json", "--verbose",
            "--max-turns", str(a.max_turns), "--append-system-prompt", sys_b() if arm == "B" else SYS_A,
            "--allowedTools", *tools, "--disallowedTools", *DENY]
+    if a.add_engine:  # 엔진은 프로젝트 밖에 있다 — 셸이 엔진 경로를 읽게 허용 (대화형에서 사용자가 승인한 상태와 같게)
+        cmd += ["--add-dir", str(engine)]
     if a.model:
         cmd += ["--model", a.model]
     env = dict(os.environ, UE_ROOT=str(engine))
@@ -248,7 +250,8 @@ def score(task, final):
         ok_par = all(p in ans for p in e["parents"])
         rec = (ok_file + ok_line + ok_par) / 3
         return {"recall": rec, "precision": None, "missing": [k for k, ok in (("file", ok_file), ("line", ok_line), ("parent", ok_par)) if not ok], "extra": []}
-    got = set(FILE_RE.findall(ans)) if task["kind"] == "files" else set(NAME_RE.findall(ans))
+    # 이름은 파일 이름을 걷어낸 뒤 뽑는다 (AI2Data.cpp 의 AI2Data 를 클래스로 읽지 않게)
+    got = set(FILE_RE.findall(ans)) if task["kind"] == "files" else set(NAME_RE.findall(FILE_RE.sub(" ", ans)))
     got.discard(task["subject"])
     exp = set(task["expect"])
     hit = got & exp
@@ -273,6 +276,8 @@ def main():
     ap.add_argument("--model", default=None)
     ap.add_argument("--only", default=None, help="과제 id 쉼표 목록")
     ap.add_argument("--rescore", action="store_true", help="세션을 다시 돌리지 않고 로그만 채점")
+    ap.add_argument("--no-add-engine", dest="add_engine", action="store_false",
+                    help="엔진 폴더를 --add-dir 로 허용하지 않는다 (셸의 엔진 경로 접근이 막힌다)")
     a = ap.parse_args()
     a.root = str(Path(a.root).resolve())
     root, kind = cindex.project_of(a.root)
