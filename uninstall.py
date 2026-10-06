@@ -6,10 +6,12 @@
 
 머신에서 (--project-only 가 아니면):
   ~/.claude/skills/game-*      링크는 링크만 끊고, 복사본은 폴더를 지운다 (이 저장소에 있는 이름만)
-  ~/.claude/hooks/<훅>.py      이 저장소가 설치한 훅 파일
-  ~/.claude/settings.json      그 훅을 가리키는 항목만 뺀다. 원본은 settings.json.bak
+  ~/.claude/hooks/<훅>.py      이 저장소가 설치한 훅 파일 (harness_events.py 포함)
+  ~/.claude/mods/<mod>         하네스 모니터 mod (링크는 링크만 끊는다)
+  ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
   ~/.claude/cache/stuck        매몰 카운터 상태
-  --purge 면 ~/.claude/cache/ue_index (엔진 인덱스, 다시 만들려면 몇 분) 도 지운다
+  ~/.claude/cache/game-harness 하네스 이벤트 로그
+  --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 도 지운다
 
 프로젝트 폴더를 주면:
   CLAUDE.local.md              → CLAUDE.local.md.removed 로 이름만 바꾼다 (직접 고친 내용이 있을 수 있어 지우지 않는다)
@@ -35,7 +37,7 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 sys.path.insert(0, str(REPO))
-from install import HOOKS, rules_block_span  # noqa: E402
+from install import HOOKS, LIBS, PLUGIN_DIRS_ENV, mod_dirs, mod_paths, rules_block_span  # noqa: E402
 
 
 def is_link(p):
@@ -61,8 +63,26 @@ def remove_skills(dry):
                 shutil.rmtree(dst)
 
 
+def remove_mods(dry):
+    for src in mod_dirs():
+        dst = CLAUDE / "mods" / src.name
+        if not (dst.exists() or dst.is_symlink()):
+            continue
+        if is_link(dst):
+            print(f"  - {dst} (링크 해제)")
+            if not dry:
+                try:
+                    os.rmdir(dst)
+                except OSError:
+                    os.unlink(dst)
+        elif (dst / ".claude-plugin" / "plugin.json").is_file():
+            print(f"  - {dst} (복사본 삭제)")
+            if not dry:
+                shutil.rmtree(dst)
+
+
 def remove_hooks(dry):
-    for name in HOOKS:
+    for name in HOOKS + LIBS:
         p = CLAUDE / "hooks" / name
         if p.is_file():
             print(f"  - {p}")
@@ -100,8 +120,21 @@ def clean_settings(dry):
             del hooks[event]
     if "hooks" in settings and not hooks:
         del settings["hooks"]
+    env = settings.get("env") or {}
+    if PLUGIN_DIRS_ENV in env:
+        ours_dirs = set(mod_paths())
+        cur = [x for x in str(env[PLUGIN_DIRS_ENV]).split(os.pathsep) if x]
+        keep = [x for x in cur if x not in ours_dirs]
+        if len(keep) != len(cur):
+            removed.append(f"env.{PLUGIN_DIRS_ENV}(mod)")
+            if keep:
+                env[PLUGIN_DIRS_ENV] = os.pathsep.join(keep)
+            else:
+                del env[PLUGIN_DIRS_ENV]
+            if not env:
+                settings.pop("env", None)
     if not removed:
-        print("  = settings.json 에 등록된 훅 없음")
+        print("  = settings.json 에 등록된 훅·mod 없음")
         return
     print("  - settings.json 훅 해제:", ", ".join(removed), "(원본: settings.json.bak)")
     if not dry:
@@ -199,10 +232,13 @@ def main():
         remove_skills(a.dry_run)
         print("훅 →", CLAUDE / "hooks")
         remove_hooks(a.dry_run)
+        print("mod →", CLAUDE / "mods")
+        remove_mods(a.dry_run)
         print("설정 →", CLAUDE / "settings.json")
         clean_settings(a.dry_run)
         remove_rules(a.dry_run)
         remove_tree(CLAUDE / "cache" / "stuck", a.dry_run)
+        remove_tree(CLAUDE / "cache" / "game-harness", a.dry_run, " (하네스 이벤트 로그)")
         ue = CLAUDE / "cache" / "ue_index"
         if a.purge:
             remove_tree(ue, a.dry_run)

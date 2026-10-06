@@ -51,6 +51,18 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 
+def harness_emit(feature, detail="", ok=True, project=""):
+    """하네스 이벤트 로그(모니터·웹뷰용). 하네스 훅이 설치된 머신에서만 남는다. 실패는 삼킨다."""
+    try:
+        hooks = str(Path.home() / ".claude" / "hooks")
+        if hooks not in sys.path:
+            sys.path.append(hooks)
+        from harness_events import emit
+        emit(feature, detail, ok=ok, project=project, source=Path(__file__).name)
+    except Exception:
+        pass
+
+
 def uproject(project):
     return next(iter(sorted(project.glob("*.uproject"))), None)
 
@@ -368,6 +380,8 @@ def cmd_index(project, eng, force, quiet):
     if force or len(changed_rows) > 1000:
         con.execute("VACUUM")
     con.close()
+    harness_emit("index.engine", "%s · 헤더 %d · 심볼 %d · 변경 %d [%.1fs]"
+                 % (eng, counts["headers"], counts["symbols"], len(changed_rows), elapsed), project=project)
     if not quiet:
         print("색인 완료 [%.1fs] 파일 %d(헤더 %d) · 모듈 %d · 심볼 %d"
               % (elapsed, counts["files"], counts["headers"], counts["modules"], counts["symbols"]))
@@ -896,6 +910,7 @@ def main():
     if re.fullmatch(r"\d+\.\d+", assoc) and ("_%s" % assoc) not in str(eng) and not os.environ.get("UE_ROOT"):
         print("[경고] 프로젝트는 UE %s 인데 %s 로 조회한다 (해당 버전 미설치?). "
               "버전별로 다른 API 는 '확인 필요'로 쓰고, 설치돼 있으면 UE_ROOT 로 지정." % (assoc, eng))
+        harness_emit("index.engine.warn", "프로젝트 UE %s ≠ 조회 엔진 %s" % (assoc, eng), ok=False, project=project)
 
     if args.command == "index":
         return cmd_index(project, eng, args.force, args.quiet)
@@ -914,6 +929,7 @@ def main():
     if n_h < 1000:
         print("[경고] 엔진 헤더가 %d개뿐이다 — %s 설치에 엔진 소스가 없다 (런처 설치 옵션 확인). "
               "'없음' 결과는 엔진에 없다는 뜻이 아니다." % (n_h, eng))
+        harness_emit("index.engine.warn", "엔진 헤더 %d개 — 엔진 소스 없음 의심 (%s)" % (n_h, eng), ok=False, project=project)
     stored = meta_get(con, "engine_root")
     if stored and stored != str(eng):
         eng = Path(stored)

@@ -11,6 +11,12 @@ from pathlib import Path
 
 SKILLS = Path.home() / ".claude" / "skills"
 
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
+
 
 def detect(start):
     p = Path(start).resolve()
@@ -64,8 +70,11 @@ def main():
         "- 기획서 읽기·사양 정리·기획과 구현 대조 → game-design-doc",
         "- 패턴 비교·선택 → game-patterns · 테스트·검증 → game-testing · 에디터 MCP 조작 → game-mcp",
     ]
-    if not (root / ".claude" / "session_start.json").is_file() and not (root / "CLAUDE.md").is_file():
+    is_setup = (root / ".claude" / "session_start.json").is_file() or (root / "CLAUDE.md").is_file()
+    if not is_setup:
         lines.append("이 프로젝트는 세팅 전이다 (CLAUDE.md·인덱스 갱신 없음). 필요하면 사용자에게 /game-bootstrap 을 안내한다.")
+    harness_emit("context.routing", f"{engine} · {'세팅됨' if is_setup else '세팅 전'}",
+                 session=data.get("session_id", ""), project=root, source="game_context")
     sys.stdout.buffer.write("\n".join(lines).encode("utf-8"))
 
 

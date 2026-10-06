@@ -5,6 +5,12 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
+
 INPUT_PREVIEW = 300
 
 
@@ -36,6 +42,8 @@ def main():
     log_dir.mkdir(parents=True, exist_ok=True)
     with open(log_dir / f"{project}.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    harness_emit("mcp.call", f"{server}/{name}", ok=not record["failed"], session=record["session"],
+                 project=data.get("cwd", ""), source="mcp_log")
 
 
 if __name__ == "__main__":

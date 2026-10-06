@@ -12,6 +12,12 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
+
 
 def matches(rule, tool, tool_input, input_text):
     if not re.search(rule["tool"], tool):
@@ -39,6 +45,8 @@ def main():
     warnings = [r["warn"] for r in rules if matches(r, tool, tool_input, input_text)]
     if not warnings:
         return
+    harness_emit("mcp.guard", f"{tool}: " + " / ".join(warnings), session=data.get("session_id", ""),
+                 project=data.get("cwd", ""), source="mcp_guard")
 
     out = {
         "hookSpecificOutput": {
