@@ -1,0 +1,95 @@
+[
+ {
+  "id": "derived",
+  "kind": "names",
+  "subject": "UAIData",
+  "expect": [
+   "ULevelComponent1",
+   "UMeshSubsystem",
+   "UMovementState",
+   "UNet2Subsystem1",
+   "UPhysics2Actor",
+   "UPhysics3Subsystem",
+   "UPhysics3Subsystem1",
+   "UReplicationSubsystem",
+   "USave2Task"
+  ],
+  "q": "UAIData 를 상속한 클래스를 모두 찾아라 — 직접 자식과 그 아래(손자·증손…) 전부, 엔진과 프로젝트 전체."
+ },
+ {
+  "id": "callers",
+  "kind": "names",
+  "subject": "UAbility3Handler::DoAbility3Handler",
+  "expect": [
+   "UAbility3Handler::Tick",
+   "UBigGameEditorActor::DoBigGameEditorActor",
+   "UBigGameEditorManager::DoBigGameEditorManager",
+   "UBigGameEditorState::DoBigGameEditorState",
+   "UBigGameEditorTask::DoBigGameEditorTask",
+   "UBigGameUIManager::DoBigGameUIManager"
+  ],
+  "q": "UAbility3Handler::DoAbility3Handler 를 직접 호출하는 함수·메서드를 모두 찾아라 (엔진과 프로젝트 전체)."
+ },
+ {
+  "id": "callees",
+  "kind": "names",
+  "subject": "UAbility3Actor::DoAbility3Actor",
+  "expect": [
+   "UMath1Component::DoMath1Component",
+   "UMath1Data::DoMath1Data",
+   "UMath1Subsystem::DoMath1Subsystem"
+  ],
+  "q": "UAbility3Actor::DoAbility3Actor 의 본문이 직접 호출하는 메서드를 모두 찾아라."
+ },
+ {
+  "id": "where",
+  "kind": "location",
+  "subject": "UGameplay3Actor",
+  "expect": {
+   "file": "Gameplay3Actor.h",
+   "line": 6,
+   "parents": [
+    "UGameplay3Subsystem"
+   ]
+  },
+  "q": "UGameplay3Actor 가 선언된 파일과 줄 번호, 그리고 부모 클래스를 찾아라."
+ },
+ {
+  "id": "ref-files",
+  "kind": "files",
+  "subject": "UMathActor",
+  "expect": [
+   "Core2Component.cpp",
+   "Core2Component.h",
+   "Material1Actor.cpp",
+   "MathActor.cpp",
+   "NavComponent1.cpp",
+   "NavComponent1.h",
+   "Slate3Data.cpp",
+   "UIComponent.cpp",
+   "UIComponent.h",
+   "UIState.cpp"
+  ],
+  "q": "UMathActor 를 쓰는 소스 파일(.h/.cpp)을 모두 찾아라 — 타입으로 쓰거나, 상속하거나, 그 메서드를 정의·호출하는 파일. 그 클래스가 선언된 헤더 자신은 뺀다."
+ },
+ {
+  "id": "overrides",
+  "kind": "names",
+  "subject": "UCoreExtState::BeginPlay",
+  "expect": [
+   "UAI2Data::BeginPlay",
+   "UCollision1Actor::BeginPlay",
+   "UCollisionComponent1::BeginPlay",
+   "UInput3Component1::BeginPlay",
+   "UMathActor::BeginPlay",
+   "UMovement1Task::BeginPlay",
+   "UPhysicsComponent::BeginPlay",
+   "UReplicationComponent1::BeginPlay",
+   "UStreaming2Subsystem::BeginPlay",
+   "UTagActor::BeginPlay",
+   "UTagComponent::BeginPlay",
+   "UTagSubsystem::BeginPlay"
+  ],
+  "q": "UCoreExtState::BeginPlay 를 재정의한 메서드를 모두 찾아라 — 직접 재정의한 것과 그 아래(손자·증손…) 전부, 엔진과 프로젝트 전체."
+ }
+]

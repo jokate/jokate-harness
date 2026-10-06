@@ -114,8 +114,11 @@ class Truth:
         return {self.qname(c) for c in out} - {None, fn}
 
     def ref_files(self, cls):
+        """클래스 자체 또는 그 멤버(메서드·필드)를 참조하는 파일 — 질문이 "타입으로 쓰거나, 상속하거나, 메서드를 정의·호출" 이다.
+        (Peer->Tick() 처럼 멤버만 부르는 .cpp 도 포함)"""
+        ids = set(self.ids(cls)) | {r[0] for r in self.q("SELECT id FROM symbols WHERE scope=?", (cls + "::",))}
         out = set()
-        for i in self.ids(cls):
+        for i in ids:
             out |= {Path(r[0]).name for r in self.q("SELECT f.path FROM refs r JOIN files f ON f.id=r.file "
                                                      "WHERE r.sym=? AND (r.kind & ?)!=0", (i, REF))}
         return out
@@ -276,6 +279,7 @@ def main():
     ap.add_argument("--model", default=None)
     ap.add_argument("--only", default=None, help="과제 id 쉼표 목록")
     ap.add_argument("--rescore", action="store_true", help="세션을 다시 돌리지 않고 로그만 채점")
+    ap.add_argument("--refresh-truth", action="store_true", help="--rescore 때 정답을 지금 규칙으로 다시 계산")
     ap.add_argument("--no-add-engine", dest="add_engine", action="store_false",
                     help="엔진 폴더를 --add-dir 로 허용하지 않는다 (셸의 엔진 경로 접근이 막힌다)")
     a = ap.parse_args()
@@ -289,6 +293,11 @@ def main():
     t = Truth([cindex.db_for("project", root, kind), cindex.db_for("engine", root, kind)])
     tf = out / "tasks.json"
     tasks = json.loads(tf.read_text(encoding="utf-8")) if a.rescore and tf.exists() else pick_tasks(t)
+    if a.rescore and a.refresh_truth:  # 과제(대상)는 그대로, 정답만 지금 규칙으로 다시 계산
+        fresh = {x["id"]: x for x in pick_tasks(t)}
+        for x in tasks:
+            if x["id"] in fresh and fresh[x["id"]]["subject"] == x["subject"]:
+                x["expect"] = fresh[x["id"]]["expect"]
     tf.write_text(json.dumps(tasks, ensure_ascii=False, indent=1), encoding="utf-8")
     if a.only:
         tasks = [x for x in tasks if x["id"] in a.only.split(",")]
