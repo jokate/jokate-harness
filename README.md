@@ -58,5 +58,7 @@ Python 3.10+, git (svn 은 선택 — 이력 신호용, 검증 안 됨), Claude 
 ## 하네스가 동작하는지 보기
 
 - 상태줄 `harness ● 기능 N개 · 마지막 …` 과 토스트 — 모니터 mod. `/harness` 로 기록 패널.
-- `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` — 인덱스 검색·그래프·검증과 하네스 이벤트 기록을 브라우저로.
+- **`index_view.bat` 더블클릭** — 인덱스 검색·그래프·검증과 하네스 이벤트 기록을 브라우저로. 프로젝트 폴더를 끌어다 놓으면 그 프로젝트,
+  그냥 더블클릭하면 하네스가 최근에 돈 프로젝트. 이미 떠 있으면 새로 띄우지 않고 연다. 화면 오른쪽 위에서 프로젝트를 바꾼다.
+  (터미널: `python ~/.claude/skills/game-onboard/scripts/index_view.py --open [--root <프로젝트>]`)
 - 상세: [docs/GUIDE.md](docs/GUIDE.md) 8절.

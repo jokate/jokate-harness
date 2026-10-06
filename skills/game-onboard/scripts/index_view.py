@@ -543,7 +543,42 @@ class App:
         return {"error": f"모르는 경로: {path}"}
 
 
-def make_handler(app):
+def recent_projects(events, current=None, limit=8):
+    """하네스 이벤트 로그에서 최근에 하네스가 돈 프로젝트들 (최근 것부터). 지금 폴더가 남아 있고 게임·C++ 프로젝트로 보이는 것만."""
+    out, seen = [], set()
+    rows = events.read(limit=5000) if events else []
+    for r in [{"project": str(current)}] + list(reversed(rows)):
+        pth = str(r.get("project") or "")
+        if not pth or pth in seen:
+            continue
+        seen.add(pth)
+        try:
+            root, kind, _ = gq.detect(pth)
+        except Exception:  # noqa: BLE001 — 지워졌거나 접근 못 하는 경로
+            continue
+        if root is None or str(root) in {o["root"] for o in out}:
+            continue
+        out.append({"root": str(root), "kind": kind, "name": Path(root).name})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def resolve_root(arg, events):
+    """--root 가 없으면: 지금 폴더가 프로젝트면 그것, 아니면 하네스 로그의 가장 최근 프로젝트, 그것도 없으면 지금 폴더."""
+    if arg:
+        return arg, None
+    root, _, _ = gq.detect(".")
+    if root is not None:
+        return str(root), None
+    rec = recent_projects(events)
+    if rec:
+        return rec[0]["root"], f"지금 폴더는 프로젝트가 아니라 최근 프로젝트를 연다: {rec[0]['root']}"
+    return ".", "지금 폴더가 프로젝트가 아니고 하네스 기록도 없다 — 프로젝트 폴더에서 열거나 --root 로 준다"
+
+
+def make_handler(state):
+    """state["app"] 을 매 요청 읽는다 — /api/switch 로 다른 프로젝트로 바꿀 수 있게."""
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -558,6 +593,23 @@ def make_handler(app):
 
         def do_GET(self):
             u = urlparse(self.path)
+            # 127.0.0.1 서버라도 다른 사이트가 DNS 리바인딩으로 들어올 수 있다 → Host 가 로컬일 때만 응답
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+            if host not in ("127.0.0.1", "localhost", "::1"):
+                return self._send(403, b"forbidden host", "text/plain")
+            app = state["app"]
+            if u.path == "/api/projects":
+                body = {"current": str(app.root), "projects": recent_projects(app.events, app.root)}
+                return self._send(200, json.dumps(body, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            if u.path == "/api/switch":
+                want = parse_qs(u.query).get("root", [""])[0]
+                root, _, _ = gq.detect(want) if want else (None, None, None)
+                if root is None:
+                    return self._send(400, json.dumps({"error": f"프로젝트로 보이지 않는다: {want}"}, ensure_ascii=False).encode("utf-8"),
+                                      "application/json; charset=utf-8")
+                state["app"] = App(str(root))
+                print(f"프로젝트 바꿈 → {root}", flush=True)
+                return self._send(200, json.dumps({"root": str(root)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             if u.path in ("/", "/index.html"):
                 return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             if not u.path.startswith("/api/"):
@@ -571,17 +623,55 @@ def make_handler(app):
     return Handler
 
 
+def find_running(port0, span=20):
+    """이미 떠 있는 웹뷰 (같은 포트 대역에서 /api/info 가 우리 응답이면). 반환: (url, 루트) 또는 None."""
+    import urllib.request
+    for port in range(port0, port0 + span):
+        url = f"http://127.0.0.1:{port}/"
+        try:
+            with urllib.request.urlopen(url + "api/info", timeout=0.4) as r:
+                info = json.loads(r.read().decode("utf-8"))
+            if "sources" in info and "root" in info:
+                return url, info["root"]
+        except Exception:  # noqa: BLE001 — 닫힌 포트·다른 서버
+            continue
+    return None
+
+
 def main():
-    ap = argparse.ArgumentParser(description="하네스 인덱스 웹뷰")
-    ap.add_argument("--root", default=".")
+    ap = argparse.ArgumentParser(description="하네스 인덱스 웹뷰. 프로젝트 폴더에서 실행하거나 --root 로 준다 "
+                                             "(없으면 하네스 기록의 최근 프로젝트). 이미 떠 있으면 그것을 연다.")
+    ap.add_argument("--root", default=None, help="프로젝트 루트 (기본: 지금 폴더, 프로젝트가 아니면 최근 프로젝트)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--open", action="store_true", help="브라우저로 연다")
+    ap.add_argument("--new", action="store_true", help="떠 있는 웹뷰가 있어도 새로 띄운다")
     a = ap.parse_args()
-    app = App(a.root)
+    root, note = resolve_root(a.root, _harness_events())
+    if note:
+        print(note)
+    if not a.new:
+        running = find_running(a.port)
+        if running:
+            url, cur = running
+            want = gq.detect(root)[0] or Path(root).resolve()
+            if str(want) != cur:
+                import urllib.parse
+                import urllib.request
+                try:
+                    urllib.request.urlopen(url + "api/switch?root=" + urllib.parse.quote(str(want)), timeout=30).read()
+                    print(f"떠 있는 웹뷰를 이 프로젝트로 바꿨다: {want}")
+                except Exception as e:  # noqa: BLE001
+                    print(f"떠 있는 웹뷰({cur})를 바꾸지 못했다: {e} — --new 로 따로 띄운다")
+            print(f"인덱스 웹뷰 이미 실행 중 {url}")
+            if a.open:
+                webbrowser.open(url)
+            return
+    state = {"app": App(root)}
+    app = state["app"]
     srv = None
     for port in range(a.port, a.port + 20):
         try:
-            srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
+            srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(state))
             break
         except OSError:
             continue
@@ -589,7 +679,7 @@ def main():
         raise SystemExit("빈 포트를 못 찾았다")
     url = f"http://127.0.0.1:{srv.server_address[1]}/"
     on = [s.name for s in app.sources.values() if s.available]
-    print(f"인덱스 웹뷰 {url} · 루트 {app.root} · 소스 {', '.join(on) or '없음'} · Ctrl+C 로 끝낸다")
+    print(f"인덱스 웹뷰 {url} · 루트 {app.root} · 소스 {', '.join(on) or '없음'} · Ctrl+C 로 끝낸다", flush=True)
     if a.open:
         webbrowser.open(url)
     try:
