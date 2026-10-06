@@ -41,6 +41,7 @@ grep 만으로는 절반만 본다. 그리고 엔진과 프로젝트는 변하�
 | 부르는 쪽 / 부르는 함수 (참조 줄 원문 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py callers X` · `callees X` · `refs X` |
 | 자식 · 재정의 (전 단계 트리) · 바꾸면 같이 볼 곳 (멤버 사용 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py derived X` · `overrides X` · `impact X` |
 | 의미 인덱스 만들기 / 상태 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine] [--mode bg] [--unity 8]` · `status` |
+| 인덱스 전부 지금 만들기 (gq → ue_q → clangd, 단계별 결과) — 사용자는 저장소의 `index_build.bat` 으로도 | `python ~/.claude/skills/game-onboard/scripts/index_all.py [<프로젝트>] [--no-clangd]` |
 | 인덱스 웹뷰 (검색·그래프·검증·하네스 기록) — 이미 떠 있으면 그것을 연다, 사용자는 저장소의 `index_view.bat` 더블클릭으로도 연다 | `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` (백그라운드로) |
 
 제외할 경로(서드파티, 중첩 저장소)는 `<루트>/.claude/gq.json` 에 `{"exclude": ["Plugins/Developer"]}`.

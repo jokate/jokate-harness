@@ -68,6 +68,10 @@ python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --un
 python ~/.claude/skills/game-onboard/scripts/cindex.py ingest <clangd-indexer 출력(YAML|RIFF)>   # 이미 만든 출력 적재만
 ```
 
+한 번에: `index_all.py [<프로젝트>]` (저장소의 `index_build.bat`) — gq·ue_q 인덱스 다음에 compile_commands.json 이 없을 때만 `cdb`,
+프로젝트는 `--mode bg`(clangd 가 없으면 clangd-indexer 전체), 엔진은 엔진 clangd 인덱스가 없을 때만 `--scope engine --unity 8`.
+cdb 에 엔진 TU 가 없으면(런처 설치 엔진) 엔진 단계는 빈 인덱스를 만들지 않고 건너뛴다 — 아래 2절의 VS Code cdb 를 `--cdb` 로 준다.
+
 | 상황 | 권장 |
 |---|---|
 | 엔진 범위 (버전당 한 번, 오래 걸림) | `--unity 8` — 처음 색인이 가장 크게 준다 |
@@ -176,4 +180,4 @@ clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트�
 | `--unity` 결과 = 묶지 않은 색인, 실패 묶음 재색인·풀기 | 검증됨 (합성, 일부러 이름 충돌을 넣어) |
 | `--mode bg` 를 Windows·UE 규모(샤드 수만 개)에서 | **검증 안 됨** |
 | UE 의 실제 compile_commands 로 `--unity` 묶음이 되는지 (TU 마다 rsp 가 다르면 안 묶인다) | **검증 안 됨** |
-| 탐색 비용: 인덱스 CLI 를 더하면 grep 만보다 싼가 (`evals/cost_ab.py`, 같은 모델·과제, 도구만 바꿈) | 합성 픽스처에서 조회 결함 수정 뒤 Sonnet −39%·Opus −38%, 재현율 1.00 (수정 전에는 +17%·−5%). 실제 UE·새 과제 세트는 **검증 안 됨** |
+| 탐색 비용: 인덱스 CLI 를 더하면 grep 만보다 싼가 (`evals/cost_ab.py`, 같은 모델·과제, 도구만 바꿈) | 합성 픽스처에서 조회 결함 수정 뒤 Sonnet −39%·Opus −38%, 재현율 1.00 (수정 전에는 +17%·−5%). 새 과제 세트·새 시드: Sonnet −38%·Opus −16%(반복 1회). 실제 UE 는 **검증 안 됨** |

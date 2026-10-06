@@ -125,6 +125,80 @@ class Truth:
                                                      "WHERE r.sym=? AND (r.kind & ?)!=0", (i, REF))}
         return out
 
+    # ---- v2 과제 정답 (2026-10-06 두 번째 세트 — 도구를 고칠 때 쓰지 않은 질문 유형)
+    def ancestors(self, cls):
+        """부모 → 그 부모 … 끝까지 (BaseOf 를 거꾸로)."""
+        par = {}
+        for s, o in self.q("SELECT subject, object FROM relations WHERE predicate=0"):
+            par.setdefault(o, set()).add(s)
+        seen, st = set(), list(self.ids(cls))
+        while st:
+            for k in par.get(st.pop(), ()):
+                if k not in seen:
+                    seen.add(k)
+                    st.append(k)
+        return {self.qname(i) for i in seen} - {None}
+
+    def holders(self, cls):
+        """cls 타입(포인터 포함)의 멤버 변수를 선언한 클래스 — 참조의 Container 가 Field 인 것의 소속 클래스."""
+        out = set()
+        for i in self.ids(cls):
+            for (sc,) in self.q("SELECT c.scope FROM refs r JOIN symbols c ON c.id=r.container WHERE r.sym=? "
+                                "AND c.kind='Field' AND (r.kind & ?)!=0", (i, REF)):
+                if sc:
+                    out.add(sc.rstrip(":"))
+        return out
+
+    def call_sites(self, fn):
+        """호출 지점 (참조 비트, 위치로 중복 제거 — 두 인덱스에 같은 헤더 참조가 있을 수 있다)."""
+        out = set()
+        for i in self.ids(fn):
+            out |= {(r[0], r[1], r[2]) for r in self.q("SELECT f.path, r.line, r.col FROM refs r JOIN files f ON f.id=r.file "
+                                                        "WHERE r.sym=? AND (r.kind & ?)!=0 AND r.container!=?",
+                                                        (i, REF, cindex.NULL_ID))}
+        return out
+
+    def caller_modules(self, fn):
+        out = set()
+        for i in self.ids(fn):
+            out |= {r[0] for r in self.q("SELECT f.module FROM refs r JOIN files f ON f.id=r.file WHERE r.sym=? "
+                                         "AND (r.kind & ?)!=0 AND r.container!=?", (i, REF, cindex.NULL_ID)) if r[0]}
+        return out
+
+    def callees2(self, fn):
+        one = self.callees(fn)
+        two = set()
+        for x in one:
+            two |= self.callees(x)
+        return (one | two) - {fn}
+
+    def def_location(self, fn):
+        for c in self.cons:
+            r = c.execute("SELECT f.path, s.def_line FROM symbols s JOIN files f ON f.id=s.def_file WHERE s.qname=?",
+                          (fn,)).fetchone()
+            if r:
+                return {"file": Path(r[0]).name, "line": r[1], "parents": []}
+        return None
+
+    def root_of(self, qname):
+        for c in self.cons:
+            r = c.execute("SELECT f.root FROM symbols s JOIN files f ON f.id=s.decl_file WHERE s.qname=?", (qname,)).fetchone()
+            if r:
+                return r[0]
+        return None
+
+    def module_deps(self, module):
+        """모듈 module 의 파일 안 참조가 가리키는 심볼이 선언된 모듈 (자기 자신·빈 모듈 제외)."""
+        out = set()
+        for (m,) in self.q("SELECT DISTINCT df.module FROM refs r JOIN files rf ON rf.id=r.file JOIN symbols s ON s.id=r.sym "
+                           "JOIN files df ON df.id=s.decl_file WHERE rf.module=? AND (r.kind & ?)!=0", (module, REF)):
+            if m and m != module:
+                out.add(m)
+        return out
+
+    def modules(self):
+        return {r[0] for r in self.q("SELECT DISTINCT module FROM files") if r[0]}
+
     def location(self, cls):
         for c in self.cons:
             r = c.execute("SELECT f.path, s.decl_line FROM symbols s JOIN files f ON f.id=s.decl_file WHERE s.qname=? "
@@ -175,6 +249,56 @@ def pick_tasks(t):
 
 
 # ---------------------------------------------------------------- 실행
+
+def pick_tasks_v2(t):
+    """두 번째 과제 세트 — 1세트(상속·호출자·피호출·위치·쓰는 파일·재정의)로 도구를 고친 뒤, 일반화를 보려고 만든 다른 질문들.
+    전용 명령이 없는 질문(멤버로 가진 클래스, 호출자의 모듈, 모듈 실참조, 호출 지점 수)을 일부러 넣었다."""
+    con = t.cons[-1]
+    q = lambda s, a=(): con.execute(s, a).fetchall()
+    classes = [r[0] for r in q("SELECT qname FROM symbols WHERE kind='Class' ORDER BY qname")]
+    meths = [r[0] for r in q("SELECT qname FROM symbols WHERE kind='InstanceMethod' AND name LIKE 'Do%' ORDER BY qname")]
+    pmods = sorted({r[0] for r in t.cons[0].execute("SELECT DISTINCT module FROM files WHERE root='project' AND module!=''")})
+    tasks = []
+    anc = next((c for c in reversed(classes) if 4 <= len(t.ancestors(c)) <= 6), None)
+    if anc:
+        tasks.append({"id": "ancestors", "kind": "names", "subject": anc, "expect": sorted(t.ancestors(anc)),
+                      "q": f"{anc} 의 부모 클래스를 위로 끝까지(부모의 부모 …) 모두 찾아라."})
+    hol = next((c for c in classes[len(classes) // 3:] if 3 <= len(t.holders(c)) <= 6), None)
+    if hol:
+        tasks.append({"id": "holders", "kind": "names", "subject": hol, "expect": sorted(t.holders(hol)),
+                      "q": f"{hol} 타입(포인터 포함)의 멤버 변수를 선언한 클래스를 모두 찾아라 (엔진과 프로젝트 전체). 답은 그 멤버를 가진 클래스 이름."})
+    cm = next((m for m in meths[len(meths) // 2:] if 3 <= len(t.caller_modules(m)) <= 6), None)
+    if cm:
+        tasks.append({"id": "caller-modules", "kind": "modules", "subject": cm, "expect": sorted(t.caller_modules(cm)),
+                      "q": f"{cm} 를 호출하는 코드가 들어 있는 모듈(*.Build.cs 단위)을 모두 찾아라. 답은 모듈 이름."})
+    c2 = next((m for m in meths[len(meths) // 4:] if 5 <= len(t.callees2(m)) <= 10), None)
+    if c2:
+        tasks.append({"id": "callees2", "kind": "names", "subject": c2, "expect": sorted(t.callees2(c2)),
+                      "q": f"{c2} 가 직접 호출하는 메서드와, 그 메서드들이 다시 직접 호출하는 메서드까지(두 단계) 모두 찾아라. {c2} 자신은 뺀다."})
+    md = next((m for m in meths[len(meths) * 2 // 3:] if t.def_location(m)), None)
+    if md:
+        tasks.append({"id": "method-def", "kind": "location", "subject": md, "expect": t.def_location(md),
+                      "q": f"{md} 의 구현(정의)이 있는 파일과 줄 번호를 찾아라."})
+    dp = next((c for c in classes if t.root_of(c) == "engine"
+               and 2 <= len({x for x in t.derived_all(c) if t.root_of(x) == "project"}) <= 6), None)
+    if dp:
+        exp = sorted(x for x in t.derived_all(dp) if t.root_of(x) == "project")
+        tasks.append({"id": "derived-project", "kind": "names", "subject": dp, "expect": exp,
+                      "q": f"엔진 클래스 {dp} 를 상속한(손자 이하 포함) 클래스 중 게임 프로젝트(현재 폴더) 쪽에 있는 것만 모두 찾아라."})
+    mdp = next((m for m in pmods if 3 <= len(t.module_deps(m)) <= 8), None)
+    if mdp:
+        tasks.append({"id": "module-deps", "kind": "modules", "subject": mdp, "expect": sorted(t.module_deps(mdp)),
+                      "q": f"게임 프로젝트의 {mdp} 모듈 코드가 실제로 참조하는(타입을 쓰거나 함수·메서드를 부르는) 다른 모듈을 모두 찾아라. "
+                           "답은 모듈 이름 (*.Build.cs 단위)."})
+    cc = next((m for m in meths[len(meths) // 3:] if 5 <= len(t.call_sites(m)) <= 12), None)
+    if cc:
+        tasks.append({"id": "call-count", "kind": "count", "subject": cc, "expect": len(t.call_sites(cc)),
+                      "q": f"{cc} 를 호출하는 지점(호출 식)이 엔진과 프로젝트를 통틀어 몇 군데인지 세라. 답은 숫자 하나."})
+    return tasks
+
+
+TASKSETS = {"v1": pick_tasks, "v2": pick_tasks_v2}
+
 
 def prompt_of(task, engine):
     return (f"엔진 소스는 {engine} 에 있고, 현재 폴더가 게임 프로젝트다. 코드는 고치지 말고 찾기만 한다.\n\n"
@@ -253,8 +377,22 @@ def score(task, final):
         ok_file = e["file"] in ans
         ok_line = bool(re.search(rf"\b{e['line']}\b", ans))
         ok_par = all(p in ans for p in e["parents"])
-        rec = (ok_file + ok_line + ok_par) / 3
+        rec = (ok_file + ok_line + ok_par) / 3 if e["parents"] else (ok_file + ok_line) / 2
         return {"recall": rec, "precision": None, "missing": [k for k, ok in (("file", ok_file), ("line", ok_line), ("parent", ok_par)) if not ok], "extra": []}
+    if task["kind"] == "count":
+        nums = [int(x) for x in re.findall(r"\b\d+\b", ans)]
+        ok = bool(nums) and nums[0] == task["expect"]
+        return {"recall": 1.0 if ok else 0.0, "precision": None, "missing": [] if ok else [task["expect"]],
+                "extra": [] if ok else nums[:3]}
+    if task["kind"] == "modules":
+        # 모듈 이름은 접두사 규칙이 없다 → 인덱스에 있는 모듈 이름과 맞는 단어만 답으로 본다
+        universe = task.get("universe") or []
+        got = {w for w in re.findall(r"[A-Za-z_]\w*", FILE_RE.sub(" ", ans)) if w in universe}
+        got.discard(task["subject"])
+        exp = set(task["expect"])
+        hit = got & exp
+        return {"recall": len(hit) / len(exp) if exp else 1.0, "precision": len(hit) / len(got) if got else 0.0,
+                "missing": sorted(exp - got), "extra": sorted(got - exp)}
     # 이름은 파일 이름을 걷어낸 뒤 뽑는다 (AI2Data.cpp 의 AI2Data 를 클래스로 읽지 않게)
     got = set(FILE_RE.findall(ans)) if task["kind"] == "files" else set(NAME_RE.findall(FILE_RE.sub(" ", ans)))
     got.discard(task["subject"])
@@ -280,6 +418,7 @@ def main():
     ap.add_argument("--timeout", type=int, default=1200)
     ap.add_argument("--model", default=None)
     ap.add_argument("--only", default=None, help="과제 id 쉼표 목록")
+    ap.add_argument("--taskset", default="v1", choices=sorted(TASKSETS), help="v1 = 첫 세트(도구 수정에 쓴 6종), v2 = 새 질문 8종")
     ap.add_argument("--rescore", action="store_true", help="세션을 다시 돌리지 않고 로그만 채점")
     ap.add_argument("--refresh-truth", action="store_true", help="--rescore 때 정답을 지금 규칙으로 다시 계산")
     ap.add_argument("--no-add-engine", dest="add_engine", action="store_false",
@@ -294,9 +433,14 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     t = Truth([cindex.db_for("project", root, kind), cindex.db_for("engine", root, kind)])
     tf = out / "tasks.json"
-    tasks = json.loads(tf.read_text(encoding="utf-8")) if a.rescore and tf.exists() else pick_tasks(t)
+    picker = TASKSETS[a.taskset]
+    tasks = json.loads(tf.read_text(encoding="utf-8")) if a.rescore and tf.exists() else picker(t)
+    universe = sorted(t.modules())
+    for x in tasks:
+        if x["kind"] == "modules":
+            x["universe"] = universe
     if a.rescore and a.refresh_truth:  # 과제(대상)는 그대로, 정답만 지금 규칙으로 다시 계산
-        fresh = {x["id"]: x for x in pick_tasks(t)}
+        fresh = {x["id"]: x for x in picker(t)}
         for x in tasks:
             if x["id"] in fresh and fresh[x["id"]]["subject"] == x["subject"]:
                 x["expect"] = fresh[x["id"]]["expect"]
