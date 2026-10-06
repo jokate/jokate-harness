@@ -59,6 +59,10 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   넘긴다 — 항목은 `cl.exe @rsp` 형태가 되고 clangd 는 실행 파일 이름으로 cl 모드를 고른다 (cl.exe + rsp 는 실험실에서 색인 확인, UE 로는 안 해 봤다).
   clang-cl 로 만들려면 `--compiler Clang`, 예전처럼 아무것도 안 넘기려면 `--compiler ""`. 유효한 값은 `WindowsCompiler` 열거형
   (`Default`·`Clang`·`VisualStudio2022` 등 — `VisualStudio` 단독은 없다).
+  **코드 생성(UHT)**: 5.4+ 는 compile_commands 를 쓰기 전에 UHT 를 돌리고, UHT 오류(예: `Expected a GENERATED_BODY()`)면 통째로 실패한다.
+  `cdb` 는 실패하면 `-NoExecCodeGenActions` 로 UHT 를 건너뛰고 한 번 더 한다 (`--codegen auto`, 기본). 생성 코드 폴더
+  `Intermediate/Build/<플랫폼>/<앱>/Inc/<모듈>` 은 이 모드와 평소 빌드가 같이 쓰므로 (UEBuildTarget.cs) 마지막 에디터 빌드의 `.generated.h` 를 쓴다 —
+  에디터 빌드를 한 번도 안 했으면 UCLASS 타입이 빠진다. `--codegen on` = 다시 안 함, `off` = 처음부터 건너뜀. 5.1–5.3 은 UHT 를 기본으로 안 돈다.
 - **런처 설치 엔진**: 엔진 모듈이 미리 빌드돼 있어 위 데이터베이스에는 **프로젝트 파일만** 나온다. 엔진 cpp 까지 색인하려면
   VS Code 프로젝트 생성기의 `.vscode/compileCommands_<이름>.json` (cl.exe + 모듈별 rsp, 엔진 모듈 포함)을 쓴다.
   `/std` 가 빠져 있으니 `--extra-arg=/std:c++20` 을 준다. `cindex.py build` 는 이 파일을 자동으로 찾아 `compile_commands.json` 이름으로 복사해 넘긴다.

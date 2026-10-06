@@ -10,6 +10,7 @@
 
   python cindex.py cdb [--target <이름>Editor] [--platform Win64] [--config Development] [--compiler Default]   # UE: compile_commands.json 생성
       Win64 는 기본으로 -Compiler=Default 를 넘긴다 — 안 넘기면 UBT 가 Clang 을 강제해 VS 의 Clang 구성 요소 없이는 실패한다
+      UBT 가 실패하면 코드 생성(UHT)을 건너뛰고(-NoExecCodeGenActions) 한 번 더 한다 (--codegen auto|on|off)
   python cindex.py build [--cdb <파일|폴더>] [--scope project|engine|all] [--filter 정규식] [--jobs N]
                          [--mode indexer|bg] [--format binary|yaml] [--unity N]
       --mode indexer (기본) clangd-indexer 전체 색인. 출력은 RIFF(binary) 가 기본 — YAML 보다 17배쯤 작고 적재 2배+ 빠름
@@ -572,15 +573,27 @@ def cmd_cdb(root, kind, a):
         # (UE 5.5·5.6 UBT 소스, Modes/GenerateClangDatabase.cs). Default = 평소 빌드와 같은 컴파일러(보통 MSVC) → 그 구성 요소 없이 돈다.
         # MSVC 면 항목이 cl.exe @rsp 가 되고 clangd 는 실행 파일 이름으로 cl 모드를 고른다.
         cmd.append(f"-Compiler={a.compiler}")
-    print("실행:", " ".join(f'"{c}"' if " " in c else c for c in cmd))
-    t0 = time.time()
-    r = subprocess.run(cmd, cwd=str(eng.parent if eng else root))
-    print(f"종료 {r.returncode} [{time.time() - t0:.0f}s]")
+
+    def run_ubt(c):
+        print("실행:", " ".join(f'"{x}"' if " " in x else x for x in c), flush=True)
+        t0 = time.time()
+        rc = subprocess.run(c, cwd=str(eng.parent if eng else root)).returncode
+        print(f"종료 {rc} [{time.time() - t0:.0f}s]", flush=True)
+        return rc
+    # 5.4+ 는 compile_commands 를 쓰기 전에 코드 생성(UHT — UCLASS·GENERATED_BODY 처리)을 먼저 돌고, UHT 오류면 통째로 실패한다.
+    # 생성 코드 폴더(Intermediate/Build/<플랫폼>/<앱>/Inc/<모듈>)는 이 모드와 평소 빌드가 같이 쓴다 (UEBuildTarget.cs 주석:
+    # "shared between all intermediate environment variants") → UHT 를 건너뛰어도 마지막 에디터 빌드의 .generated.h 를 쓴다.
+    codegen = "-NoExecCodeGenActions"
+    rc = run_ubt(cmd + ([codegen] if a.codegen == "off" else []))
+    if rc != 0 and a.codegen == "auto":
+        print(f"\nUBT 가 실패했다. 코드 생성(UHT — GENERATED_BODY·UCLASS 처리)에서 막혔을 수 있어 UHT 를 건너뛰고({codegen}) 다시 한다.\n"
+              "  .generated.h 는 마지막 에디터 빌드 것을 쓴다 — 에디터 빌드를 한 번도 안 했으면 UCLASS 타입이 인덱스에서 빠진다.", flush=True)
+        rc = run_ubt(cmd + [codegen])
     found = [p for p in (Path(out), eng.parent if eng else None, eng, root) if p and (p / "compile_commands.json").is_file()]
-    if found:
+    if found and rc == 0:
         print("compile_commands.json:", found[0] / "compile_commands.json")
-    harness_emit("index.clangd.cdb", f"{target} {a.platform} {a.config} → 종료 {r.returncode}", ok=r.returncode == 0, project=root)
-    return r.returncode
+    harness_emit("index.clangd.cdb", f"{target} {a.platform} {a.config} → 종료 {rc}", ok=rc == 0, project=root)
+    return rc
 
 
 def resolve_cdb(arg, root, eng):
@@ -1843,6 +1856,9 @@ def main():
     ap.add_argument("--platform", default="Win64")
     ap.add_argument("--config", default="Development")
     ap.add_argument("--ubt", default=None)
+    ap.add_argument("--codegen", default="auto", choices=["auto", "on", "off"],
+                    help="cdb: UBT 의 코드 생성(UHT). auto = 돌리고 실패하면 건너뛰고 다시, on = 다시 안 함, off = 처음부터 건너뜀 "
+                         "(-NoExecCodeGenActions, UE 5.4+ — 마지막 에디터 빌드의 .generated.h 를 쓴다)")
     ap.add_argument("--compiler", default="Default",
                     help="cdb (Win64): UBT -Compiler=. Default = 평소 빌드 컴파일러(보통 MSVC), Clang = clang-cl (VS 의 Clang 구성 요소 필요), "
                          "VisualStudio2022 등. 빈 값이면 넘기지 않는다 (UBT 가 Clang 을 강제)")

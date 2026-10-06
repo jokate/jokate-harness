@@ -368,6 +368,28 @@ gq 만 엔진이 필요 없다. 사용자 출력은 보지 못했다.
 검증 안 됨: 실제 UBT 가 `-Compiler=Default` 로 만든 `cl.exe @rsp` 항목을 clangd 가 UE 코드에서 제대로 색인하는지 (cl.exe + rsp 자체는 실험실에서 확인),
 UE 5.7 의 GenerateClangDatabase 동작.
 
+## 2026-10-06 (9) — compile_commands 만들기가 UHT(GENERATED_BODY) 오류로 실패
+
+보고: `-Compiler=Default` 뒤에도 Windows 에서 3단계가 실패, 메시지는 "GENERATED_BODY 뭐시기" (정확한 문구는 못 봤다).
+UE 5.4+ 의 GenerateClangDatabase 는 compile_commands 를 쓰기 전에 코드 생성(UHT)을 돌리고 (`bExecCodeGenActions` 기본 true),
+UHT 오류면 데이터베이스를 쓰지 않고 실패한다. GENERATED_BODY 를 말하는 오류는 UHT 가 낸다.
+
+UBT 소스(5.6 미러 `UEBuildTarget.cs`)에서 생성 코드 폴더는 `Intermediate/Build/<플랫폼>/<앱>/Inc/<모듈>` 이고 주석에
+"shared between all intermediate environment variants" — GCD 접미사는 오브젝트 중간 폴더에만 붙는다. 그래서 UHT 를 건너뛰어도
+include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리킨다.
+고침: `cdb` 가 실패하면 `-NoExecCodeGenActions` 로 한 번 더 한다 (`--codegen auto|on|off`).
+
+시험 (리눅스, UHT 를 돌리면 "Expected a GENERATED_BODY()" 로 실패하는 가짜 UBT):
+
+| 경우 | 결과 |
+|---|---|
+| `index_all` (cdb 없음) | 첫 시도 실패 → 안내 → `-NoExecCodeGenActions` 로 다시 → cdb 생성 → 4단계 완료 |
+| `--codegen on` | 다시 하지 않고 실패 (종료 6) |
+| `--codegen off` | 처음부터 건너뛰어 한 번에 성공 |
+
+검증 안 됨: 실제 UBT·사용자 프로젝트의 UHT 오류 문구, 건너뛴 뒤 실제 `.generated.h` 로 색인되는지. UHT 오류가 프로젝트 코드에 있다면
+평소 빌드도 실패할 것이다 — 인덱스는 마지막으로 성공한 빌드의 생성 헤더 기준이 된다.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -383,6 +405,7 @@ UE 5.7 의 GenerateClangDatabase 동작.
 - 웹뷰: 인덱스 파일이 바뀌면 화면을 열 때 다시 읽음 · cindex: Windows 에서 열린 DB 는 backup API 로 덮어쓰기 (2026-10-06)
 - 엔진 찾기: HKCU Builds(소스 빌드) · HKLM 64비트 보기 · LauncherInstalled.dat · 엔진 폴더 안 프로젝트, 못 찾으면 본 곳 출력 (2026-10-06)
 - `cindex.py cdb`: Win64 에서 `-Compiler=Default` — UBT 가 Clang 구성 요소를 요구하지 않게 (2026-10-06)
+- `cindex.py cdb`: UBT 가 실패하면 UHT 를 건너뛰고(`-NoExecCodeGenActions`) 다시 (2026-10-06)
 
 ## 검증 안 된 것
 
