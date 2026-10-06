@@ -259,6 +259,28 @@ gq → ue_q → compile_commands.json(없을 때만) → clangd 프로젝트(`--
 검증 안 됨: **`index_build.bat` 자체는 실행해 보지 않았다** (이 환경에 Windows·cmd 가 없다 — CRLF·UTF-8 과 `index_view.bat` 과 같은 구조만 확인).
 실제 UE 에서 `cdb`(UBT)와 엔진 clangd 색인 시간, Windows 경로.
 
+### 엔진 폴더 지정 (`--engine-root`, 못 찾으면 묻기)
+
+엔진 경로는 모든 도구가 `ue_q.engine_root()` 한 곳에서 정한다. 그래서 이번 실행에만 넘기면 인덱스는 만들어져도 그 뒤 조회(`ue_q`·`cindex`·웹뷰)가
+엔진을 다시 못 찾는다 → 프로젝트별로 저장하고 `engine_root()` 가 읽게 했다. 순서: `UE_ROOT` > 저장 > 레지스트리 > 기본값.
+저장 위치는 `~/.claude/cache/game-harness/engine_roots.json` (머신마다 경로가 달라 프로젝트 VCS 에 두지 않는다, uninstall 이 지운다).
+
+| 경우 | 결과 |
+|---|---|
+| 못 찾음, 대화형 아님(stdin 없음) | 묻지 않고 예전처럼 진행 — 2 실패, 5 건너뜀, 안내는 `--engine-root` |
+| `--engine-root <엔진의 부모 폴더>` | `…/Engine` 으로 맞춰 저장, 1~5 완료. 머리줄에 `(--engine-root)` |
+| 다음 실행 (옵션·UE_ROOT 없이) | 머리줄 `(저장)`, 2 완료, 5 건너뜀(있음) |
+| 그 뒤 조회 (UE_ROOT 없이) | `ue_q.py sym`·`status`, `cindex.py derived`(엔진 클래스 → 프로젝트 파생), 웹뷰 소스 4개 모두 저장된 엔진으로 동작 |
+| 엔진이 아닌 폴더 · 프로젝트 폴더(Source 는 있고 Source/Runtime 은 없음) | 종료 2, 저장값 그대로 |
+| 대화형(가상 터미널): 틀린 경로 → 따옴표 붙은 엔진 경로(끌어다 놓기 흉내) | 다시 묻고, 두 번째를 받아 저장, 종료 0 |
+| 대화형: 비우고 Enter | 엔진 없이 진행 (2 실패, 5 건너뜀) |
+| 버전 경고 (`.uproject` 5.6, 엔진 경로에 `_5.6` 없음) | 저장값이면 안 나오고(UE_ROOT 와 같은 취급), 기본값이면 나온다 |
+| `UE_ROOT` 가 다른 엔진인데 `--engine-root` 를 줌 | [참고] 한 줄, 이번 실행은 `--engine-root` 엔진. 그 뒤 조회는 UE_ROOT 가 있으면 UE_ROOT 쪽 |
+| UE_ROOT 로만 지정 · Unity · 프로젝트 아님 | 예전과 같다, 저장 파일 안 생김 |
+
+시험 중 종료 1 이 한 번 났는데, 픽스처를 복사하면서 compile_commands.json 이 원본 프로젝트 경로를 가리켜 프로젝트 TU 가 0 이 된 탓이었다
+(경로를 고친 복사본으로 다시 해 종료 0). 검증 안 됨: Windows 콘솔에서 한글 경로 입력·끌어다 놓기, 소스 빌드 엔진.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -269,6 +291,7 @@ gq → ue_q → compile_commands.json(없을 때만) → clangd 프로젝트(`--
 - 하네스 이벤트 로그 + 추적 훅 + 모니터 mod, `cindex.py`(clangd 의미 인덱스), `index_view.py`(웹뷰), game-patterns 도메인 증상·패턴 심화·UE 관용구 (2026-10-06)
 - `cindex.py` 속도: RIFF 기본, `--unity N`, `--mode bg` 증분(`cindex_speed.py`) · 웹뷰 계층/트리 그래프·증분 칸·인덱스 해부 (2026-10-06)
 - `index_build.bat` / `index_all.py`: 인덱스 한 번에 만들기 (gq → ue_q → clangd, 단계별 결과) (2026-10-06)
+- 엔진 폴더 지정: `index_all.py --engine-root`, 못 찾으면 묻기, 프로젝트별 저장을 `ue_q.engine_root()` 가 읽음 (2026-10-06)
 
 ## 검증 안 된 것
 

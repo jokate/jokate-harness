@@ -84,7 +84,9 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
    → clangd 프로젝트(`build --mode bg`, clangd 가 없으면 clangd-indexer 전체) → clangd 엔진(`build --scope engine --unity 8`, 엔진 인덱스가 없을 때만).
    한 단계가 실패해도 다음 단계로 가고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다. 명령 창에서는 옵션을 붙인다:
    `index_build.bat <폴더> --no-clangd`(정규식 인덱스만) · `--cdb`(compile_commands.json 다시) · `--engine`(엔진 clangd 인덱스 다시).
-   엔진 폴더를 못 찾으면 먼저 `set UE_ROOT=<엔진 폴더>`. 터미널: `python ~/.claude/skills/game-onboard/scripts/index_all.py [<폴더>] [옵션]`.
+   엔진 폴더를 못 찾으면(소스 빌드 엔진 등) 창에서 경로를 묻는다 — 탐색기에서 엔진 폴더를 창에 끌어다 놓고 Enter. 명령 창에서는
+   `--engine-root <엔진 폴더>`. 넣은 경로는 이 프로젝트용으로 저장돼 다음 실행과 조회 도구(ue_q·cindex·웹뷰)도 그 엔진을 쓴다.
+   (`UE_ROOT` 환경 변수가 있으면 그쪽이 먼저다.) 터미널: `python ~/.claude/skills/game-onboard/scripts/index_all.py [<폴더>] [옵션]`.
 
 **제거** — `uninstall.bat` (프로젝트 폴더를 끌어다 놓으면 그 세팅도). 한 프로젝트에서만 빼려면 `--project-only`, 미리보기는 `--dry-run`. 상세는 README.
 

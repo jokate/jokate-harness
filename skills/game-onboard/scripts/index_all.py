@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """인덱스를 지금 한 번에 만든다 (저장소의 index_build.bat 이 부른다). 표준 라이브러리만 쓴다.
 
-  python index_all.py [프로젝트 폴더] [--no-clangd] [--cdb] [--engine]
+  python index_all.py [프로젝트 폴더] [--engine-root <엔진 폴더>] [--no-clangd] [--cdb] [--engine]
 
 프로젝트 폴더를 안 주면: 지금 폴더가 프로젝트면 그것, 아니면 하네스 이벤트 로그의 가장 최근 프로젝트 (index_view.py 와 같다).
 
@@ -16,9 +16,13 @@
 
 각 단계는 따로 돈다 — 하나가 실패해도 다음 단계로 간다. 앞 단계의 결과가 필요한 단계는 이유를 적고 건너뛴다.
 끝에 단계별 결과를 낸다. 실패가 하나라도 있으면 종료 코드 1, 프로젝트를 못 찾으면 2.
-엔진 위치는 ue_q.py 와 같다: 환경 변수 UE_ROOT > .uproject EngineAssociation + 레지스트리 > C:/Unreal/UE_5.7/Engine.
+엔진 위치는 ue_q.py 와 같다: 환경 변수 UE_ROOT > 이 프로젝트용으로 저장한 경로 > .uproject EngineAssociation + 레지스트리
+> C:/Unreal/UE_5.7/Engine. --engine-root 를 주면 이번 실행에 쓰고 이 프로젝트용으로 저장한다 — 다음 실행과 조회 도구(ue_q·cindex·웹뷰)도
+그 엔진을 쓴다. 못 찾았는데 대화형 창(더블클릭한 bat)이면 경로를 묻는다. 소스 빌드 엔진(EngineAssociation 이 GUID)처럼 레지스트리로
+못 찾는 엔진에 쓴다.
 """
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -31,6 +35,7 @@ sys.path.insert(0, str(HERE))
 import cindex  # noqa: E402
 import cindex_speed  # noqa: E402
 import gq  # noqa: E402
+import ue_q  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -62,6 +67,34 @@ def pad(s, width):
     return s + " " * max(0, width - cols(s))
 
 
+def ask_engine():
+    """엔진 폴더를 묻는다. 비우면 None (엔진 없이 진행)."""
+    print("\n엔진 폴더를 못 찾았다. 엔진 폴더 경로를 넣는다 (예: D:\\UE_5.7 또는 D:\\UE_5.7\\Engine — 탐색기에서 폴더를 이 창에 "
+          "끌어다 놓아도 된다). 이 프로젝트용으로 저장한다. 비우고 Enter 면 엔진 없이 진행:", flush=True)
+    while True:
+        try:
+            text = input("> ")
+        except EOFError:
+            return None
+        if not text.strip():
+            return None
+        eng = ue_q.as_engine_dir(text)
+        if eng:
+            return eng
+        print(f"엔진 폴더가 아니다 (Source/Runtime 이 없다): {text.strip()} — 다시 넣거나 비운다", flush=True)
+
+
+def set_engine(root, eng):
+    """이번 실행의 하위 단계가 이 엔진을 쓰게 하고(UE_ROOT), 이 프로젝트용으로 저장한다."""
+    other = os.environ.get("UE_ROOT")
+    if other and ue_q.as_engine_dir(other) != eng:
+        print(f"[참고] 환경 변수 UE_ROOT={other} 가 있다 — 조회 도구는 UE_ROOT 를 저장값보다 먼저 쓴다. 이번 실행만 {eng} 로 한다.")
+    ue_q.save_engine_root(root, eng)
+    os.environ["UE_ROOT"] = str(eng)
+    ue_q.engine_source.cache_clear()
+    print(f"엔진 폴더 저장: {root.name} → {eng} ({ue_q.engine_roots_path()})")
+
+
 def run(title, script, args, root):
     """하위 스크립트를 같은 파이썬으로 돌리고 출력은 그대로 흘린다. (상태, 걸린 초, 메모)"""
     cmd = [sys.executable, str(HERE / script), *args]
@@ -86,6 +119,7 @@ def engine_tus(cdb, root, eng):
 def main():
     ap = argparse.ArgumentParser(description="인덱스를 지금 한 번에 만든다 (gq → ue_q → clangd)")
     ap.add_argument("root", nargs="?", default=None, help="프로젝트 폴더 (없으면 지금 폴더 또는 최근 프로젝트)")
+    ap.add_argument("--engine-root", default=None, help="엔진 폴더 (UE_5.7 또는 UE_5.7/Engine). 이 프로젝트용으로 저장한다")
     ap.add_argument("--no-clangd", action="store_true", help="정규식 인덱스(gq·ue_q)만 만든다")
     ap.add_argument("--cdb", action="store_true", help="compile_commands.json 이 있어도 다시 만든다 (모듈·파일을 더했을 때)")
     ap.add_argument("--engine", action="store_true", help="엔진 clangd 인덱스가 있어도 다시 만든다 (오래 걸린다)")
@@ -98,9 +132,26 @@ def main():
         print("프로젝트(.uproject 또는 Unity 프로젝트)를 찾지 못했다 — 프로젝트 폴더를 index_build.bat 위에 끌어다 놓거나 "
               "`index_all.py <프로젝트 폴더>` 로 준다.")
         return 2
-    eng = cindex.engine_dir_of(root, kind)
+    eng, how = (ue_q.engine_source(root) if kind == "ue" else (None, ""))
+    if kind == "ue" and a.engine_root:
+        eng = ue_q.as_engine_dir(a.engine_root)
+        if not eng:
+            print(f"엔진 폴더가 아니다 (Source/Runtime 이 없다): {a.engine_root}")
+            return 2
+        set_engine(root, eng)
+        how = "--engine-root"
     eng_ok = bool(eng and (eng / "Source").is_dir())
-    print(f"프로젝트 {root} · {kind}" + (f" · 엔진 {eng}" + ("" if eng_ok else " (없음 — UE_ROOT 로 지정)") if kind == "ue" else ""))
+    if kind == "ue" and not eng_ok and sys.stdin.isatty():
+        try:
+            given = ask_engine()
+        except KeyboardInterrupt:
+            print("\n중단")
+            return 1
+        if given:
+            set_engine(root, given)
+            eng, how, eng_ok = given, "입력", True
+    print(f"프로젝트 {root} · {kind}" + (f" · 엔진 {eng} ({how if eng_ok else '없음 — --engine-root 로 지정'})"
+                                        if kind == "ue" else ""))
     r = str(root)
     steps = []  # (제목, 상태, 초, 메모)
     current = [None]
@@ -151,7 +202,7 @@ def main():
                     step(titles[1], "cindex.py", ["build", "--root", r])
                 edb = cindex.db_for("engine", root, kind)
                 if not eng_ok:
-                    skip(titles[2], "엔진 폴더를 못 찾았다 — UE_ROOT 로 지정")
+                    skip(titles[2], "엔진 폴더를 못 찾았다 — --engine-root 로 지정")
                 elif edb and edb.exists() and not a.engine:
                     skip(titles[2], f"있음 {edb} (엔진 버전당 한 번 — 다시 만들려면 --engine)")
                 elif engine_tus(cdb, root, eng) == 0:

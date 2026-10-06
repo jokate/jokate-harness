@@ -45,6 +45,7 @@ PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하�
 
 인덱스를 지금 만들려면 프로젝트 폴더를 `index_build.bat` 위에 끌어다 놓는다 (더블클릭이면 하네스가 최근에 돈 프로젝트).
 프로젝트 좌표 → 엔진 좌표 → clangd 의미 인덱스 순으로 돌고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다.
+엔진 폴더를 못 찾으면 창에서 경로를 묻고 프로젝트별로 저장한다 (명령 창에서는 `--engine-root <엔진 폴더>`).
 clangd 도구가 없으면 clangd 단계는 건너뛴다 — 준비는 [docs/GUIDE.md](docs/GUIDE.md) 3절.
 
 ## 제거
