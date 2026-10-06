@@ -12,7 +12,7 @@ grep 만으로는 절반만 본다. 그리고 엔진과 프로젝트는 변하�
 |---|---|---|---|
 | 엔진 | 버전 고정, 거대 | `ue_q.py` → `~/.claude/cache/ue_index/<엔진경로>/` (엔진당 1개, 프로젝트 공유) | 엔진 설치·패치 때 `index` |
 | 프로젝트 | 매일 변함 | `gq.py` → UE `Saved/ClaudeIndex` · Unity `Library/ClaudeIndex` | SessionStart 훅 (`game-bootstrap` 참고) |
-| 의미 (참조·호출·상속·오버라이드) | 컴파일 기준 | `cindex.py` → 프로젝트 `Saved/ClaudeIndex/clangd.sqlite` · 엔진 `ue_index/<엔진경로>/clangd.sqlite` | 수동 `build` (compile_commands.json + clangd-indexer 필요) |
+| 의미 (참조·호출·상속·오버라이드) | 컴파일 기준 | `cindex.py` → 프로젝트 `Saved/ClaudeIndex/clangd.sqlite` · 엔진 `ue_index/<엔진경로>/clangd.sqlite` | 수동 `build` (compile_commands.json + clangd-indexer, 증분 `--mode bg` 는 clangd) |
 
 정규식 인덱스는 선언 줄만 본다. 누가 부르나·누가 재정의했나·바꾸면 어디가 영향받나는 `cindex.py` 로 본다. 의미 인덱스는 grep 을 대체하지 않는다 — 문자열·주석·설정은 `rg`.
 
@@ -40,12 +40,13 @@ grep 만으로는 절반만 본다. 그리고 엔진과 프로젝트는 변하�
 | UE 엔진 모듈·의존 / 본문 검색 | `python ~/.claude/skills/game-onboard/scripts/ue_q.py module X` · `deps X` · `rg "패턴" --module X` |
 | 부르는 쪽 / 부르는 함수 (참조 줄 원문 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py callers X` · `callees X` · `refs X` |
 | 자식 · 재정의 · 바꾸면 같이 볼 곳 | `python ~/.claude/skills/game-onboard/scripts/cindex.py derived X` · `overrides X` · `impact X` |
-| 의미 인덱스 만들기 / 상태 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine]` · `status` |
+| 의미 인덱스 만들기 / 상태 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine] [--mode bg] [--unity 8]` · `status` |
 | 인덱스 웹뷰 (검색·그래프·검증·하네스 기록) | `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` |
 
 제외할 경로(서드파티, 중첩 저장소)는 `<루트>/.claude/gq.json` 에 `{"exclude": ["Plugins/Developer"]}`.
 UE 엔진 소스 조회 규칙·출력 형식·전형적 흐름·한계: [references/ue_q.md](references/ue_q.md) — 엔진 API 를 볼 때는 먼저 읽는다.
 clangd 의미 인덱스 준비(clangd-indexer, compile_commands.json)·명령·함정: [references/cindex.md](references/cindex.md).
+속도: 엔진 범위는 `--unity 8`(처음 색인이 크게 준다), 프로젝트 범위는 `--mode bg`(두 번째부터 바뀐 파일과 그것을 포함한 TU 만) — 근거와 합성 측정은 cindex.md 3절.
 인덱스 설계 근거와 검증 기준(연구 기반): [references/indexing-research.md](references/indexing-research.md).
 의미 인덱스가 없으면 "누가 부르나" 류 답은 `rg` 결과임을 밝힌다 (같은 이름 다른 심볼이 섞인다).
 
@@ -70,4 +71,4 @@ clangd 의미 인덱스 준비(clangd-indexer, compile_commands.json)·명령·�
 - `gq.py` 의 심볼 추출은 정규식이다. UE 는 리플렉션 매크로와 `*_API` 클래스만, Unity 는 최상위 타입 선언만 잡는다. 매크로로 생성된 타입·중첩 타입은 빠질 수 있다.
 - Unity 경로는 가짜 프로젝트로만 검증했다. 실제 대형 Unity 프로젝트에서는 검증 안 됨.
 - Unity 엔진 소스 인덱서는 없다. 패키지 소스는 `Library/PackageCache` 에서 직접 `rg` 로 본다.
-- `cindex.py` 는 가짜 UE 구조와 clangd-indexer 23.1.0(리눅스)으로만 검증했다. 실제 UE 엔진·Windows·UBT `cdb` 는 검증 안 됨 (references/cindex.md 7절).
+- `cindex.py` 는 가짜 UE 구조와 clangd/clangd-indexer 23.1.0(리눅스)으로만 검증했다. 실제 UE 엔진·Windows·UBT `cdb`, UE 규모의 `--mode bg`·`--unity` 는 검증 안 됨 (references/cindex.md 7절).

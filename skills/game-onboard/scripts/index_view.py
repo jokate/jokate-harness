@@ -15,6 +15,7 @@
 """
 import argparse
 import json
+import os
 import random
 import sqlite3
 import sys
@@ -91,6 +92,59 @@ def coord_check(rows, resolve_path, n=200):
             "pass": total > 0 and len(bad) <= total * 0.02,
             "why": "표본 심볼의 path:line 에 이름이 있는가. 2% 넘게 틀리면 인덱스가 낡았거나 파서가 잘못 짚는다.",
             "samples": bad[:20]}
+
+
+SRC_EXT = (".h", ".hpp", ".hh", ".inl", ".cpp", ".cc", ".cxx", ".c")
+SKIP_WALK = {"Intermediate", "Binaries", "ThirdParty", "Saved", "DerivedDataCache", ".git", ".vs", "Content"}
+
+
+class ModuleResolver:
+    """경로 → 모듈: 가장 가까운 *.Build.cs (UE). 없으면 루트 아래 첫 폴더."""
+
+    def __init__(self):
+        self.cache = {}
+
+    def of(self, path, root):
+        d = os.path.dirname(path)
+        chain = []
+        found = None
+        while d and d not in self.cache:
+            chain.append(d)
+            try:
+                bc = next((e.name for e in os.scandir(d) if e.name.endswith(".Build.cs")), None)
+            except OSError:
+                bc = None
+            if bc:
+                found = bc[:-len(".Build.cs")]
+                break
+            parent = os.path.dirname(d)
+            if parent == d or len(d) <= len(root):
+                break
+            d = parent
+        if found is None:
+            found = self.cache.get(d) if d in self.cache else None
+        if not found:
+            rel = os.path.relpath(path, root).replace("\\", "/").split("/")
+            found = rel[1] if len(rel) > 2 and rel[0] in ("Source", "Plugins") else rel[0]
+        for c in chain:
+            self.cache[c] = found
+        return found
+
+
+def disk_sources(root, kind_root):
+    """커버리지 분모: 디스크의 C++ 소스. UE 프로젝트는 Source + Plugins/*/Source, 엔진은 Source/{Runtime,Editor,Developer} + Plugins."""
+    root = str(root)
+    bases = []
+    if kind_root == "engine":
+        bases = [os.path.join(root, "Source", d) for d in ("Runtime", "Editor", "Developer")] + [os.path.join(root, "Plugins")]
+    else:
+        bases = [os.path.join(root, "Source"), os.path.join(root, "Plugins")]
+    out = []
+    for base in bases:
+        for dp, dns, fns in os.walk(base):
+            dns[:] = [d for d in dns if d not in SKIP_WALK]
+            out += [os.path.join(dp, f) for f in fns if f.endswith(SRC_EXT)]
+    return out
 
 
 def bfs_graph(focus_ids, neighbors, label_of, kind_of, depth):
@@ -205,6 +259,37 @@ class EngineSource:
             return out + [(str(k[0]), "base", False) for k in kids]
         return bfs_graph(starts, nb, lambda i: sym(i)["name"], lambda i: sym(i)["kind"], depth)
 
+    def overview(self):
+        meta = dict(self.q("SELECT key, value FROM meta"))
+        kinds = self.q("SELECT kind, COUNT(*) FROM symbols GROUP BY kind ORDER BY 2 DESC")
+        groups = {n: (d or "") + ("/" + p if p else "") for n, d, p in self.q("SELECT name, domain, plugin FROM modules")}
+        mods = self.q("SELECT f.module, COUNT(s.rowid), COUNT(DISTINCT f.id) FROM files f LEFT JOIN symbols s "
+                      "ON s.file_id=f.id WHERE f.module != '' GROUP BY f.module ORDER BY 2 DESC LIMIT 400")
+        files = self.q("SELECT kind, COUNT(*) FROM files GROUP BY kind")
+        return {"counts": json.loads(meta.get("counts", "{}")), "kinds": kinds,
+                "modules": [{"name": m, "group": groups.get(m, ""), "symbols": n, "files": nf} for m, n, nf in mods],
+                "file_kinds": files, "build": {"at": meta.get("generated_at"), "seconds": meta.get("elapsed"),
+                                               "engine_root": meta.get("engine_root")}}
+
+    def declared(self):
+        out = {}
+        for n, pub, pri in self.q("SELECT name, deps_public, deps_private FROM modules"):
+            d = {x: "private" for x in pri.split(",") if x}
+            d.update({x: "public" for x in pub.split(",") if x})
+            out[n] = d
+        return out
+
+    def matrix(self, focus, limit, declared=None):
+        return declared_matrix(self.declared(), {m["name"]: m["symbols"] for m in self.overview()["modules"]}, focus, limit)
+
+    def pipeline(self):
+        meta = dict(self.q("SELECT key, value FROM meta"))
+        counts = json.loads(meta.get("counts", "{}"))
+        return {"mode": "정규식 (ue_q.py index)", "at": meta.get("generated_at"),
+                "stages": [{"name": "엔진 폴더 순회 + 헤더 정규식 파싱 + 적재", "seconds": float(meta.get("elapsed") or 0)}],
+                "facts": [["파일", counts.get("files")], ["헤더", counts.get("headers")], ["모듈", counts.get("modules")],
+                          ["심볼", counts.get("symbols")], ["증분", "size+mtime 서명 (index 할 때만)"]], "history": []}
+
     def checks(self):
         out = []
         rows = self.q("SELECT s.name, f.path, s.line FROM symbols s JOIN files f ON f.id=s.file_id "
@@ -307,12 +392,68 @@ class ProjectSource:
                           if (x[4] or "").lower() == s["name"].lower()][:30]
         return bfs_graph(starts, nb, lambda i: self.syms[int(i)][0], lambda i: self.syms[int(i)][1], depth)
 
+    def overview(self):
+        kinds = {}
+        per_mod = {}
+        for s in self.syms:
+            kinds[s[1]] = kinds.get(s[1], 0) + 1
+            m = self._module(s[2]) or "(모듈 밖)"
+            per_mod[m] = per_mod.get(m, 0) + 1
+        assets = gq.load(self.root, self.kind, "assets", [])
+        atypes = {}
+        for a in assets:
+            atypes[a[2]] = atypes.get(a[2], 0) + 1
+        docs = gq.load(self.root, self.kind, "docs", {})
+        tags = gq.load(self.root, self.kind, "tags", {})
+        return {"counts": {"symbols": len(self.syms), "modules": len(self.mods), "docs": len(docs), "assets": len(assets),
+                           "tags": len(tags)},
+                "kinds": sorted(kinds.items(), key=lambda x: -x[1]),
+                "modules": [{"name": m, "group": "project", "symbols": n,
+                             "files": len({s[2] for s in self.syms if (self._module(s[2]) or "(모듈 밖)") == m})}
+                            for m, n in sorted(per_mod.items(), key=lambda x: -x[1])],
+                "asset_types": sorted(atypes.items(), key=lambda x: -x[1])[:16],
+                "build": {"at": self.meta.get("built"), "vcs": self.meta.get("vcs"), "rev": (self.meta.get("rev") or "")[:10]}}
+
+    def declared(self):
+        return {n: {**{d: "private" for d in m["private"]}, **{d: "public" for d in m["public"]}} for n, m in self.mods.items()}
+
+    def matrix(self, focus, limit, declared=None):
+        sizes = {}
+        for s in self.syms:
+            m = self._module(s[2])
+            if m:
+                sizes[m] = sizes.get(m, 0) + 1
+        return declared_matrix(self.declared(), sizes, focus, limit)
+
+    def pipeline(self):
+        return {"mode": "정규식 (gq.py index, 세션 시작 훅)", "at": self.meta.get("built"),
+                "stages": [], "facts": [["VCS", self.meta.get("vcs") or "없음"], ["리비전", (self.meta.get("rev") or "-")[:10]],
+                                        ["갱신", "세션 시작마다 (.claude/session_start.json)"]], "history": []}
+
     def checks(self):
         out = [coord_check([(s[0], s[2], s[3]) for s in self.syms], lambda p: self.root / p)]
         stale = gq.stale_reason(self.root, self.kind, self.meta)
         out.append({"name": "신선도", "metric": stale or "OK", "pass": not stale,
                     "why": "VCS 리비전·문서 수정 시각 기준 (gq.py status 와 같은 기준). 애셋은 index 로만 갱신된다."})
         return out
+
+
+def declared_matrix(declared, sizes, focus, limit):
+    """Build.cs 선언 의존 행렬. 노드는 focus 와 그 이웃, 없으면 크기 상위 limit 개."""
+    names = set(declared) | {d for v in declared.values() for d in v}
+    if focus:
+        f = next((n for n in names if n.lower() == focus.lower()), None)
+        chosen = [f] if f else []
+        if f:
+            chosen += [d for d in declared.get(f, {})] + [n for n, v in declared.items() if f in v]
+    else:
+        chosen = sorted(names, key=lambda n: (-sizes.get(n, 0), n))
+    chosen = list(dict.fromkeys(chosen))[:limit]
+    idx = {n: i for i, n in enumerate(chosen)}
+    cells = [[idx[a], idx[b], 0, kind] for a, deps in declared.items() if a in idx
+             for b, kind in deps.items() if b in idx and a != b]
+    return {"modules": [{"name": n, "size": sizes.get(n, 0), "local": n in declared} for n in chosen], "cells": cells,
+            "measure": "declared"}
 
 
 # ---------------------------------------------------------------- 서버
@@ -349,6 +490,10 @@ class App:
                 return {"events": []}
             sess = arg("session") or None
             return {"events": self.events.read(limit=int(arg("limit", "500")), session=sess)}
+        if path == "/api/coverage":
+            src = self.sources.get(arg("src"))
+            return src.coverage() if src is not None and getattr(src, "available", False) and hasattr(src, "coverage") \
+                else {"error": "커버리지는 clangd 소스에만 있다"}
         if path == "/api/compare" and cindex is not None:
             return cindex.compare(self.sources, arg("pair"))
         if path == "/api/queryset" and cindex is not None:
@@ -372,6 +517,20 @@ class App:
             return src.graph(arg("mode", "inherit"), arg("focus"), max(1, min(4, int(arg("depth", "2")))))
         if path == "/api/checks":
             return {"checks": src.checks()}
+        if path == "/api/overview":
+            return src.overview()
+        if path == "/api/pipeline":
+            return src.pipeline()
+        if path == "/api/matrix":
+            declared = {}
+            for other in self.sources.values():
+                if other.available and hasattr(other, "declared"):
+                    declared.update(other.declared())
+            return src.matrix(arg("focus"), max(5, min(80, int(arg("limit", "28")))), declared)
+        if path == "/api/refs" and hasattr(src, "refs_with_text"):
+            return {"refs": src.refs_with_text(arg("id"), int(arg("limit", "200")))}
+        if path == "/api/anatomy" and hasattr(src, "anatomy"):
+            return {"anatomy": src.anatomy(arg("name"))}
         return {"error": f"모르는 경로: {path}"}
 
 

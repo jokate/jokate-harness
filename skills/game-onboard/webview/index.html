@@ -3,322 +3,1096 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Harness Index View</title>
+<title>Harness Index</title>
 <style>
 :root {
-  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc;
-  --accent: #2f6fdb; --ok: #1f8a4c; --bad: #c0392b; --warn: #b7791f; --code: #f1f0ec;
-  --k-class: #2f6fdb; --k-struct: #7a4fd6; --k-enum: #1f8a4c; --k-func: #c46a16; --k-module: #4a5568; --k-other: #8a8a84;
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --card: #ffffff; --raise: #f3f2ee;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --ring: rgba(11,11,11,0.10); --shadow: 0 1px 2px rgba(11,11,11,.06), 0 8px 24px rgba(11,11,11,.06);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --seq-0: #e8f1fc; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #2a78d6; --seq-5: #1c5cab; --seq-6: #0d366b;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --good-ink: #006300;
+  --accent: #2a78d6; --code-bg: #f4f3ef; --kw: #7c3aed; --ty: #0f766e; --mac: #c2410c; --str: #a16207; --com: #898781;
+  --hero-a: #0b1b3f; --hero-b: #1c3f8f; --hero-c: #3b2a9e;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --line: #34332f;
-    --accent: #6ea0ff; --ok: #4cc27f; --bad: #ff7b6b; --warn: #e3b25a; --code: #262624;
-    --k-class: #6ea0ff; --k-struct: #b49bff; --k-enum: #4cc27f; --k-func: #f0a35a; --k-module: #aab4c3; --k-other: #8a8a84;
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --card: #161615; --raise: #22221f;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --ring: rgba(255,255,255,0.10); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --seq-0: #13233a; --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf; --seq-4: #3987e5; --seq-5: #6da7ec; --seq-6: #b7d3f6;
+    --good-ink: #0ca30c; --accent: #3987e5; --code-bg: #121211; --kw: #c4b5fd; --ty: #5eead4; --mac: #fdba74; --str: #fcd34d; --com: #898781;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --line: #34332f;
-  --accent: #6ea0ff; --ok: #4cc27f; --bad: #ff7b6b; --warn: #e3b25a; --code: #262624;
-  --k-class: #6ea0ff; --k-struct: #b49bff; --k-enum: #4cc27f; --k-func: #f0a35a; --k-module: #aab4c3; --k-other: #8a8a84;
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --card: #161615; --raise: #22221f;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --ring: rgba(255,255,255,0.10); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --seq-0: #13233a; --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf; --seq-4: #3987e5; --seq-5: #6da7ec; --seq-6: #b7d3f6;
+  --good-ink: #0ca30c; --accent: #3987e5; --code-bg: #121211; --kw: #c4b5fd; --ty: #5eead4; --mac: #fdba74; --str: #fcd34d; --com: #898781;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Malgun Gothic", sans-serif; }
-header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
-header h1 { font-size: 16px; margin: 0; }
-header .root { color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
-nav { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
-nav button { border: 0; background: none; color: var(--muted); padding: 8px 12px; cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
-nav button.on { color: var(--text); border-bottom-color: var(--accent); }
-main { padding: 16px; max-width: 1400px; margin: 0 auto; }
-section { display: none; } section.on { display: block; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; background: var(--panel); }
-.chip.off { opacity: .55; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
-input, select, button.act { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
-input[type=search] { flex: 1 1 220px; min-width: 0; }
-button.act { cursor: pointer; } button.act:hover { border-color: var(--accent); }
-.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
-@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: break-word; }
-td.mono { word-break: break-all; }
-th { color: var(--muted); font-weight: 500; }
-tr.click { cursor: pointer; } tr.click:hover { background: var(--code); }
-.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-.muted { color: var(--muted); }
-.kind { display: inline-block; min-width: 56px; font-size: 11px; color: var(--muted); }
-pre.code { background: var(--code); border-radius: 6px; padding: 8px; overflow: auto; max-height: 420px; margin: 8px 0; font-size: 12px; line-height: 1.45; }
-pre.code .ln { color: var(--muted); user-select: none; display: inline-block; width: 4.5em; text-align: right; padding-right: 1em; }
-.rel h4 { margin: 10px 0 4px; font-size: 13px; }
-.rel a { color: var(--accent); cursor: pointer; text-decoration: none; }
-.pass { color: var(--ok); } .fail { color: var(--bad); } .warn { color: var(--warn); }
-#graph { width: 100%; height: 620px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; touch-action: none; display: block; }
-#graph text { font-size: 11px; fill: var(--text); pointer-events: none; }
-#graph line { stroke: var(--line); stroke-width: 1.2; }
-#graph line.public, #graph line.calls { stroke: var(--accent); }
-#graph line.base { stroke: var(--k-struct); }
-#graph line.overrides { stroke: var(--warn); stroke-dasharray: 4 3; }
-.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
-.err { color: var(--bad); white-space: pre-wrap; }
-details summary { cursor: pointer; color: var(--muted); }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+.muted { color: var(--muted); } .ink2 { color: var(--ink-2); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; overflow: hidden; color: #fff; background: linear-gradient(120deg, var(--hero-a), var(--hero-b) 55%, var(--hero-c)); }
+.hero::before { content: ""; position: absolute; inset: -40%; background:
+  radial-gradient(closest-side, rgba(110,160,255,.35), transparent 70%) 10% 20% / 40% 60% no-repeat,
+  radial-gradient(closest-side, rgba(170,120,255,.30), transparent 70%) 85% 10% / 45% 70% no-repeat,
+  radial-gradient(closest-side, rgba(40,200,170,.22), transparent 70%) 60% 90% / 40% 60% no-repeat;
+  animation: drift 18s ease-in-out infinite alternate; }
+.hero::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent); }
+@keyframes drift { to { transform: translate(4%, -3%) rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .hero::before { animation: none; } * { transition: none !important; } }
+.hero-in { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 22px 16px 18px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.12); display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); flex: none; }
+.brand h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+.brand .sub { font-size: 12px; opacity: .8; overflow-wrap: anywhere; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.10); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); font-size: 12px; white-space: nowrap; }
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #6ee7a8; box-shadow: 0 0 0 3px rgba(110,231,168,.18); }
+.pill.off { opacity: .55; } .pill.off .dot { background: #9ca3af; box-shadow: none; }
+.theme-btn { border: 0; background: rgba(255,255,255,.12); color: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+
+/* ---------- nav + toolbar ---------- */
+.nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--page) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--grid); }
+.nav-in { max-width: 1440px; margin: 0 auto; padding: 0 16px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tab { border: 0; background: none; padding: 12px 12px 10px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+main { max-width: 1440px; margin: 0 auto; padding: 16px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.field { background: var(--card); border: 1px solid var(--ring); border-radius: 10px; padding: 7px 10px; min-width: 0; }
+.field:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+input.field[type=search] { flex: 1 1 240px; }
+.btn { border: 1px solid var(--ring); background: var(--card); border-radius: 10px; padding: 7px 12px; cursor: pointer; box-shadow: 0 1px 0 var(--ring); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.view { display: none; } .view.on { display: block; animation: fade .25s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } }
+
+/* ---------- cards & grid ---------- */
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.span-12 { grid-column: span 12; } .span-2 { grid-column: span 2; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; } .span-6 { grid-column: span 6; } .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; } .span-3 { grid-column: span 3; }
+@media (max-width: 1100px) { .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; } .span-3, .span-2 { grid-column: span 6; } }
+@media (max-width: 560px) { .span-3 { grid-column: span 12; } }
+.card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow), inset 0 0 0 1px var(--ring); padding: 16px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 14px; } .card .desc { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; white-space: nowrap; }
+.empty { color: var(--muted); padding: 24px 8px; text-align: center; }
+.err { color: var(--critical); white-space: pre-wrap; }
+
+/* KPI */
+.hero-fig { display: flex; flex-direction: column; justify-content: space-between; min-height: 150px; background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 16%, var(--card)), var(--card) 60%); }
+.hero-fig .big { font-size: 56px; font-weight: 650; line-height: 1; letter-spacing: -1px; }
+.kpi .label { font-size: 12px; color: var(--ink-2); }
+.kpi .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+.kpi .note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.status i { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-style: normal; font-size: 11px; }
+.status.good i { background: var(--good); } .status.bad i { background: var(--critical); } .status.warn i { background: var(--warning); color: #0b0b0b; } .status.none i { background: var(--axis); }
+
+/* meter */
+.meter { height: 10px; border-radius: 999px; background: var(--seq-1); overflow: hidden; }
+.meter > b { display: block; height: 100%; background: var(--seq-4); border-radius: 999px; transition: width .6s ease; }
+
+/* chart chrome */
+svg text { fill: var(--ink-2); font-size: 11px; }
+.axis line, .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.chart-table th, .chart-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.chart-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend i.line { height: 2px; width: 14px; border-radius: 1px; }
+.legend i.ring { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--axis); }
+
+/* tooltip */
+#tip { position: fixed; z-index: 99; pointer-events: none; background: var(--card); color: var(--ink); border-radius: 10px; box-shadow: var(--shadow), inset 0 0 0 1px var(--ring); padding: 8px 10px; font-size: 12px; max-width: 360px; opacity: 0; transition: opacity .12s; }
+#tip .v { font-size: 14px; font-weight: 650; } #tip .k { color: var(--ink-2); } #tip .row { display: flex; align-items: center; gap: 6px; }
+#tip .key { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+
+/* explore */
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; }
+@media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.results { max-height: 640px; overflow: auto; margin: 0 -8px; }
+.res { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
+.res:hover, .res.on { background: var(--raise); }
+.res .nm { font-weight: 600; overflow-wrap: anywhere; } .res .nm .sc { color: var(--muted); font-weight: 400; }
+.res .loc { grid-column: 2; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-2); padding: 1px 8px 1px 6px; border-radius: 999px; background: var(--raise); white-space: nowrap; height: 20px; align-self: start; }
+.badge i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip { border: 1px solid var(--ring); background: var(--card); border-radius: 999px; padding: 2px 10px; cursor: pointer; font-size: 12px; }
+.chip.on { background: var(--accent); color: #fff; border-color: transparent; }
+.dhead h2 { margin: 0; font-size: 20px; overflow-wrap: anywhere; } .dhead .sc { color: var(--muted); font-weight: 400; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; font-size: 12px; margin: 10px 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+pre.code { background: var(--code-bg); border-radius: 12px; padding: 10px 0; overflow: auto; max-height: 360px; margin: 10px 0; font-size: 12px; line-height: 1.55; box-shadow: inset 0 0 0 1px var(--ring); }
+pre.code .l { display: block; padding: 0 12px; white-space: pre; } pre.code .l:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+pre.code .ln { display: inline-block; width: 3.6em; color: var(--muted); user-select: none; text-align: right; margin-right: 12px; }
+.tk-kw { color: var(--kw); } .tk-ty { color: var(--ty); } .tk-mac { color: var(--mac); font-weight: 600; } .tk-str { color: var(--str); } .tk-com { color: var(--com); font-style: italic; }
+.rel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.rel-box { background: var(--raise); border-radius: 12px; padding: 10px; min-width: 0; }
+.rel-box h4 { margin: 0 0 6px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.rel-box a { display: block; color: var(--accent); cursor: pointer; text-decoration: none; overflow-wrap: anywhere; padding: 1px 0; }
+.reflist { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow: auto; }
+.ref { background: var(--raise); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.ref-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; overflow-wrap: anywhere; }
+.ref-code { display: block; margin-top: 4px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre; overflow-x: auto; color: var(--ink); }
+
+/* graph */
+.graph-wrap { position: relative; }
+#graph { width: 100%; height: 640px; display: block; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 70%); border-radius: 16px; box-shadow: inset 0 0 0 1px var(--ring); touch-action: none; cursor: grab; }
+#graph .edge { fill: none; stroke: var(--axis); stroke-width: 1.4; transition: opacity .15s; }
+#graph .node circle.body { stroke: var(--surface); stroke-width: 2; transition: r .15s; }
+#graph .node text { fill: var(--ink); font-size: 11px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+#graph .node { cursor: pointer; transition: opacity .15s; }
+#graph .faded { opacity: .12; }
+#graph .band-label { fill: var(--muted); font-size: 11px; font-weight: 600; }
+.graph-side { position: absolute; top: 12px; right: 12px; width: min(320px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; }
+.graph-tools { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
+.gtree { min-height: 320px; max-height: 760px; overflow: auto; padding: 14px 16px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ring); }
+.gtree h4 { margin: 4px 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.gtree details > div, .gtree .kids { margin-left: 11px; padding-left: 14px; border-left: 1px solid var(--grid); }
+.gtree summary { list-style: none; cursor: pointer; color: var(--ink); } .gtree summary::-webkit-details-marker { display: none; }
+.trow { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 8px; font-size: 13px; min-width: 0; }
+.trow:hover { background: var(--raise); }
+.trow .tw { width: 14px; flex: none; color: var(--muted); font-size: 10px; text-align: center; }
+details[open] > summary .tw.can { transform: rotate(90deg); }
+.trow .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.trow .nm { overflow-wrap: anywhere; } .trow .nm.focus { font-weight: 700; }
+.trow .cnt { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.trow .rep { font-size: 11px; color: var(--muted); }
+
+/* modules matrix */
+.matrix-wrap { overflow: auto; max-height: 760px; }
+.matrix-cell { stroke: var(--surface); stroke-width: 2; }
+.matrix-cell:hover { stroke: var(--ink); stroke-width: 1.5; }
+
+/* pipeline */
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; }
+.anat { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 1100px) { .anat { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .aref { grid-template-columns: minmax(0, 1fr); } .aref .cont { grid-column: 1; } }
+.anat-col { background: var(--raise); border-radius: 12px; padding: 12px; min-width: 0; }
+.anat-col h4 { margin: 0 0 2px; font-size: 13px; font-family: ui-monospace, Consolas, monospace; }
+.anat-col .note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.afield { padding: 5px 0; border-bottom: 1px solid var(--grid); font-size: 12px; min-width: 0; }
+.afield .k { font-family: ui-monospace, Consolas, monospace; color: var(--ink-2); } .afield .v { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.afield .why { color: var(--muted); font-size: 11px; }
+.bits { display: inline-flex; gap: 2px; flex: none; }
+.bits b { min-width: 30px; height: 18px; padding: 0 3px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 600; background: var(--card); color: var(--muted); box-shadow: inset 0 0 0 1px var(--ring); }
+.bits b.on { background: var(--s1); color: #fff; box-shadow: none; }
+.aref { padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 12px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; }
+.aref .loc { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; } .aref .cont { grid-column: 2; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.arel { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
+.arel .self { font-weight: 700; } .arel .pred { font-size: 11px; padding: 0 8px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--ring); }
+.stage { flex: 1 1 160px; min-width: 150px; background: var(--raise); border-radius: 14px; padding: 12px; position: relative; margin: 6px 18px 6px 0; }
+.stage:not(:last-child)::after { content: ""; position: absolute; right: -16px; top: 50%; width: 14px; height: 2px; background: var(--axis); }
+.stage:not(:last-child)::before { content: ""; position: absolute; right: -17px; top: calc(50% - 4px); border: 5px solid transparent; border-left-color: var(--axis); }
+.stage .t { font-size: 12px; color: var(--ink-2); } .stage .v { font-size: 20px; font-weight: 650; } .stage .s { font-size: 12px; color: var(--muted); }
+@media (max-width: 560px) { .stage { margin-right: 0; } .stage::after, .stage::before { display: none; } }
+.tile { flex: 1 1 140px; min-width: 130px; background: var(--raise); border-radius: 14px; padding: 12px; }
+.tile .t { font-size: 12px; color: var(--ink-2); } .tile .v { font-size: 20px; font-weight: 650; } .tile .s { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* table generic */
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px; border-bottom: 1px solid var(--grid); }
+.tbl td { padding: 6px; border-bottom: 1px solid var(--grid); vertical-align: top; overflow-wrap: anywhere; }
+.tbl td.n { text-align: right; font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Harness Index View</h1>
-  <span class="root" id="root">…</span>
+<header class="hero">
+  <div class="hero-in">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2l7.3-.3M7.2 8.2l3.7 7.6M16.9 9.3l-3.7 6.7"/></svg>
+      </div>
+      <div style="min-width:0">
+        <h1>Harness Index</h1>
+        <div class="sub" id="sub">불러오는 중…</div>
+      </div>
+    </div>
+    <div class="pills" id="pills"></div>
+    <button class="theme-btn" id="theme" title="테마">테마: 자동</button>
+  </div>
 </header>
-<nav id="tabs">
-  <button data-tab="search" class="on">검색</button>
-  <button data-tab="graph">그래프</button>
-  <button data-tab="verify">검증</button>
-  <button data-tab="harness">하네스</button>
-</nav>
+<nav class="nav"><div class="nav-in" id="tabs">
+  <button class="tab on" data-v="overview">개요</button>
+  <button class="tab" data-v="explore">탐색</button>
+  <button class="tab" data-v="graph">그래프</button>
+  <button class="tab" data-v="modules">모듈 지도</button>
+  <button class="tab" data-v="pipeline">파이프라인</button>
+  <button class="tab" data-v="verify">검증</button>
+  <button class="tab" data-v="harness">하네스</button>
+</div></nav>
 <main>
-  <div class="chips" id="sources"></div>
+  <div class="toolbar" id="srcbar">
+    <label class="muted" for="src">인덱스</label>
+    <select class="field" id="src"></select>
+    <span class="muted" id="srcnote"></span>
+  </div>
 
-  <section id="search" class="on">
-    <div class="row">
-      <select id="s-src"></select>
-      <input type="search" id="s-q" placeholder="심볼 이름 (부분 일치)" autocomplete="off">
-      <button class="act" id="s-go">검색</button>
+  <section class="view on" id="v-overview"><div class="grid" id="ov"></div></section>
+
+  <section class="view" id="v-explore">
+    <div class="toolbar">
+      <input class="field" type="search" id="q" placeholder="심볼 이름 · A::B · 부분 일치" autocomplete="off">
+      <button class="btn primary" id="go">검색</button>
     </div>
     <div class="split">
-      <div class="card"><table><thead><tr><th>종류</th><th>이름</th><th>위치</th></tr></thead><tbody id="s-res"></tbody></table></div>
-      <div class="card" id="s-detail"><span class="muted">결과를 누르면 선언 원문과 관계가 나온다.</span></div>
+      <div class="card"><div class="chips" id="kindchips"></div><div class="results" id="results"><div class="empty">이름을 넣고 검색한다.</div></div></div>
+      <div class="card" id="detail"><div class="empty">결과를 고르면 선언 원문, 관계 미니맵, 참조가 나온다.</div></div>
     </div>
   </section>
 
-  <section id="graph-tab">
-    <div class="row">
-      <select id="g-src"></select>
-      <select id="g-mode"></select>
-      <input type="search" id="g-focus" placeholder="중심 (심볼 또는 모듈 이름)">
-      <select id="g-depth"><option>1</option><option selected>2</option><option>3</option><option>4</option></select>
-      <button class="act" id="g-go">그리기</button>
-      <span class="muted" id="g-note"></span>
+  <section class="view" id="v-graph">
+    <div class="toolbar">
+      <select class="field" id="gmode"></select>
+      <input class="field" type="search" id="gfocus" placeholder="중심 심볼 / 모듈">
+      <select class="field" id="gdepth"><option value="1">깊이 1</option><option value="2" selected>깊이 2</option><option value="3">깊이 3</option><option value="4">깊이 4</option></select>
+      <select class="field" id="glayout"><option value="layered">계층 배치</option><option value="tree">트리 (접기)</option><option value="force">힘 배치</option></select>
+      <button class="btn primary" id="gdraw">그리기</button>
+      <span class="muted" id="gnote"></span>
     </div>
-    <svg id="graph"></svg>
-    <div class="legend" id="g-legend"></div>
+    <div class="graph-wrap">
+      <svg id="graph" role="img" aria-label="관계 그래프"></svg>
+      <div id="gtree" class="gtree" hidden></div>
+      <div class="graph-tools"><button class="btn" id="gfit">맞춤</button><button class="btn" id="gtable">표</button></div>
+      <div class="card graph-side" id="gside" hidden></div>
+    </div>
+    <div class="legend" id="glegend"></div>
+    <div id="gtablebox" hidden></div>
   </section>
 
-  <section id="verify">
-    <div class="row">
-      <select id="v-src"></select>
-      <button class="act" id="v-go">자체 검사</button>
-      <select id="v-pair"></select>
-      <button class="act" id="v-cmp">정규식 ↔ clangd 대조</button>
-      <button class="act" id="v-qs">질의 세트 실행</button>
+  <section class="view" id="v-modules">
+    <div class="toolbar">
+      <input class="field" type="search" id="mfocus" placeholder="모듈 이름 (비우면 상위)">
+      <label class="muted">개수 <input type="range" id="mlimit" min="8" max="60" value="28" style="vertical-align:middle"></label>
+      <span class="num muted" id="mlimitv">28</span>
+      <button class="btn primary" id="mdraw">그리기</button>
     </div>
-    <div class="card" id="v-out"><span class="muted">검사를 고르면 결과가 여기 나온다. 기준은 각 줄의 설명에 있다.</span></div>
+    <div class="grid">
+      <div class="card span-8"><div class="card-head"><div><h3 id="mtitle">모듈 의존 행렬</h3><p class="desc" id="mdesc"></p></div><button class="linkish" data-table="mtable">표로 보기</button></div>
+        <div class="matrix-wrap" id="matrix"></div><div class="legend" id="mlegend"></div><div id="mtable" hidden></div></div>
+      <div class="card span-4"><h3>가장 굵은 의존</h3><p class="desc">행렬에서 참조 수가 큰 순서. 막대는 참조 수.</p><div id="mtop"></div></div>
+    </div>
   </section>
 
-  <section id="harness">
-    <div class="row">
-      <input type="search" id="h-filter" placeholder="기능 id 필터 (예: skill. / script.ue_q)">
-      <input type="search" id="h-session" placeholder="세션 id (비우면 전체)">
-      <label class="muted"><input type="checkbox" id="h-auto" checked> 5초마다 갱신</label>
-      <button class="act" id="h-go">새로고침</button>
+  <section class="view" id="v-pipeline"><div class="grid" id="pl"></div></section>
+
+  <section class="view" id="v-verify">
+    <div class="toolbar">
+      <button class="btn primary" id="vself">자체 검사</button>
+      <select class="field" id="vpair"></select>
+      <button class="btn" id="vcmp">정규식 ↔ clangd 대조</button>
+      <button class="btn" id="vqs">질의 세트</button>
     </div>
-    <div class="split">
-      <div class="card"><table><thead><tr><th>기능</th><th>횟수</th><th>실패</th><th>마지막</th></tr></thead><tbody id="h-sum"></tbody></table></div>
-      <div class="card"><table><thead><tr><th>시각</th><th></th><th>기능</th><th>내용</th></tr></thead><tbody id="h-list"></tbody></table></div>
+    <div class="grid" id="vout"><div class="card span-12 empty">검사를 고른다. 기준은 각 줄 설명과 references/indexing-research.md.</div></div>
+  </section>
+
+  <section class="view" id="v-harness">
+    <div class="toolbar">
+      <input class="field" type="search" id="hfilter" placeholder="기능 id 필터 (skill. · script.ue_q …)">
+      <input class="field" type="search" id="hsession" placeholder="세션 id (비우면 전체)">
+      <label class="muted"><input type="checkbox" id="hauto" checked> 5초마다 갱신</label>
     </div>
+    <div class="grid" id="hv"></div>
   </section>
 </main>
+<div id="tip" role="tooltip"></div>
 <script>
+'use strict'
+// ======================================================================= util
 const $ = s => document.querySelector(s)
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-const api = async (path, params = {}) => {
+const NS = 'http://www.w3.org/2000/svg'
+function h(tag, attrs, ...kids) {
+  const svg = ['svg', 'g', 'rect', 'circle', 'line', 'path', 'text', 'defs', 'marker', 'pattern', 'title', 'polygon'].includes(tag)
+  const e = svg ? document.createElementNS(NS, tag) : document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue
+    if (k === 'class') e.setAttribute('class', v)
+    else if (k === 'text') e.textContent = v
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v)
+    else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v)
+    else e.setAttribute(k, v)
+  }
+  for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)))
+  return e
+}
+const clear = el => { while (el.firstChild) el.removeChild(el.firstChild); return el }
+const fmt = n => n === null || n === undefined || n === '' ? '–' : typeof n !== 'number' ? String(n) : Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : Math.abs(n) >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : n.toLocaleString('ko-KR')
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+async function api(path, params = {}) {
   const r = await fetch('/api/' + path + '?' + new URLSearchParams(params))
   const j = await r.json()
-  if (j.error) throw new Error(j.error)
+  if (j && j.error) throw new Error(j.error)
   return j
 }
-const MODE_LABEL = { inherit: '상속', modules: '모듈 의존', calls: '호출', overrides: '오버라이드' }
-const KIND_COLOR = k => {
-  k = (k || '').toLowerCase()
-  if (/class|interface/.test(k)) return 'var(--k-class)'
-  if (/struct|union/.test(k)) return 'var(--k-struct)'
-  if (/enum/.test(k)) return 'var(--k-enum)'
-  if (/func|method|constructor|destructor|delegate/.test(k)) return 'var(--k-func)'
-  if (/module/.test(k)) return 'var(--k-module)'
-  return 'var(--k-other)'
-}
-let INFO = null
+const tip = $('#tip')
+function showTip(ev, build) { clear(tip); build(tip); tip.style.opacity = 1; moveTip(ev) }
+function moveTip(ev) { const w = tip.offsetWidth, hh = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + hh > innerHeight - 8) y = ev.clientY - hh - 14; tip.style.left = x + 'px'; tip.style.top = y + 'px' }
+function hideTip() { tip.style.opacity = 0 }
+function tipLines(value, label, rows = []) { return t => { t.append(h('div', { class: 'v', text: value }), h('div', { class: 'k', text: label })); for (const [k, v] of rows) t.append(h('div', { class: 'k' }, h('span', { class: 'muted', text: k + ' ' }), v)) } }
+function statusChip(pass) { const s = pass === true ? ['good', '✓', '통과'] : pass === false ? ['bad', '✕', '실패'] : ['none', '–', '판정 없음']; return h('span', { class: 'status ' + s[0] }, h('i', { text: s[1] }), s[2]) }
+function countUp(el, to) { if (typeof to !== 'number' || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(to); return } const t0 = performance.now(); const step = t => { const k = Math.min(1, (t - t0) / 700); el.textContent = fmt(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step) }; requestAnimationFrame(step) }
+
+// kind → 그룹 (색은 그룹으로, 텍스트 라벨이 항상 같이 간다)
+function kindGroup(k) { k = (k || '').toLowerCase(); if (/class|struct|union|interface|enum$|uenum|uclass|ustruct|typealias|delegate/.test(k) && !/constant/.test(k)) return 0; if (/method|function|constructor|destructor|conversion/.test(k)) return 1; if (/field|variable|property|constant/.test(k)) return 2; return 3 }
+const GROUP_NAMES = ['타입', '함수·메서드', '데이터', '기타']
+const ROOT_NAMES = { engine: '엔진', project: '프로젝트', '외부': '외부', '': '(없음)' }
+const rootName = g => ROOT_NAMES[g] !== undefined ? ROOT_NAMES[g] : g
+const groupColor = g => `var(--s${g + 1})`
+const badge = k => h('span', { class: 'badge' }, h('i', { style: { background: groupColor(kindGroup(k)) } }), k || '?')
+
+// ======================================================================= state
+let INFO = null, SRC = null
+const state = { tab: 'overview' }
+function srcInfo() { return INFO.sources.find(s => s.name === SRC) }
+function isClangd() { return (srcInfo() || {}).engine === 'clangd' }
 
 async function boot() {
   INFO = await api('info')
-  $('#root').textContent = `${INFO.root} · ${INFO.kind || '엔진 미감지'}`
-  $('#sources').innerHTML = INFO.sources.map(s =>
-    `<span class="chip ${s.available ? '' : 'off'}" title="${esc(JSON.stringify(s.info))}">${s.available ? '●' : '○'} ${esc(s.label)}${s.available && s.info.counts ? ' · ' + esc(Object.entries(s.info.counts).map(([k, v]) => k + ' ' + v).join(' · ')) : s.info.missing ? ' — ' + esc(s.info.missing) : ''}</span>`).join('') +
-    `<span class="chip ${INFO.harness.available ? '' : 'off'}">${INFO.harness.available ? '●' : '○'} 하네스 로그</span>`
-  const opts = INFO.sources.filter(s => s.available).map(s => `<option value="${s.name}">${esc(s.label)}</option>`).join('') || '<option value="">(인덱스 없음)</option>'
-  for (const id of ['#s-src', '#g-src', '#v-src']) $(id).innerHTML = opts
-  $('#v-pair').innerHTML = (INFO.compare || []).map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('') || '<option value="">(대조할 clangd 인덱스 없음)</option>'
-  syncModes()
+  $('#sub').textContent = `${INFO.root} · ${INFO.kind || '엔진 미감지'}`
+  const pills = clear($('#pills'))
+  for (const s of INFO.sources) pills.append(h('span', { class: 'pill' + (s.available ? '' : ' off'), title: s.available ? '' : (s.info.missing || '') }, h('i', { class: 'dot' }), s.label))
+  pills.append(h('span', { class: 'pill' + (INFO.harness.available ? '' : ' off') }, h('i', { class: 'dot' }), '하네스 로그'))
+  const avail = INFO.sources.filter(s => s.available)
+  const sel = clear($('#src'))
+  for (const s of avail) sel.append(h('option', { value: s.name, text: s.label }))
+  if (!avail.length) sel.append(h('option', { value: '', text: '(인덱스 없음)' }))
+  SRC = (avail.find(s => s.name === 'clangd-project') || avail.find(s => s.engine === 'clangd') || avail[0] || {}).name
+  sel.value = SRC || ''
+  sel.onchange = () => { SRC = sel.value; refresh() }
+  const pair = clear($('#vpair'))
+  for (const p of INFO.compare || []) pair.append(h('option', { value: p.id, text: p.label }))
+  if (!(INFO.compare || []).length) pair.append(h('option', { value: '', text: '(대조할 clangd 인덱스 없음)' }))
+  refresh()
 }
-
-function syncModes() {
-  const s = INFO.sources.find(x => x.name === $('#g-src').value)
-  $('#g-mode').innerHTML = (s?.modes || []).map(m => `<option value="${m}">${MODE_LABEL[m] || m}</option>`).join('')
+function refresh() {
+  const s = srcInfo()
+  $('#srcnote').textContent = s ? (s.engine === 'clangd' ? '컴파일러 기준 (참조·호출·상속·오버라이드)' : '선언 줄 정규식 (빠르지만 참조는 없다)') : ''
+  const modes = (s && s.modes) || []
+  const gm = clear($('#gmode'))
+  const ML = { inherit: '상속', calls: '호출', overrides: '오버라이드', modules: '모듈 의존' }
+  for (const m of modes) gm.append(h('option', { value: m, text: ML[m] || m }))
+  render(state.tab)
 }
-
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b))
-  document.querySelectorAll('main section').forEach(x => x.classList.remove('on'))
-  $(b.dataset.tab === 'graph' ? '#graph-tab' : '#' + b.dataset.tab).classList.add('on')
-  if (b.dataset.tab === 'harness') loadEvents()
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b))
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + b.dataset.v))
+  state.tab = b.dataset.v
+  requestAnimationFrame(() => layoutCharts())
+  $('#srcbar').style.display = b.dataset.v === 'harness' || b.dataset.v === 'verify' ? 'none' : ''
+  render(b.dataset.v)
 })
+function render(tab) {
+  if (!SRC && tab !== 'harness') return
+  ;({ overview: renderOverview, explore: () => {}, graph: () => {}, modules: renderModules, pipeline: renderPipeline, verify: () => {}, harness: renderHarness })[tab]()
+}
 
-// ---------------------------------------------------------------- 검색
+// theme
+const THEMES = ['auto', 'light', 'dark']
+let theme = 'auto'
+try { theme = localStorage.getItem('hi-theme') || 'auto' } catch (e) {}
+function applyTheme() { if (theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', theme); $('#theme').textContent = '테마: ' + { auto: '자동', light: '라이트', dark: '다크' }[theme] }
+$('#theme').onclick = () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; try { localStorage.setItem('hi-theme', theme) } catch (e) {}; applyTheme(); render(state.tab) }
+applyTheme()
+
+// ======================================================================= charts
+// 가로 막대 (단일 계열, slot 1). rows: [{label, value, note?}]
+// 차트는 실제 폭으로 그린다 (viewBox 를 늘리면 글자도 같이 커지거나 작아진다)
+function lazy(fn) { const d = h('div', { class: 'lazy-chart' }); d._fn = fn; return d }
+function layoutCharts(root = document) { root.querySelectorAll('.lazy-chart').forEach(d => { const w = Math.floor(d.clientWidth); if (!w || d._w === w) return; d._w = w; clear(d).append(d._fn(w)) }) }
+let _rz = 0; addEventListener('resize', () => { clearTimeout(_rz); _rz = setTimeout(() => layoutCharts(), 150) })
+function hbar(rows, opts = {}) {
+  const W = opts.width || 520, rowH = 26, labelW = Math.min(opts.labelW || 150, Math.floor(W * 0.42)), pad = 56
+  const max = Math.max(1, ...rows.map(r => r.value))
+  const svg = h('svg', { viewBox: `0 0 ${W} ${rows.length * rowH + 8}`, width: W, height: rows.length * rowH + 8, role: 'img', 'aria-label': opts.title || '' })
+  rows.forEach((r, i) => {
+    const y = i * rowH + 4, w = Math.max(2, (W - labelW - pad) * r.value / max)
+    const g = h('g', { tabindex: 0 })
+    const maxc = Math.max(6, Math.floor((labelW - 10) / 6.5))
+    g.append(h('text', { x: labelW - 8, y: y + 15, 'text-anchor': 'end', text: r.label.length > maxc ? r.label.slice(0, maxc - 1) + '…' : r.label }))
+    g.append(h('path', { d: barPath(labelW, y + 4, w, 14), fill: r.color || 'var(--s1)' }))
+    g.append(h('text', { x: labelW + w + 6, y: y + 15, class: 'num', text: fmt(r.value) + (opts.unit || '') }))
+    g.append(h('rect', { x: 0, y, width: W, height: rowH, fill: 'transparent' }))
+    const tipf = ev => showTip(ev, tipLines(fmt(r.value) + (opts.unit || ''), r.label, r.extra || []))
+    g.addEventListener('pointermove', tipf); g.addEventListener('pointerleave', hideTip); g.addEventListener('focus', ev => { const b = g.getBoundingClientRect(); showTip({ clientX: b.left + 40, clientY: b.top }, tipLines(fmt(r.value), r.label, r.extra || [])) }); g.addEventListener('blur', hideTip)
+    if (opts.onclick) { g.style.cursor = 'pointer'; g.addEventListener('click', () => opts.onclick(r)) }
+    svg.append(g)
+  })
+  return svg
+}
+function barPath(x, y, w, hgt) { const r = Math.min(4, w / 2, hgt / 2); return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + hgt - r}Q${x + w},${y + hgt} ${x + w - r},${y + hgt}H${x}Z` }
+function tableOf(head, rows, numeric = []) {
+  return h('table', { class: 'chart-table' }, h('thead', {}, h('tr', {}, head.map(x => h('th', { text: x })))), h('tbody', {}, rows.map(r => h('tr', {}, r.map((c, i) => h('td', { class: numeric.includes(i) ? 'n' : '', text: typeof c === 'number' ? fmt(c) : c }))))))
+}
+function card(span, title, desc, body, tableEl) {
+  const id = 't' + Math.random().toString(36).slice(2, 8)
+  const head = h('div', { class: 'card-head' }, h('div', {}, h('h3', { text: title }), desc ? h('p', { class: 'desc', text: desc }) : null))
+  const c = h('div', { class: 'card ' + span }, head, body)
+  if (tableEl) { const box = h('div', { id, hidden: true }, tableEl); head.append(h('button', { class: 'linkish', text: '표로 보기', onclick: e => { box.hidden = !box.hidden; e.target.textContent = box.hidden ? '표로 보기' : '표 닫기' } })); c.append(box) }
+  return c
+}
+// squarified treemap
+function squarify(items, x, y, w, hh) {
+  const total = items.reduce((a, b) => a + b.value, 0) || 1, out = []
+  let rest = items.map(it => ({ ...it, area: it.value / total * w * hh })).filter(it => it.area > 0)
+  while (rest.length) {
+    const short = Math.min(w, hh); let row = [rest[0]], worst = ratio(row, short), i = 1
+    while (i < rest.length) { const nr = row.concat(rest[i]), nw = ratio(nr, short); if (nw > worst) break; row = nr; worst = nw; i++ }
+    const sum = row.reduce((a, b) => a + b.area, 0)
+    if (w >= hh) { const cw = sum / hh; let cy = y; for (const r of row) { const ch = r.area / cw; out.push({ ...r, x, y: cy, w: cw, h: ch }); cy += ch } x += cw; w -= cw }
+    else { const ch = sum / w; let cx = x; for (const r of row) { const cw = r.area / ch; out.push({ ...r, x: cx, y, w: cw, h: ch }); cx += cw } y += ch; hh -= ch }
+    rest = rest.slice(row.length)
+  }
+  return out
+  function ratio(row, s) { const sum = row.reduce((a, b) => a + b.area, 0), mx = Math.max(...row.map(r => r.area)), mn = Math.min(...row.map(r => r.area)); return Math.max(s * s * mx / (sum * sum), sum * sum / (s * s * mn)) }
+}
+function treemap(items, groups, opts = {}) {
+  const W = opts.width || 760, H = opts.height || 340
+  const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': opts.title || '' })
+  const rects = squarify(items.slice().sort((a, b) => b.value - a.value), 0, 0, W, H)
+  for (const r of rects) {
+    const gi = groups.indexOf(r.group), fill = `var(--s${Math.max(0, gi) + 1})`
+    const g = h('g', { tabindex: 0 })
+    g.append(h('rect', { x: r.x + 1, y: r.y + 1, width: Math.max(0, r.w - 2), height: Math.max(0, r.h - 2), rx: 6, fill, 'fill-opacity': 0.88 }))
+    if (r.w > 64 && r.h > 30) {
+      const lum = fill.includes('s4') || fill.includes('s3') ? '#0b0b0b' : '#ffffff'
+      g.append(h('text', { x: r.x + 8, y: r.y + 18, style: { fill: lum, fontWeight: 600, fontSize: '12px' }, text: r.label.length * 7.2 > r.w - 12 ? r.label.slice(0, Math.max(2, Math.floor((r.w - 12) / 7.2) - 1)) + '…' : r.label }))
+      if (r.h > 46) g.append(h('text', { x: r.x + 8, y: r.y + 34, style: { fill: lum, opacity: .85 }, text: fmt(r.value) }))
+    }
+    g.addEventListener('pointermove', ev => showTip(ev, tipLines(fmt(r.value) + ' ' + (opts.unit || ''), r.label, r.extra || [])))
+    g.addEventListener('pointerleave', hideTip)
+    if (opts.onclick) { g.style.cursor = 'pointer'; g.addEventListener('click', () => opts.onclick(r)) }
+    svg.append(g)
+  }
+  return svg
+}
+function legend(entries, cls = '') { return h('div', { class: 'legend' }, entries.map(([color, label, kind]) => h('span', {}, h('i', { class: kind || '', style: { background: color } }), label))) }
+function meterEl(ratio) { return h('div', { class: 'meter', role: 'meter', 'aria-valuenow': Math.round(ratio * 100), 'aria-valuemin': 0, 'aria-valuemax': 100 }, h('b', { style: { width: (ratio * 100).toFixed(1) + '%' } })) }
+
+// ======================================================================= 개요
+async function renderOverview() {
+  const box = clear($('#ov'))
+  let ov
+  try { ov = await api('overview', { src: SRC }) } catch (e) { box.append(h('div', { class: 'card span-12 err', text: e.message })); return }
+  const c = ov.counts || {}
+  const clangd = isClangd()
+  const fig = h('div', { class: 'card span-4 hero-fig' },
+    h('div', { class: 'ink2', text: srcInfo().label }),
+    h('div', {}, h('div', { class: 'big', id: 'bigfig' }), h('div', { class: 'ink2', text: '심볼' })),
+    h('div', { class: 'muted', text: `빌드 ${ov.build && ov.build.at || '–'}` }))
+  box.append(fig); countUp(fig.querySelector('#bigfig'), c.symbols || 0)
+  const kpis = clangd
+    ? [['참조', c.refs, '어디서 쓰나 · 누가 부르나'], ['관계', c.relations, `상속 ${fmt(ov.relations.BaseOf)} · 재정의 ${fmt(ov.relations.OverriddenBy)}`], ['파일', c.files, `모듈 ${fmt((ov.modules || []).length)}`]]
+    : [['파일', c.files || c.docs, c.headers ? `헤더 ${fmt(c.headers)}` : (c.docs !== undefined ? '문서' : '')], ['모듈', c.modules, 'Build.cs 기준'], c.assets !== undefined ? ['애셋', c.assets, `태그 ${fmt(c.tags)}`] : ['헤더', c.headers, '선언을 뽑은 헤더']]
+  for (const [label, value, note] of kpis) { const v = h('div', { class: 'value' }); box.append(h('div', { class: 'card span-2 kpi' }, h('div', { class: 'label', text: label }), v, h('div', { class: 'note', text: note || '' }))); countUp(v, value || 0) }
+  if (clangd) {
+    const st = ov.failed_tu ? h('span', { class: 'status bad' }, h('i', { text: '✕' }), `실패 TU ${ov.failed_tu}`) : h('span', { class: 'status good' }, h('i', { text: '✓' }), '실패 TU 0')
+    box.append(h('div', { class: 'card span-2 kpi' }, h('div', { class: 'label', text: '색인 상태' }), h('div', { style: { marginTop: '8px' } }, st), ov.generated_h ? h('div', { class: 'note', text: `.generated.h 관련 ${ov.generated_h} — UCLASS 누락 가능` }) : h('div', { class: 'note', text: '종료 코드가 아니라 stderr 로 센다' })))
+  }
+  // 종류
+  const kinds = (ov.kinds || []).slice(0, 10).map(([k, n]) => ({ label: k, value: n, color: groupColor(kindGroup(k)) }))
+  const restK = (ov.kinds || []).slice(10).reduce((a, [, n]) => a + n, 0)
+  if (restK) kinds.push({ label: '기타', value: restK, color: 'var(--s4)' })
+  const usedG = [...new Set(kinds.map(k => kindGroup(k.label === '기타' ? '' : k.label)))].sort()
+  box.append(card('span-5', '심볼 종류', '무엇이 색인됐나. 색은 종류 묶음(타입·함수·데이터·기타), 이름이 같이 붙는다.', h('div', {}, lazy(w => hbar(kinds, { title: '심볼 종류', labelW: 140, width: w })), legend(usedG.map(g => [groupColor(g), GROUP_NAMES[g]]))), tableOf(['종류', '개수'], (ov.kinds || []).map(([k, n]) => [k, n]), [1])))
+  // 트리맵
+  const mods = (ov.modules || []).filter(m => m.symbols > 0)
+  const groups = [...new Set(mods.map(m => m.group || ''))].slice(0, 3)
+  const items = mods.map(m => ({ label: m.name, value: m.symbols, group: groups.includes(m.group || '') ? (m.group || '') : groups[groups.length - 1], extra: [['파일', fmt(m.files)], m.refs !== undefined ? ['참조(이 모듈 파일 안)', fmt(m.refs)] : null, ['묶음', rootName(m.group || '')]].filter(Boolean) }))
+  box.append(card('span-7', '모듈 지도', '넓이 = 그 모듈에 선언된 심볼 수. 누르면 모듈 지도 탭에서 그 모듈 중심으로 본다.', h('div', {}, mods.length ? lazy(w => treemap(items, groups, { width: w, height: w < 520 ? 280 : 360, unit: '심볼', onclick: r => { $('#mfocus').value = r.label; document.querySelector('.tab[data-v=modules]').click() } })) : h('div', { class: 'empty', text: '모듈 정보 없음' }), groups.length > 1 ? legend(groups.map((g, i) => [`var(--s${i + 1})`, rootName(g)])) : null), tableOf(['모듈', '묶음', '심볼', '파일'], mods.map(m => [m.name, m.group || '', m.symbols, m.files]), [2, 3])))
+  if (clangd) {
+    const rk = Object.entries(ov.ref_kinds || {}).map(([k, v]) => ({ label: k, value: v }))
+    box.append(card('span-5', '참조 구성', '참조 한 건은 여러 성격을 같이 가진다(선언이면서 정의 등). "Container 있음" 이 호출 그래프의 재료다.', lazy(w => hbar(rk, { title: '참조 구성', labelW: 120, unit: '건', width: w })), tableOf(['성격', '건수'], rk.map(r => [r.label, r.value]), [1])))
+    const covBox = h('div', {}, h('div', { class: 'empty', text: '디스크와 대조하는 중…' }))
+    box.append(card('span-7', '커버리지 — 디스크 소스 중 clangd 가 본 파일', '어떤 번역 단위도 포함하지 않은 헤더·제외된 cpp 는 인덱스에 없다. 모듈별 비율.', covBox))
+    api('coverage', { src: SRC }).then(cv => {
+      clear(covBox)
+      const ratio = cv.total ? cv.indexed / cv.total : 0
+      covBox.append(h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '6px' } }, h('div', { style: { fontSize: '28px', fontWeight: 650 }, text: (ratio * 100).toFixed(1) + '%' }), h('div', { class: 'muted', text: `${fmt(cv.indexed)} / ${fmt(cv.total)} 파일` })), meterEl(ratio))
+      const rows = (cv.modules || []).slice(0, 14).map(m => ({ label: m.name, value: m.disk ? Math.round(m.indexed / m.disk * 100) : 0, extra: [['본 파일', `${m.indexed} / ${m.disk}`], ...(m.missing_sample.length ? [['빠진 예', m.missing_sample.slice(0, 3).join(', ')]] : [])] }))
+      covBox.append(h('div', { style: { marginTop: '12px' } }, lazy(w => hbar(rows, { title: '모듈별 커버리지(%)', labelW: 160, width: w, unit: '%' }))))
+      const tb = tableOf(['모듈', '본 파일', '디스크', '빠진 예'], (cv.modules || []).map(m => [m.name, m.indexed, m.disk, m.missing_sample.join(', ')]), [1, 2])
+      covBox.append(h('details', {}, h('summary', { text: '모듈 전체 표' }), tb)); layoutCharts(covBox)
+    }).catch(e => { clear(covBox).append(h('div', { class: 'err', text: e.message })) })
+  } else if (ov.asset_types && ov.asset_types.length) {
+    box.append(card('span-5', '애셋 유형', '이름 접두사로 본 애셋 분포 (내용은 에디터 MCP 로).', lazy(w => hbar(ov.asset_types.map(([k, n]) => ({ label: k, value: n })), { labelW: 110, width: w })), tableOf(['유형', '개수'], ov.asset_types, [1])))
+  } else if (ov.file_kinds) {
+    box.append(card('span-5', '파일 종류', '색인 대상 파일.', lazy(w => hbar(ov.file_kinds.map(([k, n]) => ({ label: k, value: n })), { labelW: 90, width: w })), tableOf(['종류', '개수'], ov.file_kinds, [1])))
+  }
+  layoutCharts(box)
+}
+
+// ======================================================================= 탐색
+let lastResults = [], kindFilter = null
 async function doSearch() {
-  const q = $('#s-q').value.trim()
-  if (!q) return
-  try {
-    const { results } = await api('search', { src: $('#s-src').value, q, limit: 80 })
-    $('#s-res').innerHTML = results.map(r => `<tr class="click" data-id="${esc(r.id)}"><td class="kind">${esc(r.kind)}</td><td>${esc(r.scope ? r.scope + r.name : r.name)}</td><td class="mono muted">${esc(r.path)}:${r.line}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">없음</td></tr>'
-    document.querySelectorAll('#s-res tr.click').forEach(tr => tr.onclick = () => showDetail($('#s-src').value, tr.dataset.id))
-  } catch (e) { $('#s-res').innerHTML = `<tr><td colspan=3 class="err">${esc(e.message)}</td></tr>` }
+  const q = $('#q').value.trim(); if (!q) return
+  const box = clear($('#results')); box.append(h('div', { class: 'empty', text: '찾는 중…' }))
+  try { lastResults = (await api('search', { src: SRC, q, limit: 120 })).results; kindFilter = null; drawResults() }
+  catch (e) { clear(box).append(h('div', { class: 'err', text: e.message })) }
+}
+function drawResults() {
+  const chips = clear($('#kindchips')), counts = {}
+  for (const r of lastResults) counts[r.kind] = (counts[r.kind] || 0) + 1
+  chips.append(h('button', { class: 'chip' + (kindFilter ? '' : ' on'), text: `전체 ${lastResults.length}`, onclick: () => { kindFilter = null; drawResults() } }))
+  for (const [k, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) chips.append(h('button', { class: 'chip' + (kindFilter === k ? ' on' : ''), text: `${k} ${n}`, onclick: () => { kindFilter = k; drawResults() } }))
+  const box = clear($('#results'))
+  const list = lastResults.filter(r => !kindFilter || r.kind === kindFilter)
+  if (!list.length) { box.append(h('div', { class: 'empty', text: '없음' })); return }
+  for (const r of list) box.append(h('div', { class: 'res', tabindex: 0, onclick: e => { document.querySelectorAll('.res.on').forEach(x => x.classList.remove('on')); e.currentTarget.classList.add('on'); showDetail(r.src || SRC, r.id) }, onkeydown: e => { if (e.key === 'Enter') e.currentTarget.click() } },
+    badge(r.kind), h('div', { class: 'nm' }, r.scope ? h('span', { class: 'sc', text: r.scope }) : null, r.name), h('div', { class: 'loc mono', text: `${r.path}:${r.line}${r.module ? '  ·  ' + r.module : ''}` })))
+}
+$('#go').onclick = doSearch
+$('#q').onkeydown = e => { if (e.key === 'Enter') doSearch() }
+
+const CPP_KW = new Set('alignas alignof auto bool break case catch char class const constexpr consteval const_cast continue decltype default delete do double dynamic_cast else enum explicit export extern false final float for friend goto if inline int long mutable namespace new noexcept nullptr operator override private protected public register reinterpret_cast return short signed sizeof static static_assert static_cast struct switch template this throw true try typedef typename union unsigned using virtual void volatile while'.split(' '))
+function highlight(line) {
+  const frag = document.createDocumentFragment(), re = /(\/\/.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b[A-Z][A-Z0-9_]{2,}\b(?=\s*\()|\b[A-Za-z_]\w*\b)/g
+  let last = 0, m
+  while ((m = re.exec(line))) {
+    if (m.index > last) frag.append(line.slice(last, m.index))
+    const t = m[0]; let cls = null
+    if (t.startsWith('//') || t.startsWith('/*')) cls = 'tk-com'; else if (t[0] === '"' || t[0] === "'") cls = 'tk-str'
+    else if (/^[A-Z][A-Z0-9_]{2,}$/.test(t)) cls = 'tk-mac'; else if (CPP_KW.has(t)) cls = 'tk-kw'; else if (/^[UAFIETS][A-Z]\w+$/.test(t)) cls = 'tk-ty'
+    frag.append(cls ? h('span', { class: cls, text: t }) : t)
+    last = m.index + t.length
+  }
+  if (last < line.length) frag.append(line.slice(last))
+  return frag
+}
+function codeBlock(sn) { if (!sn) return h('p', { class: 'muted', text: '원문을 읽지 못했다.' }); return h('pre', { class: 'code' }, sn.lines.map((l, i) => h('span', { class: 'l' }, h('span', { class: 'ln', text: sn.start + i }), highlight(l)))) }
+
+// 미니 관계도: 위=부모, 아래=자식, 왼쪽=부르는 쪽, 오른쪽=부르는 함수
+function egoMap(sym, rel, src, W = 640) {
+  const pick = (...keys) => keys.flatMap(k => Object.entries(rel).filter(([n]) => n.startsWith(k)).flatMap(([, v]) => v)).filter(x => x && x.id !== undefined && x.name)
+  // 높이는 실제로 있는 방향만큼만: 위(부모)·아래(자식) 줄이 없으면 그 띠를 접고, 옆 줄은 가장 긴 쪽 개수로 잡는다
+  const nTop = pick('부모', '재정의 대상').length, nBot = pick('자식', '재정의한 쪽').length
+  const nSide = Math.min(7, Math.max(pick('호출하는 쪽').length, pick('부르는 함수').length))
+  const mid = Math.max(84, nSide * 34 + 20), topBand = nTop ? 64 : 16, botBand = nBot ? 76 : 40
+  const H = topBand + mid + botBand, cx = W / 2, cy = topBand + mid / 2, sideX = Math.min(96, W * .18)
+  const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': '관계 미니맵' })
+  const sides = [
+    { items: pick('부모', '재정의 대상'), pos: (i, n) => [cx + (i - (n - 1) / 2) * Math.min(120, (W - 40) / Math.max(1, n)), 38], label: '부모 · 재정의 대상' },
+    { items: pick('자식', '재정의한 쪽'), pos: (i, n) => [cx + (i - (n - 1) / 2) * Math.min(120, (W - 40) / Math.max(1, n)), H - 38], label: '자식 · 재정의한 쪽' },
+    { items: pick('호출하는 쪽'), pos: (i, n) => [sideX, cy + (i - (n - 1) / 2) * 34], label: '부르는 쪽' },
+    { items: pick('부르는 함수'), pos: (i, n) => [W - sideX, cy + (i - (n - 1) / 2) * 34], label: '부르는 함수' },
+  ]
+  const g = h('g'); svg.append(g)
+  let total = 0
+  sides.forEach((s, si) => {
+    const list = s.items.slice(0, si < 2 ? 5 : 7); total += list.length
+    list.forEach((it, i) => {
+      const [x, y] = s.pos(i, list.length)
+      g.append(h('path', { d: `M${cx},${cy} Q${(cx + x) / 2},${si < 2 ? (cy + y) / 2 : cy} ${x},${y}`, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 1.4 }))
+      const node = h('g', { style: { cursor: 'pointer' }, tabindex: 0, onclick: () => showDetail(it.src || src, it.id) })
+      node.append(h('circle', { cx: x, cy: y, r: 6, fill: groupColor(kindGroup(it.kind)), stroke: 'var(--card)', 'stroke-width': 2 }))
+      const label = (it.scope || '') + it.name
+      node.append(h('text', { x: si === 2 ? x - 10 : si === 3 ? x + 10 : x, y: si < 2 ? (si === 0 ? y - 10 : y + 18) : y + 4, 'text-anchor': si === 2 ? 'end' : si === 3 ? 'start' : 'middle', style: { fill: 'var(--ink)', paintOrder: 'stroke', stroke: 'var(--card)', strokeWidth: '3px' }, text: label.length > 26 ? label.slice(0, 25) + '…' : label }))
+      node.addEventListener('pointermove', ev => showTip(ev, tipLines(label, s.label, [['종류', it.kind || '?'], ['위치', `${it.path || ''}:${it.line || ''}`]])))
+      node.addEventListener('pointerleave', hideTip)
+      g.append(node)
+    })
+  })
+  g.append(h('circle', { cx, cy, r: 13, fill: groupColor(kindGroup(sym.kind)), stroke: 'var(--card)', 'stroke-width': 3 }))
+  g.append(h('circle', { cx, cy, r: 19, fill: 'none', stroke: groupColor(kindGroup(sym.kind)), 'stroke-opacity': .35, 'stroke-width': 2 }))
+  g.append(h('text', { x: cx, y: cy + 36, 'text-anchor': 'middle', style: { fill: 'var(--ink)', fontWeight: 650, paintOrder: 'stroke', stroke: 'var(--card)', strokeWidth: '3px' }, text: sym.name }))
+  if (!total) g.append(h('text', { x: cx, y: cy - 30, 'text-anchor': 'middle', text: '이 인덱스에 기록된 관계가 없다' }))
+  return svg
 }
 async function showDetail(src, id) {
-  const box = $('#s-detail')
-  try {
-    const { symbol: s } = await api('detail', { src, id })
-    if (!s) { box.innerHTML = '<span class="muted">없음</span>'; return }
-    const fields = ['kind', 'module', 'signature', 'type', 'return_type', 'parent', 'api', 'refs']
-      .filter(k => s[k] !== undefined && s[k] !== '' && s[k] !== null)
-      .map(k => `<tr><th>${k}</th><td class="mono">${esc(s[k])}</td></tr>`).join('')
-    const code = s.snippet ? `<pre class="code">${s.snippet.lines.map((l, i) => `<span class="ln">${s.snippet.start + i}</span>${esc(l)}`).join('\n')}</pre>` : '<p class="muted">원문을 읽지 못했다.</p>'
-    const rels = Object.entries(s.relations || {}).filter(([, v]) => v.length).map(([k, v]) =>
-      `<h4>${esc(k)} (${v.length})</h4>` + v.slice(0, 60).map(r => `<div><a data-src="${esc(r.src || src)}" data-id="${esc(r.id)}">${esc(r.scope ? r.scope + r.name : r.name)}</a> <span class="mono muted">${esc(r.path || '')}${r.line ? ':' + r.line : ''}</span></div>`).join('')).join('')
-    box.innerHTML = `<h3 style="margin:0">${esc(s.scope ? s.scope + s.name : s.name)}</h3><div class="mono muted">${esc(s.path)}:${s.line}${s.def_path ? ` · 정의 ${esc(s.def_path)}:${s.def_line}` : ''}</div>
-      <table>${fields}</table>${code}<div class="rel">${rels}</div>
-      <div class="row" style="margin-top:8px"><button class="act" id="d-graph">그래프로 보기</button></div>`
-    box.querySelectorAll('.rel a').forEach(a => a.onclick = () => showDetail(a.dataset.src, a.dataset.id))
-    $('#d-graph').onclick = () => {
-      $('#g-src').value = src; syncModes(); $('#g-focus').value = s.name
-      document.querySelector('#tabs button[data-tab=graph]').click(); drawGraph()
-    }
-  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>` }
-}
-$('#s-go').onclick = doSearch
-$('#s-q').onkeydown = e => { if (e.key === 'Enter') doSearch() }
-
-// ---------------------------------------------------------------- 그래프 (힘 기반 배치, 의존 없음)
-let sim = null
-async function drawGraph() {
-  const svg = $('#graph')
-  if (sim) cancelAnimationFrame(sim)
-  svg.innerHTML = ''
-  $('#g-note').textContent = '불러오는 중…'
-  let g
-  try { g = await api('graph', { src: $('#g-src').value, mode: $('#g-mode').value, focus: $('#g-focus').value.trim(), depth: $('#g-depth').value }) }
-  catch (e) { $('#g-note').textContent = e.message; return }
-  $('#g-note').textContent = `노드 ${g.nodes.length} · 간선 ${g.edges.length}${g.truncated ? ' (상한에서 잘림)' : ''}`
-  const kinds = [...new Set(g.nodes.map(n => n.kind))]
-  const ekinds = [...new Set(g.edges.map(e => e.kind))]
-  $('#g-legend').innerHTML = kinds.map(k => `<span><i style="background:${KIND_COLOR(k)}"></i>${esc(k)}</span>`).join('') +
-    ' · 간선: ' + ekinds.map(k => `<span>${esc(k)}</span>`).join(' ')
-  const W = svg.clientWidth, H = svg.clientHeight
-  const ns = 'http://www.w3.org/2000/svg'
-  const view = document.createElementNS(ns, 'g'); svg.appendChild(view)
-  const defs = document.createElementNS(ns, 'defs')
-  defs.innerHTML = '<marker id="arr" viewBox="0 0 10 10" refX="16" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" opacity=".5"/></marker>'
-  svg.appendChild(defs)
-  const byId = new Map(g.nodes.map((n, i) => [n.id, Object.assign(n, { x: W / 2 + Math.cos(i) * 80 * Math.sqrt(i), y: H / 2 + Math.sin(i) * 80 * Math.sqrt(i), vx: 0, vy: 0 })]))
-  const edges = g.edges.map(e => ({ ...e, s: byId.get(e.source), t: byId.get(e.target) })).filter(e => e.s && e.t)
-  const lines = edges.map(e => { const l = document.createElementNS(ns, 'line'); l.setAttribute('class', e.kind); l.setAttribute('marker-end', 'url(#arr)'); view.appendChild(l); return l })
-  const nodeEls = g.nodes.map(n => {
-    const el = document.createElementNS(ns, 'g'); el.style.cursor = 'grab'
-    el.innerHTML = `<circle r="${n.focus ? 9 : 6}" fill="${KIND_COLOR(n.kind)}" stroke="var(--panel)" stroke-width="2"></circle><text x="10" y="4">${esc(n.label)}</text><title>${esc(n.kind)} ${esc(n.label)}</title>`
-    view.appendChild(el)
-    let drag = false
-    el.addEventListener('pointerdown', ev => { drag = true; el.setPointerCapture(ev.pointerId); n.fixed = true })
-    el.addEventListener('pointermove', ev => { if (!drag) return; const p = toLocal(ev); n.x = p.x; n.y = p.y; heat = Math.max(heat, 0.3) })
-    el.addEventListener('pointerup', () => { drag = false })
-    el.addEventListener('dblclick', () => { $('#g-focus').value = n.label; drawGraph() })
-    return el
-  })
-  let zoom = 1, panX = 0, panY = 0
-  const apply = () => view.setAttribute('transform', `translate(${panX},${panY}) scale(${zoom})`)
-  const toLocal = ev => { const r = svg.getBoundingClientRect(); return { x: (ev.clientX - r.left - panX) / zoom, y: (ev.clientY - r.top - panY) / zoom } }
-  svg.onwheel = ev => { ev.preventDefault(); const f = ev.deltaY < 0 ? 1.1 : 0.9; const r = svg.getBoundingClientRect(); const mx = ev.clientX - r.left, my = ev.clientY - r.top; panX = mx - (mx - panX) * f; panY = my - (my - panY) * f; zoom *= f; apply() }
-  let panning = null
-  svg.onpointerdown = ev => { if (ev.target === svg) panning = { x: ev.clientX - panX, y: ev.clientY - panY } }
-  svg.onpointermove = ev => { if (panning) { panX = ev.clientX - panning.x; panY = ev.clientY - panning.y; apply() } }
-  svg.onpointerup = () => { panning = null }
-  let heat = 1
-  const tick = () => {
-    const N = g.nodes
-    for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) {
-      const a = N[i], b = N[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx * dx + dy * dy + 0.01
-      if (d2 > 90000) continue
-      const f = 900 / d2; dx *= f; dy *= f; a.vx += dx; a.vy += dy; b.vx -= dx; b.vy -= dy
-    }
-    for (const e of edges) { const dx = e.t.x - e.s.x, dy = e.t.y - e.s.y; const d = Math.sqrt(dx * dx + dy * dy) || 1; const f = (d - 90) * 0.02; e.s.vx += dx / d * f; e.s.vy += dy / d * f; e.t.vx -= dx / d * f; e.t.vy -= dy / d * f }
-    for (const n of N) {
-      n.vx += (W / 2 - n.x) * 0.002; n.vy += (H / 2 - n.y) * 0.002
-      if (!n.fixed) { n.x += n.vx * heat; n.y += n.vy * heat }
-      n.vx *= 0.6; n.vy *= 0.6
-    }
-    edges.forEach((e, i) => { const l = lines[i]; l.setAttribute('x1', e.s.x); l.setAttribute('y1', e.s.y); l.setAttribute('x2', e.t.x); l.setAttribute('y2', e.t.y) })
-    N.forEach((n, i) => nodeEls[i].setAttribute('transform', `translate(${n.x},${n.y})`))
-    heat *= 0.985
-    if (heat > 0.02) sim = requestAnimationFrame(tick)
+  const box = clear($('#detail')); box.append(h('div', { class: 'empty', text: '불러오는 중…' }))
+  let s
+  try { s = (await api('detail', { src, id })).symbol } catch (e) { clear(box).append(h('div', { class: 'err', text: e.message })); return }
+  clear(box)
+  if (!s) { box.append(h('div', { class: 'empty', text: '없음' })); return }
+  box.append(h('div', { class: 'dhead' }, h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, badge(s.kind), s.deprecated ? h('span', { class: 'status warn' }, h('i', { text: '!' }), 'deprecated') : null, s.module ? h('span', { class: 'badge', text: s.module }) : null),
+    h('h2', {}, s.scope ? h('span', { class: 'sc', text: s.scope }) : null, s.name)))
+  const kv = h('dl', { class: 'kv' })
+  const addKV = (k, v) => { if (v !== undefined && v !== null && v !== '') kv.append(h('dt', { text: k }), h('dd', { class: 'mono', text: String(v) })) }
+  addKV('선언', `${s.path}:${s.line}`); if (s.def_path) addKV('정의', `${s.def_path}:${s.def_line}`)
+  addKV('시그니처', s.signature); addKV('반환', s.return_type); addKV('부모(정규식)', s.parent); addKV('API', s.api); addKV('참조 기록', s.ref_rows)
+  box.append(kv, codeBlock(s.snippet))
+  const rel = s.relations || {}
+  box.append(h('h3', { style: { margin: '14px 0 0', fontSize: '14px' }, text: '관계 미니맵' }), h('p', { class: 'desc muted', style: { fontSize: '12px', margin: '0' }, text: '위 = 부모·재정의 대상, 아래 = 자식·재정의한 쪽, 왼쪽 = 부르는 쪽, 오른쪽 = 부르는 함수. 노드를 누르면 그쪽으로 옮긴다.' }), lazy(w => egoMap(s, rel, src, w)))
+  const grid = h('div', { class: 'rel-grid' })
+  for (const [k, v] of Object.entries(rel)) {
+    if (!v.length || k === '참조 위치') continue
+    grid.append(h('div', { class: 'rel-box' }, h('h4', { text: `${k} ${v.length}` }), v.slice(0, 40).map(r => h('a', { onclick: () => showDetail(r.src || src, r.id), title: `${r.path || ''}:${r.line || ''}`, text: (r.scope || '') + r.name }))))
   }
-  const reheat = () => { if (heat <= 0.02) { heat = 0.3; sim = requestAnimationFrame(tick) } }
-  svg.addEventListener('pointermove', () => { if (heat > 0.02 && heat < 0.3) return; if (g.nodes.some(n => n.fixed)) reheat() })
-  apply(); tick()
+  if (grid.childNodes.length) box.append(grid)
+  layoutCharts(box)
+  if ((srcInfo() || {}).engine === 'clangd' || String(src).startsWith('clangd')) {
+    const rb = h('div', {}, h('div', { class: 'muted', text: '참조 불러오는 중…' }))
+    box.append(h('h3', { style: { margin: '16px 0 6px', fontSize: '14px' }, text: '참조 — 위치와 그 줄 원문' }), rb)
+    api('refs', { src, id, limit: 200 }).then(({ refs }) => {
+      clear(rb)
+      if (!refs.length) { rb.append(h('div', { class: 'muted', text: '참조 없음' })); return }
+      rb.append(h('div', { class: 'reflist' }, refs.map(r => h('div', { class: 'ref' },
+        h('div', { class: 'ref-head' }, h('span', { class: 'badge', text: r.kind }), h('span', { class: 'mono', text: `${r.path}:${r.line}` }), h('span', { class: 'muted', text: 'in ' + r.container })),
+        h('code', { class: 'ref-code' }, highlight(r.text || ''))))))
+    }).catch(e => { clear(rb).append(h('div', { class: 'err', text: e.message })) })
+  }
+  box.append(h('div', { class: 'toolbar', style: { marginTop: '12px' } }, h('button', { class: 'btn', text: '그래프로 보기', onclick: () => { $('#gfocus').value = (s.scope || '') + s.name; const ml = (srcInfo().modes || []); $('#gmode').value = s.kind && kindGroup(s.kind) === 1 && ml.includes('calls') ? 'calls' : 'inherit'; document.querySelector('.tab[data-v=graph]').click(); drawGraph() } })))
 }
-$('#g-go').onclick = drawGraph
-$('#g-src').onchange = syncModes
-$('#g-focus').onkeydown = e => { if (e.key === 'Enter') drawGraph() }
 
-// ---------------------------------------------------------------- 검증
-const checkTable = rows => `<table><thead><tr><th>검사</th><th>결과</th><th>기준</th></tr></thead><tbody>` + rows.map(c =>
-  `<tr><td>${esc(c.name)}</td><td class="${c.pass === null || c.pass === undefined ? 'warn' : c.pass ? 'pass' : 'fail'}">${c.pass === null || c.pass === undefined ? '–' : c.pass ? '통과' : '실패'} · <span class="mono">${esc(c.metric)}</span></td><td class="muted">${esc(c.why || '')}${c.samples && c.samples.length ? `<details><summary>표본 ${c.samples.length}</summary><div class="mono">${c.samples.map(esc).join('<br>')}</div></details>` : ''}</td></tr>`).join('') + '</tbody></table>'
-$('#v-go').onclick = async () => {
-  $('#v-out').innerHTML = '<span class="muted">검사 중…</span>'
-  try { const { checks } = await api('checks', { src: $('#v-src').value }); $('#v-out').innerHTML = checkTable(checks) }
-  catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+// ======================================================================= 그래프
+let gData = null, gSim = 0
+const EDGE_COLORS = { base: 'var(--s1)', calls: 'var(--s2)', overrides: 'var(--s3)', public: 'var(--s1)', private: 'var(--s2)' }
+async function drawGraph() {
+  const svg = clear($('#graph')); $('#gside').hidden = true
+  const treeMode = $('#glayout').value === 'tree'
+  svg.style.display = treeMode ? 'none' : ''; $('#gtree').hidden = !treeMode; document.querySelector('.graph-tools').style.display = treeMode ? 'none' : ''
+  $('#gnote').textContent = '불러오는 중…'
+  try { gData = await api('graph', { src: SRC, mode: $('#gmode').value, focus: $('#gfocus').value.trim(), depth: $('#gdepth').value }) }
+  catch (e) { $('#gnote').textContent = e.message; return }
+  const { nodes, edges } = gData
+  $('#gnote').textContent = `노드 ${nodes.length} · 간선 ${edges.length}${gData.truncated ? ' · 상한에서 잘림' : ''}`
+  if (!nodes.length) { if (treeMode) clear($('#gtree')).append(h('div', { class: 'empty', text: '그릴 것이 없다 — 중심 이름을 확인한다' })); else svg.append(h('text', { x: 24, y: 40, text: '그릴 것이 없다 — 중심 이름을 확인한다' })); return }
+  if (treeMode) { drawTree(nodes, edges); return }
+  svg.style.height = ''
+  let W = svg.clientWidth, H = svg.clientHeight
+  const deg = {}; edges.forEach(e => { deg[e.source] = (deg[e.source] || 0) + 1; deg[e.target] = (deg[e.target] || 0) + 1 })
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const ekinds = [...new Set(edges.map(e => String(e.kind).split(' ')[0]))]
+  const isLayered = $('#glayout').value === 'layered'
+  nodes.forEach(n => { delete n.layer })
+  const spans = isLayered ? layered(nodes, edges, W, H) : []
+  if (isLayered && spans.length) {
+    // 접힌 줄이 많으면 캔버스를 키워 글자가 줄지 않게 한다 (최대 1600px). 맞춤은 새 높이 기준
+    const need = Math.max(...nodes.map(n => n.y)) - Math.min(...nodes.map(n => n.y)) + BAND_H * 2
+    if (need > H) { svg.style.height = Math.min(1600, need) + 'px'; H = svg.clientHeight }
+  }
+  if (!isLayered) nodes.forEach((n, i) => { n.x = W / 2 + Math.cos(i * 2.4) * 30 * Math.sqrt(i + 1); n.y = H / 2 + Math.sin(i * 2.4) * 30 * Math.sqrt(i + 1) })
+  const defs = h('defs'); svg.append(defs)
+  for (const k of ekinds) defs.append(h('marker', { id: 'ar-' + k, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, h('path', { d: 'M0,1 L9,5 L0,9 z', fill: EDGE_COLORS[k] || 'var(--axis)' })))
+  const view = h('g'); svg.append(view)
+  const lg = h('g'), eg = h('g'), ng = h('g'); view.append(lg, eg, ng)
+  const mode = $('#gmode').value
+  const side = { inherit: ['부모 쪽', '자식 쪽'], calls: ['불리는 쪽', '부르는 쪽'], overrides: ['재정의 대상 쪽', '재정의한 쪽'], modules: ['의존 대상 쪽', '의존하는 쪽'] }[mode] || ['위', '아래']
+  for (const sp of spans) {
+    const pad = BAND_H / 2 - 6
+    lg.append(h('rect', { x: sp.x0 - COL_W / 2 - 40, y: sp.y0 - pad, width: sp.x1 - sp.x0 + COL_W + 80, height: sp.y1 - sp.y0 + pad * 2, rx: 14, fill: sp.level === 0 ? 'color-mix(in srgb, var(--accent) 9%, transparent)' : 'color-mix(in srgb, var(--ink) 3%, transparent)', stroke: 'var(--grid)' }))
+    lg.append(h('text', { x: sp.x0 - COL_W / 2 - 30, y: sp.y0 - pad + 16, class: 'band-label', text: sp.level === 0 ? (sp.count > 1 ? `중심과 같은 깊이 · ${sp.count}` : '중심') : `${sp.level < 0 ? side[0] : side[1]} ${Math.abs(sp.level)}단계 · ${sp.count}` }))
+  }
+  const eEls = edges.map(e => { const k = String(e.kind).split(' ')[0]; const p = h('path', { class: 'edge', stroke: EDGE_COLORS[k] || 'var(--axis)', 'stroke-opacity': .65, 'marker-end': `url(#ar-${k})` }); p.append(h('title', { text: `${(byId.get(e.source) || {}).label} → ${(byId.get(e.target) || {}).label} (${e.kind})` })); eg.append(p); return p })
+  const nEls = nodes.map(n => {
+    const r = Math.min(16, 6 + Math.sqrt(deg[n.id] || 0) * 2.2) + (n.focus ? 4 : 0)
+    n.r = r
+    const el = h('g', { class: 'node', tabindex: 0 })
+    if (n.focus) el.append(h('circle', { r: r + 6, fill: 'none', stroke: groupColor(kindGroup(n.kind)), 'stroke-opacity': .35, 'stroke-width': 3 }))
+    el.append(h('circle', { class: 'body', r, fill: n.kind === 'external' ? 'var(--axis)' : groupColor(kindGroup(n.kind === 'module' ? '' : n.kind)) }))
+    el.append(isLayered ? h('text', { x: 0, y: LABEL_DY, 'text-anchor': 'middle', text: n.label.length > 24 ? n.label.slice(0, 23) + '…' : n.label })
+      : h('text', { x: r + 4, y: 4, text: n.label.length > 34 ? n.label.slice(0, 33) + '…' : n.label }))
+    el.addEventListener('pointerenter', () => focusNode(n.id, true)); el.addEventListener('pointerleave', () => { focusNode(n.id, false); hideTip() })
+    el.addEventListener('pointermove', ev => showTip(ev, tipLines(n.label, n.kind, [['연결', String(deg[n.id] || 0)]])))
+    el.addEventListener('click', () => sideCard(n))
+    el.addEventListener('dblclick', () => { $('#gfocus').value = n.label; drawGraph() })
+    let drag = null
+    el.addEventListener('pointerdown', ev => { ev.stopPropagation(); drag = { x: ev.clientX, y: ev.clientY }; el.setPointerCapture(ev.pointerId); n.fixed = true })
+    el.addEventListener('pointermove', ev => { if (!drag) return; n.x += (ev.clientX - drag.x) / zoom; n.y += (ev.clientY - drag.y) / zoom; drag = { x: ev.clientX, y: ev.clientY }; paint() })
+    el.addEventListener('pointerup', () => { drag = null })
+    ng.append(el); return el
+  })
+  function focusNode(id, on) {
+    const near = new Set([id]); edges.forEach(e => { if (e.source === id) near.add(e.target); if (e.target === id) near.add(e.source) })
+    nEls.forEach((el, i) => el.classList.toggle('faded', on && !near.has(nodes[i].id)))
+    eEls.forEach((el, i) => el.classList.toggle('faded', on && edges[i].source !== id && edges[i].target !== id))
+  }
+  function paint() {
+    edges.forEach((e, i) => {
+      const s = byId.get(e.source), t = byId.get(e.target); if (!s || !t) return
+      const bus = isLayered && !s.fixed && !t.fixed ? busPath(s, t) : null
+      if (bus) { eEls[i].setAttribute('d', bus); return }
+      const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy) || 1
+      const sx = s.x + dx / d * s.r, sy = s.y + dy / d * s.r, tx = t.x - dx / d * (t.r + 3), ty = t.y - dy / d * (t.r + 3)
+      const mx = (sx + tx) / 2 - dy * 0.12, my = (sy + ty) / 2 + dx * 0.12
+      eEls[i].setAttribute('d', `M${sx},${sy} Q${mx},${my} ${tx},${ty}`)
+    })
+    nodes.forEach((n, i) => nEls[i].setAttribute('transform', `translate(${n.x},${n.y})`))
+  }
+  let zoom = 1, px = 0, py = 0
+  const apply = () => view.setAttribute('transform', `translate(${px},${py}) scale(${zoom})`)
+  function fit() { const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y); const x0 = Math.min(...xs) - (isLayered ? COL_W / 2 + 50 : 60), x1 = Math.max(...xs) + (isLayered ? COL_W / 2 + 50 : 200), y0 = Math.min(...ys) - 50, y1 = Math.max(...ys) + 50; zoom = Math.min(2, W / (x1 - x0), H / (y1 - y0)); px = (W - (x1 + x0) * zoom) / 2; py = (H - (y1 + y0) * zoom) / 2; apply() }
+  svg.onwheel = ev => { ev.preventDefault(); const f = ev.deltaY < 0 ? 1.12 : 0.89, b = svg.getBoundingClientRect(), mx = ev.clientX - b.left, my = ev.clientY - b.top; px = mx - (mx - px) * f; py = my - (my - py) * f; zoom *= f; apply() }
+  let pan = null
+  svg.onpointerdown = ev => { pan = { x: ev.clientX - px, y: ev.clientY - py } }
+  svg.onpointermove = ev => { if (pan) { px = ev.clientX - pan.x; py = ev.clientY - pan.y; apply() } }
+  svg.onpointerup = () => { pan = null }
+  $('#gfit').onclick = fit
+  if ($('#glayout').value === 'force') {
+    let heat = 1; const id = ++gSim
+    const tick = () => {
+      if (id !== gSim) return
+      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) { const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx * dx + dy * dy + .01; if (d2 > 120000) continue; const f = 1400 / d2; dx *= f; dy *= f; if (!a.fixed) { a.x += dx * heat; a.y += dy * heat } if (!b.fixed) { b.x -= dx * heat; b.y -= dy * heat } }
+      for (const e of edges) { const s = byId.get(e.source), t = byId.get(e.target); if (!s || !t) continue; const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy) || 1, f = (d - 110) * .03 * heat; if (!s.fixed) { s.x += dx / d * f; s.y += dy / d * f } if (!t.fixed) { t.x -= dx / d * f; t.y -= dy / d * f } }
+      for (const n of nodes) if (!n.fixed) { n.x += (W / 2 - n.x) * .004 * heat; n.y += (H / 2 - n.y) * .004 * heat }
+      paint(); heat *= .97
+      if (heat > .02) requestAnimationFrame(tick); else fit()
+    }
+    tick()
+  } else { paint(); fit() }
+  const groupsUsed = [...new Set(nodes.map(n => n.kind === 'external' ? -1 : kindGroup(n.kind === 'module' ? '' : n.kind)))]
+  clear($('#glegend')).append(...groupsUsed.map(g => h('span', {}, h('i', { style: { background: g < 0 ? 'var(--axis)' : groupColor(g), borderRadius: '50%' } }), g < 0 ? '외부 모듈' : (gData.nodes[0].kind === 'module' ? '모듈' : GROUP_NAMES[g]))), ...ekinds.map(k => h('span', {}, h('i', { class: 'line', style: { background: EDGE_COLORS[k] || 'var(--axis)' } }), { base: '상속(자식 → 부모)', calls: '호출(부르는 쪽 → 불리는 쪽)', overrides: '재정의(재정의한 쪽 → 대상)', public: 'public 의존', private: 'private 의존', refs: '참조 의존(실사용)' }[k] || k)))
+  const tb = $('#gtablebox'); clear(tb).append(tableOf(['from', 'to', '종류'], edges.map(e => [(byId.get(e.source) || {}).label, (byId.get(e.target) || {}).label, e.kind])))
+  $('#gtable').onclick = () => { tb.hidden = !tb.hidden }
 }
-$('#v-cmp').onclick = async () => {
-  if (!$('#v-pair').value) return
-  $('#v-out').innerHTML = '<span class="muted">대조 중…</span>'
-  try { const r = await api('compare', { pair: $('#v-pair').value }); $('#v-out').innerHTML = `<p class="muted">${esc(r.note || '')}</p>` + checkTable(r.checks) }
-  catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+const COL_W = 176, BAND_H = 100, LABEL_DY = 26
+// 트리(접기): 중심에서 간선을 따라 위(target 쪽)·아래(source 쪽)로 펼친다. 이미 나온 노드는 다시 펼치지 않고 ↻ 로 표시
+function drawTree(nodes, edges) {
+  const box = clear($('#gtree')), byId = new Map(nodes.map(n => [n.id, n]))
+  const up = new Map(), down = new Map()
+  for (const e of edges) { (up.get(e.source) || up.set(e.source, []).get(e.source)).push(e.target); (down.get(e.target) || down.set(e.target, []).get(e.target)).push(e.source) }
+  const mode = $('#gmode').value
+  const names = { inherit: ['부모 쪽 (상속 대상)', '자식 쪽 (상속한 클래스)'], calls: ['불리는 쪽 (이 함수가 부르는 함수)', '부르는 쪽 (이 함수를 부르는 함수)'], overrides: ['재정의 대상 쪽', '재정의한 쪽'], modules: ['의존 대상 쪽', '의존하는 쪽'] }[mode] || ['위', '아래']
+  const start = nodes.find(n => n.focus) || nodes[0]
+  function rowOf(n, kids, rep, isFocus) {
+    const can = kids > 0 && !rep
+    return h('div', { class: 'trow', tabindex: 0, onclick: ev => { if (ev.target.closest('summary') && can && !ev.target.classList.contains('nm')) return; ev.preventDefault(); sideCard(n) } },
+      h('span', { class: 'tw' + (can ? ' can' : ''), text: can ? '▶' : '' }),
+      h('span', { class: 'dot', style: { background: n.kind === 'external' ? 'var(--axis)' : groupColor(kindGroup(n.kind === 'module' ? '' : n.kind)) } }),
+      h('span', { class: 'nm' + (isFocus ? ' focus' : ''), text: n.label }), rep ? h('span', { class: 'rep', text: '↻ 위에 이미 있음' }) : null,
+      h('span', { class: 'cnt', text: kids && !rep ? `${kids}` : '' }))
+  }
+  const shown = new Set()
+  function rec(id, map, seen, depth) {
+    const n = byId.get(id); if (!n) return null
+    shown.add(id)
+    const kids = (map.get(id) || []).filter(k => byId.has(k)), rep = seen.has(id) && depth > 0
+    if (rep || !kids.length) return rowOf(n, kids.length, rep, depth === 0)
+    seen.add(id)
+    const sorted = [...kids].sort((a, b) => ((map.get(b) || []).length - (map.get(a) || []).length) || String(byId.get(a).label).localeCompare(byId.get(b).label))
+    return h('details', { open: depth < 2 || nodes.length < 120 }, h('summary', {}, rowOf(n, kids.length, false, depth === 0)), h('div', {}, sorted.map(k => rec(k, map, seen, depth + 1))))
+  }
+  const upKids = (up.get(start.id) || []).length, downKids = (down.get(start.id) || []).length
+  box.append(h('h4', { text: `↑ ${names[0]} · ${upKids}` }), upKids ? rec(start.id, up, new Set(), 0) : h('div', { class: 'muted', style: { fontSize: '12px', padding: '2px 6px 8px' }, text: '없음' }),
+    h('h4', { style: { marginTop: '14px' }, text: `↓ ${names[1]} · ${downKids}` }), downKids ? rec(start.id, down, new Set(), 0) : h('div', { class: 'muted', style: { fontSize: '12px', padding: '2px 6px' }, text: '없음' }))
+  const rest = nodes.filter(n => !shown.has(n.id) && n.id !== start.id).length
+  if (rest) box.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '14px 6px 0' }, text: `나머지 ${rest}개는 위로 올라갔다가 다른 갈래로 내려온 노드(형제·사촌 등)다. 트리는 중심의 직계만 보인다 — 전체는 계층·힘 배치에서.` }))
+  clear($('#glegend')).append(h('span', {}, '▶ 펼치기 · 숫자 = 바로 아래 개수 · 이름을 누르면 옆 카드'))
+  const tb = $('#gtablebox'); clear(tb).append(tableOf(['from', 'to', '종류'], edges.map(e => [(byId.get(e.source) || {}).label, (byId.get(e.target) || {}).label, e.kind])))
 }
-$('#v-qs').onclick = async () => {
-  $('#v-out').innerHTML = '<span class="muted">질의 세트 실행 중…</span>'
+function layered(nodes, edges, W, H) {
+  // 중심에서 간선 방향(source → target = 위로)으로 층을 매긴다. target 쪽(부모·불리는 쪽)은 위, source 쪽은 아래.
+  const layer = new Map(), byId = new Map(nodes.map(n => [n.id, n]))
+  const start = nodes.find(n => n.focus) || nodes[0]
+  layer.set(start.id, 0); const q = [start.id]
+  while (q.length) { const id = q.shift(), l = layer.get(id); for (const e of edges) { if (e.source === id && !layer.has(e.target)) { layer.set(e.target, l - 1); q.push(e.target) } if (e.target === id && !layer.has(e.source)) { layer.set(e.source, l + 1); q.push(e.source) } } }
+  nodes.forEach(n => { if (!layer.has(n.id)) layer.set(n.id, 0) })
+  const levels = [...new Set(layer.values())].sort((a, b) => a - b)
+  const rows = levels.map(l => nodes.filter(n => layer.get(n.id) === l))
+  for (let it = 0; it < 4; it++) rows.forEach((row, ri) => { row.forEach(n => { const nb = edges.filter(e => e.source === n.id || e.target === n.id).map(e => byId.get(e.source === n.id ? e.target : e.source)).filter(m => m && m.order !== undefined); n.bary = nb.length ? nb.reduce((a, m) => a + m.order, 0) / nb.length : (n.order || 0) }); row.sort((a, b) => a.bary - b.bary); row.forEach((n, i) => n.order = i - (row.length - 1) / 2) })
+  // 한 층이 너무 넓으면 여러 줄로 접는다 (자식 60개를 한 줄에 펴면 읽을 수 없다)
+  const perRow = Math.max(4, Math.floor(W / COL_W))
+  const bands = []
+  rows.forEach((row, ri) => { for (let k = 0; k < row.length; k += perRow) bands.push({ level: levels[ri], nodes: row.slice(k, k + perRow) }) })
+  bands.forEach((band, bi) => band.nodes.forEach((n, i) => { n.x = W / 2 + (i - (band.nodes.length - 1) / 2) * COL_W; n.y = H / 2 + (bi - (bands.length - 1) / 2) * BAND_H; n.layer = band.level }))
+  // 층마다 세로 범위 (접힌 줄 전부) — 배경 띠와 이름표용
+  return levels.map(l => { const ys = nodes.filter(n => n.layer === l).map(n => n.y), xs = nodes.filter(n => n.layer === l).map(n => n.x); return { level: l, y0: Math.min(...ys), y1: Math.max(...ys), x0: Math.min(...xs), x1: Math.max(...xs), count: ys.length } })
+}
+// 계층 배치의 직교(버스) 간선: 아래 층 → 위 층은 노드 사이 통로(열 사이 COL_W/2)로 올라가 부모 줄 아래 버스에서 합류한다.
+// 같은 부모로 가는 선이 한 줄로 겹쳐 조직도처럼 읽힌다. 위로 가지 않는 간선(같은 층·역방향)만 곡선으로 남긴다.
+function busPath(s, t) {
+  if (s.layer === undefined || t.layer === undefined || t.layer >= s.layer) return null
+  const gx = s.x - COL_W / 2, ys = s.y - s.r - 14, yt = t.y + BAND_H / 2 - 4
+  return `M${s.x},${s.y - s.r} V${ys} H${gx} V${yt} H${t.x} V${t.y + LABEL_DY + 6}`
+}
+async function sideCard(n) {
+  const side = $('#gside'); side.hidden = false; clear(side)
+  side.append(h('div', { class: 'card-head' }, h('h3', { text: n.label }), h('button', { class: 'linkish', text: '닫기', onclick: () => side.hidden = true })), h('div', { class: 'muted', text: n.kind }))
+  if (n.kind === 'module' || n.kind === 'external') { side.append(h('button', { class: 'btn', style: { marginTop: '8px' }, text: '이 모듈 중심으로', onclick: () => { $('#gfocus').value = n.label; drawGraph() } })); return }
   try {
-    const r = await api('queryset')
-    const per = (r.results || []).map(x => `<tr><td class="mono">${esc(x.query)}</td><td class="mono">${esc(x.expect)}</td>${(r.sources || []).map(s => { const v = x.ranks[s]; return `<td class="${v === null ? 'fail' : v === 1 ? 'pass' : 'warn'}">${v === null ? '없음' : v}</td>` }).join('')}</tr>`).join('')
-    $('#v-out').innerHTML = `<p class="muted">${esc(r.note || '')}</p>` + checkTable(r.summary || []) +
-      (per ? `<h4>질의별 순위</h4><table><thead><tr><th>질의</th><th>정답</th>${(r.sources || []).map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody>${per}</tbody></table>` : '')
-  } catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+    const { symbol: s } = await api('detail', { src: SRC, id: n.id })
+    if (s) side.append(h('div', { class: 'mono muted', style: { margin: '6px 0' }, text: `${s.path}:${s.line}` }), codeBlock(s.snippet && { start: s.snippet.start, lines: s.snippet.lines.slice(0, 12) }))
+  } catch (e) {}
+  side.append(h('div', { class: 'toolbar' }, h('button', { class: 'btn', text: '중심으로', onclick: () => { $('#gfocus').value = n.label; drawGraph() } }), h('button', { class: 'btn', text: '탐색에서 열기', onclick: () => { document.querySelector('.tab[data-v=explore]').click(); showDetail(SRC, n.id) } })))
+}
+$('#gdraw').onclick = drawGraph
+$('#gfocus').onkeydown = e => { if (e.key === 'Enter') drawGraph() }
+
+// ======================================================================= 모듈 지도 (행렬)
+$('#mlimit').oninput = () => { $('#mlimitv').textContent = $('#mlimit').value }
+$('#mdraw').onclick = () => renderModules()
+document.querySelectorAll('[data-table]').forEach(b => b.onclick = () => { const t = document.getElementById(b.dataset.table); t.hidden = !t.hidden; b.textContent = t.hidden ? '표로 보기' : '표 닫기' })
+async function renderModules() {
+  const box = clear($('#matrix')); box.append(h('div', { class: 'empty', text: '불러오는 중…' }))
+  let m
+  try { m = await api('matrix', { src: SRC, focus: $('#mfocus').value.trim(), limit: $('#mlimit').value }) } catch (e) { clear(box).append(h('div', { class: 'err', text: e.message })); return }
+  clear(box)
+  const refs = m.measure === 'refs'
+  $('#mtitle').textContent = refs ? '모듈 의존 행렬 — 실제 참조' : '모듈 의존 행렬 — Build.cs 선언'
+  $('#mdesc').textContent = refs ? '행(쓰는 모듈) → 열(쓰이는 모듈). 진할수록 참조가 많다. 테두리만 있는 칸 = Build.cs 에 선언했지만 이 인덱스에서 참조 0, 주황 모서리 = 선언 없이 쓴다(전이 포함 등).' : '행(선언한 모듈) → 열(의존 대상). 색 = public / private.'
+  const N = m.modules.length
+  if (!N) { box.append(h('div', { class: 'empty', text: '모듈 의존이 없다' })); return }
+  const cell = Math.max(14, Math.min(26, Math.floor(620 / N))), lab = 150, W = lab + N * cell + 8, H = lab + N * cell + 8
+  const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: Math.max(W, 320), role: 'img', 'aria-label': '모듈 의존 행렬' })
+  const max = Math.max(1, ...m.cells.map(c => c[2]))
+  const seq = v => { if (!v) return null; const k = Math.min(6, 1 + Math.floor(Math.log(v) / Math.log(max + 1) * 6)); return `var(--seq-${k})` }
+  m.modules.forEach((mod, i) => {
+    svg.append(h('text', { x: lab - 6, y: lab + i * cell + cell / 2 + 4, 'text-anchor': 'end', text: mod.name.length > 20 ? mod.name.slice(0, 19) + '…' : mod.name }))
+    svg.append(h('text', { transform: `translate(${lab + i * cell + cell / 2 + 4},${lab - 6}) rotate(-60)`, text: mod.name.length > 20 ? mod.name.slice(0, 19) + '…' : mod.name }))
+  })
+  for (let i = 0; i <= N; i++) { svg.append(h('line', { class: 'grid-line', x1: lab, x2: lab + N * cell, y1: lab + i * cell, y2: lab + i * cell })); svg.append(h('line', { class: 'grid-line', y1: lab, y2: lab + N * cell, x1: lab + i * cell, x2: lab + i * cell })) }
+  let declaredOnly = 0, usedOnly = 0
+  for (const [i, j, n, decl] of m.cells) {
+    const x = lab + j * cell, y = lab + i * cell
+    const g = h('g', { tabindex: 0 })
+    if (refs) {
+      if (n) g.append(h('rect', { class: 'matrix-cell', x: x + 1, y: y + 1, width: cell - 2, height: cell - 2, rx: 3, fill: seq(n) }))
+      else { declaredOnly++; g.append(h('rect', { x: x + 3, y: y + 3, width: cell - 6, height: cell - 6, rx: 3, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 1.5 })) }
+      if (n && m.has_declared && !decl) { usedOnly++; g.append(h('path', { d: `M${x + cell - 9},${y + 1} H${x + cell - 1} V${y + 9} Z`, fill: 'var(--s2)' })) }
+    } else g.append(h('rect', { class: 'matrix-cell', x: x + 1, y: y + 1, width: cell - 2, height: cell - 2, rx: 3, fill: decl === 'public' ? 'var(--s1)' : 'var(--s2)' }))
+    const a = m.modules[i].name, b = m.modules[j].name
+    g.append(h('rect', { x, y, width: cell, height: cell, fill: 'transparent' }))
+    g.addEventListener('pointermove', ev => showTip(ev, tipLines(refs ? `참조 ${fmt(n)}` : (decl || ''), `${a} → ${b}`, [['Build.cs', decl || (m.has_declared ? '선언 없음' : '–')]])))
+    g.addEventListener('pointerleave', hideTip)
+    svg.append(g)
+  }
+  box.append(svg)
+  clear($('#mlegend')).append(...(refs ? [h('span', {}, h('i', { style: { background: 'linear-gradient(90deg, var(--seq-1), var(--seq-6))', width: '60px' } }), `참조 수 1 → ${fmt(max)} (로그)`), h('span', {}, h('i', { class: 'ring' }), `선언만 (${declaredOnly})`), m.has_declared ? h('span', {}, h('i', { style: { background: 'var(--s2)', clipPath: 'polygon(0 0,100% 0,100% 100%)' } }), `선언 없이 사용 (${usedOnly})`) : null].filter(Boolean)
+    : [h('span', {}, h('i', { style: { background: 'var(--s1)' } }), 'public'), h('span', {}, h('i', { style: { background: 'var(--s2)' } }), 'private')]))
+  clear($('#mtable')).append(tableOf(['from', 'to', refs ? '참조' : '선언', 'Build.cs'], m.cells.map(([i, j, n, d]) => [m.modules[i].name, m.modules[j].name, refs ? n : '', d || '–']), [2]))
+  const top = m.cells.filter(c => c[2]).sort((a, b) => b[2] - a[2]).slice(0, 14).map(([i, j, n, d]) => ({ label: `${m.modules[i].name} → ${m.modules[j].name}`, value: n, extra: [['Build.cs', d || '선언 없음']] }))
+  setTimeout(() => layoutCharts($('#mtop')), 0)
+  clear($('#mtop')).append(top.length ? lazy(w => hbar(top, { labelW: 220, width: w })) : h('div', { class: 'empty', text: refs ? '참조 없음' : '이 소스는 선언 의존만 있다 — clangd 소스를 고르면 실제 참조가 보인다' }))
 }
 
-// ---------------------------------------------------------------- 하네스
-async function loadEvents() {
-  try {
-    const { events } = await api('events', { limit: 2000, session: $('#h-session').value.trim() })
-    const f = $('#h-filter').value.trim()
-    const list = f ? events.filter(e => e.feature.includes(f)) : events
-    const sum = new Map()
-    for (const e of list) { const r = sum.get(e.feature) || { n: 0, bad: 0, last: '' }; r.n++; r.bad += e.ok ? 0 : 1; r.last = e.t; sum.set(e.feature, r) }
-    $('#h-sum').innerHTML = [...sum.entries()].sort((a, b) => b[1].last.localeCompare(a[1].last)).map(([k, r]) => `<tr><td class="mono">${esc(k)}</td><td>${r.n}</td><td class="${r.bad ? 'fail' : 'muted'}">${r.bad}</td><td class="mono muted">${esc(r.last)}</td></tr>`).join('') || '<tr><td colspan=4 class="muted">기록 없음</td></tr>'
-    $('#h-list').innerHTML = list.slice(-300).reverse().map(e => `<tr><td class="mono muted">${esc(e.t)}</td><td class="${e.ok ? 'pass' : 'fail'}">${e.ok ? '✓' : '✗'}</td><td class="mono">${esc(e.feature)}</td><td class="muted">${esc(e.detail)}<div class="mono" style="font-size:11px">${esc(e.session ? e.session.slice(0, 8) : '')} ${esc(e.project)}</div></td></tr>`).join('')
-  } catch (e) { $('#h-list').innerHTML = `<tr><td colspan=4 class="err">${esc(e.message)}</td></tr>` }
+// ======================================================================= 파이프라인
+const secs = s => (s < 1 ? s.toFixed(2) : s < 10 ? s.toFixed(1) : s.toFixed(0)) + 's'
+async function renderPipeline() {
+  const box = clear($('#pl'))
+  let p
+  try { p = await api('pipeline', { src: SRC }) } catch (e) { box.append(h('div', { class: 'card span-12 err', text: e.message })); return }
+  const total = (p.stages || []).reduce((a, s) => a + (s.seconds || 0), 0)
+  const flow = h('div', { class: 'flow' })
+  const facts = Object.fromEntries(p.facts || [])
+  const stageBoxes = isClangd() ? [
+    ['compile_commands', fmt(facts['번역 단위']), '번역 단위(TU)'],
+    ...(p.stages || []).map(s => [s.name, secs(s.seconds), total ? Math.round(s.seconds / total * 100) + '%' : '']),
+    ['sqlite', facts['출력'] || facts['샤드 합계'] || '', facts['샤드 합계'] ? '샤드 합계 → 심볼·참조·관계' : '심볼·참조·관계'],
+  ] : (p.stages || []).map(s => [s.name, secs(s.seconds), '']).concat([['결과', p.at || '', '']])
+  for (const [t, v, s] of stageBoxes) flow.append(h('div', { class: 'stage' }, h('div', { class: 't', text: t }), h('div', { class: 'v', text: v || '–' }), h('div', { class: 's', text: s || '' })))
+  box.append(card('span-12', `색인 파이프라인 — ${p.mode || ''}`, `마지막 빌드 ${p.at || '–'}. 단계별 걸린 시간.`, flow))
+  if (p.incremental) box.append(incrementalCard(p.incremental))
+  const ft = h('table', { class: 'tbl' }, h('tbody', {}, (p.facts || []).map(([k, v]) => h('tr', {}, h('td', { class: 'muted', text: k }), h('td', { class: 'mono', text: String(v ?? '–') })))))
+  box.append(card('span-5', '설정·사실', '', ft))
+  const hist = p.history || []
+  const hb = h('div', {})
+  if (hist.length) hb.append(lazy(W => {
+    const H = 230, padL = 48, padB = 34, n = hist.length, bw = Math.min(24, (W - padL - 10) / n * .6)
+    const max = Math.max(0.01, ...hist.map(x => (x.t_index || 0) + (x.t_ingest || 0)))
+    const dec = max < 1 ? 2 : max < 10 ? 1 : 0
+    const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': '빌드 이력' })
+    for (let k = 0; k <= 4; k++) { const y = H - padB - (H - padB - 10) * k / 4; svg.append(h('line', { class: 'grid-line', x1: padL, x2: W - 6, y1: y, y2: y }), h('text', { x: padL - 6, y: y + 4, 'text-anchor': 'end', class: 'num', text: (max * k / 4).toFixed(dec) + 's' })) }
+    hist.forEach((x, i) => {
+      const cx = padL + (i + .5) * (W - padL - 10) / n, sc = (H - padB - 10) / max
+      const hi = (x.t_index || 0) * sc, hg = (x.t_ingest || 0) * sc, base = H - padB
+      const g = h('g', { tabindex: 0 })
+      g.append(h('rect', { x: cx - bw / 2, y: base - hi, width: bw, height: Math.max(0, hi - (hg ? 1 : 0)), fill: 'var(--s1)' }))
+      if (hg) g.append(h('path', { d: `M${cx - bw / 2},${base - hi - 1} V${base - hi - hg + 4} Q${cx - bw / 2},${base - hi - hg} ${cx - bw / 2 + 4},${base - hi - hg} H${cx + bw / 2 - 4} Q${cx + bw / 2},${base - hi - hg} ${cx + bw / 2},${base - hi - hg + 4} V${base - hi - 1} Z`, fill: 'var(--s2)' }))
+      g.append(h('text', { x: cx, y: H - padB + 14, 'text-anchor': 'middle', text: '#' + (i + 1) }))
+      if (x.reused !== undefined && x.reused !== null) g.append(h('text', { x: cx, y: H - padB + 27, 'text-anchor': 'middle', class: 'muted', text: `재사용 ${x.reused}` }))
+      g.append(h('rect', { x: cx - bw, y: 0, width: bw * 2, height: H, fill: 'transparent' }))
+      g.addEventListener('pointermove', ev => showTip(ev, tipLines(`${((x.t_index || 0) + (x.t_ingest || 0)).toFixed(1)}s`, `#${i + 1} · ${x.at} · ${x.mode || ''}`, [['색인', (x.t_index || 0).toFixed(1) + 's'], ['적재', (x.t_ingest || 0).toFixed(1) + 's'], ['TU', String(x.tus ?? '–')], ['재사용/재색인', `${x.reused ?? '–'} / ${x.rebuilt ?? '–'}`], ['심볼', fmt(x.symbols)], ['출력', fmt(x.out_bytes) + 'B']])))
+      g.addEventListener('pointerleave', hideTip)
+      svg.append(g)
+    })
+    return svg
+  }), legend([['var(--s1)', '색인 (clangd)'], ['var(--s2)', '적재 (sqlite)']]))
+  else hb.append(h('div', { class: 'empty', text: '이력이 없다 — 이 인덱스는 이력 기록 이전에 만들어졌거나 정규식 소스다' }))
+  box.append(card('span-7', '빌드 이력 — 속도 변화', '빌드마다 색인·적재 시간. 증분 빌드면 재사용한 파일 수가 같이 나온다.', hb, hist.length ? tableOf(['#', '시각', '방식', 'TU', '색인s', '적재s', '재사용', '재색인', '심볼', '참조'], hist.map((x, i) => [i + 1, x.at, x.mode || '', x.tus ?? '–', (x.t_index || 0).toFixed(1), (x.t_ingest || 0).toFixed(1), x.reused ?? '–', x.rebuilt ?? '–', x.symbols, x.refs]), [3, 4, 5, 6, 7, 8, 9]) : null))
+  if (isClangd()) box.append(anatomyCard())
+  const er = p.errors || {}
+  setTimeout(() => layoutCharts(box), 0)
+  if (er.failed_tu || er.count) box.append(card('span-12', `실패 TU ${er.failed_tu || 0} · 오류 줄 ${er.count || 0}`, 'clangd-indexer 는 실패해도 종료 코드 0 — stderr 에서 센 것. 실패한 TU 의 심볼·참조는 빠진다.', h('div', {}, (er.failed_sample || []).map(x => h('div', { class: 'mono' }, h('span', { class: 'status bad' }, h('i', { text: '✕' })), ' ', x)), (er.sample || []).slice(0, 12).map(x => h('div', { class: 'mono muted', text: x })))))
 }
-$('#h-go').onclick = loadEvents
-setInterval(() => { if ($('#h-auto').checked && $('#harness').classList.contains('on')) loadEvents() }, 5000)
 
-boot().catch(e => { $('#root').innerHTML = `<span class="err">${esc(e.message)}</span>` })
+// 증분 빌드: 번역 단위 한 칸 = TU(또는 유니티 묶음) 하나. 주황 = 이번에 다시 색인, 파랑 = 샤드 재사용
+function incrementalCard(inc) {
+  const units = Math.max(1, inc.units || ((inc.rebuilt || 0) + (inc.reused || 0))), per = Math.max(1, Math.ceil(units / 600))
+  const cells = Math.ceil(units / per), hot = Math.min(cells, Math.ceil((inc.rebuilt || 0) / per))
+  const wrap = h('div', {})
+  wrap.append(lazy(W => {
+    const size = cells <= 300 ? 14 : 10, gap = 3
+    const cols = Math.max(1, Math.floor((W + gap) / (size + gap))), rows = Math.ceil(cells / cols), H = rows * (size + gap)
+    const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': `번역 단위 ${units} 중 ${inc.rebuilt} 다시 색인` })
+    for (let i = 0; i < cells; i++) {
+      const x = (i % cols) * (size + gap), y = Math.floor(i / cols) * (size + gap), on = i < hot
+      const r = h('rect', { x, y, width: size, height: size, rx: 3, fill: on ? 'var(--s2)' : 'var(--s1)', 'fill-opacity': on ? 1 : .35 })
+      r.addEventListener('pointermove', ev => showTip(ev, tipLines(on ? '다시 색인' : '샤드 재사용', per > 1 ? `칸 하나 = ${per} TU` : '칸 하나 = TU 하나', [['다시 색인', fmt(inc.rebuilt)], ['재사용', fmt(inc.reused)]])))
+      r.addEventListener('pointerleave', hideTip)
+      svg.append(r)
+    }
+    return svg
+  }))
+  const kpi = (label, v, note) => h('div', { class: 'tile' }, h('div', { class: 't', text: label }), h('div', { class: 'v', text: v }), note ? h('div', { class: 's', text: note }) : null)
+  const reasons = Object.entries(inc.reasons || {})
+  const kp = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '10px', margin: '12px 0 4px' } },
+    kpi('다시 색인', fmt(inc.rebuilt), inc.cold ? '처음 색인 — 전부' : `${units ? Math.round(inc.rebuilt / units * 100) : 0}%`),
+    kpi('샤드 재사용', fmt(inc.reused), '다이제스트 그대로'),
+    kpi('바뀐 파일', fmt(inc.changed_files), '내용 해시로 확인'),
+    kpi('강제 재색인', fmt(inc.invalidated), reasons.length ? reasons.map(([k, v]) => `${k} ${v}`).join(' · ') : 'clangd 가 놓치는 경우 없음'),
+    kpi('샤드', fmt(inc.shards), inc.unity_split ? `묶음에서 푼 파일 ${inc.unity_split}` : '파일마다 하나'))
+  return card('span-12', '증분 — 이번 빌드에서 다시 한 일', '칸 하나가 번역 단위(유니티면 묶음) 하나다. 강제 재색인 = clangd 혼자서는 놓치는 경우(헤더를 포함한 다른 TU, 플래그 변경, TU 로 바뀐 파일)를 이 하네스가 샤드를 지워 다시 돌린 것.',
+    h('div', {}, wrap, legend([['var(--s2)', '이번에 다시 색인'], ['color-mix(in srgb, var(--s1) 35%, transparent)', '샤드 재사용']]), kp))
+}
+
+// clangd 원본 레코드 셋(!Symbol · !Refs · !Relations) 해부. 필드 설명은 llvm-project clangd/index/{Symbol,Ref,Relation}.h 기준
+const SYM_FLAGS = [[1, 'IndexedForCodeCompletion'], [2, 'Deprecated'], [4, 'ImplementationDetail'], [8, 'VisibleOutsideFile'], [16, 'HasDocComment']]
+const REF_BITS = [['Decl', '선언', 'Decl'], ['Def', '정의', 'Def'], ['Ref', '참조', 'Ref'], ['Spelled', '이름이 그 자리에 쓰임', 'Spel'], ['Call', '호출 가능 심볼의 참조', 'Call']]
+const SYM_WHY = {
+  ID: '이름이 아니라 이 해시(USR 기반)가 키다. 오버로드·같은 이름을 구분한다.',
+  Scope: '네임스페이스·클래스 한정자. 웹뷰는 Scope + Name 으로 한정 이름을 만든다.',
+  CanonicalDeclaration: '첫 선언 위치. clangd 는 0 기준 줄·열이고 저장할 때 1 기준으로 바꾼다.',
+  Definition: '정의가 있는 TU 를 색인했을 때만 채워진다.',
+  Signature: '코드 완성용 정보 — 완성 대상이 아닌 심볼(클래스 멤버 등)은 비어 있다.',
+  References: 'clangd-indexer 는 헤더를 처음 연 TU 에서만 심볼을 모아 이 값이 0 또는 1 에 그친다. 참조 수는 !Refs 를 센다.',
+}
+function anatomyCard() {
+  const body = h('div', {}), inp = h('input', { type: 'search', class: 'field', placeholder: '심볼 이름 (비우면 재정의·참조가 많은 메서드를 고른다)', style: { minWidth: '0' } })
+  const go = async () => {
+    clear(body).append(h('div', { class: 'empty', text: '불러오는 중…' }))
+    let a
+    try { a = (await api('anatomy', { src: SRC, name: inp.value.trim() })).anatomy } catch (e) { clear(body).append(h('div', { class: 'err', text: e.message })); return }
+    clear(body)
+    if (!a) { body.append(h('div', { class: 'empty', text: '그 이름의 심볼이 없다' })); return }
+    const sym = h('div', { class: 'anat-col' }, h('h4', { text: '--- !Symbol' }), h('p', { class: 'note', text: '심볼마다 한 건. 무엇이·어디에 선언·정의됐나.' }),
+      a.symbol.map(([k, v]) => {
+        let shown = v
+        if (k === 'Flags') { const f = +v; shown = `${v} = ${SYM_FLAGS.filter(([b]) => f & b).map(([, n]) => n).join(' | ') || 'None'}` }
+        const why = SYM_WHY[k.split(' ')[0]]
+        return h('div', { class: 'afield' }, h('div', { class: 'k', text: k }), h('div', { class: 'v', text: shown }), why ? h('div', { class: 'why', text: why }) : null)
+      }))
+    const refs = h('div', { class: 'anat-col' }, h('h4', { text: `--- !Refs  (${fmt(a.refs_total)}건 중 ${a.refs.length})` }),
+      h('p', { class: 'note', text: '참조 한 건 = 위치 + 종류 비트 + Container(그 참조를 감싼 함수). Container 를 모으면 호출 그래프가 된다.' }),
+      h('div', { class: 'chips', style: { margin: '0 0 6px' } }, REF_BITS.map(([b, d, s]) => h('span', { class: 'badge', title: d }, h('span', { class: 'bits' }, h('b', { class: 'on', text: s })), `${b} — ${d}`))),
+      a.refs.map(r => h('div', { class: 'aref' },
+        h('span', { class: 'bits', title: `Kind ${r.kind}` }, REF_BITS.map(([b, , s]) => h('b', { class: r.bits.includes(b) ? 'on' : '', text: s }))),
+        h('span', { class: 'loc', text: `${r.path}:${r.line}:${r.col}` }),
+        h('span', { class: 'cont', text: `Container → ${r.container} · Kind ${r.kind}` }))),
+      a.refs.length ? null : h('div', { class: 'empty', text: '참조 기록 없음' }))
+    const rel = h('div', { class: 'anat-col' }, h('h4', { text: '--- !Relations' }),
+      h('p', { class: 'note', text: '주어 —술어→ 목적어. 부모 —BaseOf→ 자식, 부모 메서드 —OverriddenBy→ 재정의한 메서드. 굵은 쪽이 이 심볼.' }),
+      a.relations.map(x => h('div', { class: 'arel' }, h('span', { class: x.self_is === 'subject' ? 'self' : '', text: x.subject }), h('span', { class: 'pred', text: x.predicate }), h('span', { text: '→' }), h('span', { class: x.self_is === 'object' ? 'self' : '', text: x.object }))),
+      a.relations.length ? null : h('div', { class: 'empty', text: '이 심볼이 들어간 관계 없음' }))
+    body.append(h('div', { class: 'muted', style: { fontSize: '12px', margin: '0 0 8px' } }, '표본: ', h('strong', { class: 'mono', text: a.qname }), a.module ? ` · 모듈 ${a.module}` : ''), h('div', { class: 'anat' }, sym, refs, rel))
+  }
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') go() })
+  const c = card('span-12', '인덱스 해부 — clangd 가 심볼 하나에 남기는 레코드', 'clangd-indexer 출력(YAML)의 세 문서 종류를 표본 한 건으로 그대로 보인다. 이 세 가지가 탐색·그래프·모듈 지도의 전부다.',
+    h('div', {}, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' } }, inp, h('button', { class: 'btn', text: '보기', onclick: go })), body))
+  go()
+  return c
+}
+
+// ======================================================================= 검증
+function checksCard(span, title, desc, checks) {
+  const body = h('div', {}, checks.map(c => {
+    const m = /(\d+)\s*\/\s*(\d+)/.exec(String(c.metric))
+    return h('div', { style: { padding: '10px 0', borderBottom: '1px solid var(--grid)' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } }, h('strong', { text: c.name }), statusChip(c.pass)),
+      h('div', { class: 'mono ink2', style: { margin: '4px 0' }, text: String(c.metric) }),
+      m && +m[2] ? meterEl(+m[1] / +m[2]) : null,
+      h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '6px' }, text: c.why || '' }),
+      c.samples && c.samples.length ? h('details', {}, h('summary', { text: `표본 ${c.samples.length}` }), h('div', { class: 'mono' }, c.samples.map(x => h('div', { text: x })))) : null)
+  }))
+  return card(span, title, desc, body)
+}
+$('#vself').onclick = async () => {
+  const box = clear($('#vout'))
+  for (const s of INFO.sources.filter(s => s.available)) {
+    const holder = h('div', { class: 'card span-6 empty', text: s.label + ' 검사 중…' }); box.append(holder)
+    api('checks', { src: s.name }).then(r => holder.replaceWith(checksCard('span-6', s.label, '자체 검사', r.checks))).catch(e => { holder.className = 'card span-6 err'; holder.textContent = e.message })
+  }
+}
+$('#vcmp').onclick = async () => {
+  const box = clear($('#vout')); if (!$('#vpair').value) return
+  try { const r = await api('compare', { pair: $('#vpair').value }); box.append(checksCard('span-12', '정규식 ↔ clangd 대조', r.note || '', r.checks)) } catch (e) { box.append(h('div', { class: 'card span-12 err', text: e.message })) }
+}
+$('#vqs').onclick = async () => {
+  const box = clear($('#vout'))
+  let r
+  try { r = await api('queryset') } catch (e) { box.append(h('div', { class: 'card span-12 err', text: e.message })); return }
+  const srcs = r.sources || []
+  const bins = [['1위', v => v === 1, 'var(--seq-5)'], ['2–5위', v => typeof v === 'number' && v > 1 && v <= 5, 'var(--seq-3)'], ['6–10위', v => typeof v === 'number' && v > 5, 'var(--seq-2)'], ['못 찾음', v => v === null, 'var(--axis)']]
+  const chart = lazy(W => { const rowH = 34, lab = Math.min(200, W * .4), svg = h('svg', { viewBox: `0 0 ${W} ${srcs.length * rowH + 10}`, width: W, height: srcs.length * rowH + 10, role: 'img', 'aria-label': '질의 순위 분포' })
+  srcs.forEach((s, i) => {
+    const vals = (r.results || []).map(x => x.ranks[s]).filter(v => v !== '-' && v !== undefined)
+    const label = (INFO.sources.find(x => x.name === s) || {}).label || s
+    svg.append(h('text', { x: lab - 8, y: i * rowH + 22, 'text-anchor': 'end', text: label }))
+    let x = lab
+    for (const [bn, f, col] of bins) {
+      const n = vals.filter(f).length, w = vals.length ? (W - lab - 20) * n / vals.length : 0
+      if (!w) continue
+      const g = h('g', { tabindex: 0 }); g.append(h('rect', { x: x + 1, y: i * rowH + 8, width: Math.max(0, w - 2), height: 20, rx: 3, fill: col }))
+      if (w > 36) g.append(h('text', { x: x + w / 2, y: i * rowH + 22, 'text-anchor': 'middle', style: { fill: col.includes('seq-5') || col.includes('seq-3') ? '#fff' : 'var(--ink)' }, text: String(n) }))
+      g.addEventListener('pointermove', ev => showTip(ev, tipLines(`${n} / ${vals.length}`, `${label} · ${bn}`))); g.addEventListener('pointerleave', hideTip)
+      svg.append(g); x += w
+    }
+  })
+  return svg })
+  box.append(card('span-12', '질의 세트 — 순위 분포', r.note || '', h('div', {}, chart, legend(bins.map(b => [b[2], b[0]])), h('div', { class: 'ink2', style: { marginTop: '10px' } }, (r.summary || []).map(sm => h('div', { class: 'mono', text: `${sm.name}: ${sm.metric}` })))),
+    tableOf(['질의', '정답', ...srcs], (r.results || []).map(x => [x.query, x.expect, ...srcs.map(s => x.ranks[s] === null ? '없음' : String(x.ranks[s]))]))))
+  layoutCharts(box)
+}
+
+// ======================================================================= 하네스
+const LANES = ['context', 'session_start', 'index', 'skill', 'script', 'stuck', 'handoff', 'mcp']
+const LANE_NAMES = { context: '라우팅', session_start: '세션 시작', index: '인덱스', skill: '스킬', script: '조회', stuck: '매몰', handoff: 'HandOff', mcp: 'MCP' }
+async function renderHarness() {
+  const box = $('#hv')
+  let ev
+  try { ev = (await api('events', { limit: 3000, session: $('#hsession').value.trim() })).events } catch (e) { clear(box).append(h('div', { class: 'card span-12 err', text: e.message })); return }
+  const f = $('#hfilter').value.trim(); if (f) ev = ev.filter(e => e.feature.includes(f))
+  clear(box)
+  const feats = new Set(ev.map(e => e.feature)), fails = ev.filter(e => !e.ok).length, sessions = new Set(ev.map(e => e.session).filter(Boolean))
+  for (const [label, value, note] of [['기록', ev.length, '이벤트 줄'], ['기능', feats.size, '서로 다른 기능 id'], ['실패', fails, fails ? '빨간 ✕ 로 표시' : '없음'], ['세션', sessions.size, '세션 id 가 있는 기록']]) { const v = h('div', { class: 'value' }); box.append(h('div', { class: 'card span-3 kpi' }, h('div', { class: 'label', text: label }), v, h('div', { class: 'note', text: note }))); countUp(v, value) }
+  if (!ev.length) { box.append(h('div', { class: 'card span-12 empty', text: '기록 없음 — 하네스 훅이 설치된 세션에서 기능이 동작하면 쌓인다' })); return }
+  const t0 = Math.min(...ev.map(e => e.ts)), t1 = Math.max(...ev.map(e => e.ts)), span = Math.max(1000, t1 - t0)
+  const timeline = lazy(W => { const lane = 34, lab = 90, H = LANES.length * lane + 30
+  const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': '하네스 타임라인' })
+  LANES.forEach((l, i) => { svg.append(h('text', { x: lab - 8, y: i * lane + lane / 2 + 4, 'text-anchor': 'end', text: LANE_NAMES[l] }), h('line', { class: 'grid-line', x1: lab, x2: W - 10, y1: i * lane + lane / 2, y2: i * lane + lane / 2 })) })
+  const ticks = W < 600 ? 2 : 4
+  for (let k = 0; k <= ticks; k++) { const x = lab + (W - lab - 20) * k / ticks; svg.append(h('text', { x, y: H - 6, 'text-anchor': k === 0 ? 'start' : k === ticks ? 'end' : 'middle', class: 'num', text: new Date(t0 + span * k / ticks).toLocaleTimeString('ko-KR') })) }
+  for (const e of ev.slice(-1500)) {
+    const li = Math.max(0, LANES.indexOf(e.feature.split('.')[0])), x = lab + (W - lab - 20) * (e.ts - t0) / span, y = li * lane + lane / 2
+    const g = h('g', { tabindex: 0 })
+    if (e.ok) g.append(h('circle', { cx: x, cy: y, r: 5, fill: 'var(--s1)', stroke: 'var(--card)', 'stroke-width': 2 }))
+    else g.append(h('path', { d: `M${x - 5},${y - 5} L${x + 5},${y + 5} M${x + 5},${y - 5} L${x - 5},${y + 5}`, stroke: 'var(--critical)', 'stroke-width': 2.4, 'stroke-linecap': 'round' }))
+    g.append(h('circle', { cx: x, cy: y, r: 12, fill: 'transparent' }))
+    g.addEventListener('pointermove', evv => showTip(evv, tipLines(e.feature, e.t, [['결과', e.ok ? '성공' : '실패'], ['내용', e.detail || '–'], ['세션', (e.session || '–').slice(0, 8)]])))
+    g.addEventListener('pointerleave', hideTip)
+    svg.append(g)
+  }
+  return svg })
+  box.append(card('span-12', '타임라인', '줄 = 하네스 층, 점 = 기능 동작, ✕ = 실패. 점에 올리면 내용.', h('div', {}, timeline, legend([['var(--s1)', '동작'], ['var(--critical)', '실패 (✕ 모양)']]))))
+  const counts = {}; for (const e of ev) { const c = counts[e.feature] || (counts[e.feature] = { n: 0, bad: 0, last: '' }); c.n++; c.bad += e.ok ? 0 : 1; c.last = e.t }
+  const rows = Object.entries(counts).sort((a, b) => b[1].n - a[1].n)
+  box.append(card('span-5', '기능별 횟수', '', lazy(w => hbar(rows.slice(0, 16).map(([k, c]) => ({ label: k, value: c.n, extra: [['실패', String(c.bad)], ['마지막', c.last]] })), { labelW: 190, width: w })), tableOf(['기능', '횟수', '실패', '마지막'], rows.map(([k, c]) => [k, c.n, c.bad, c.last]), [1, 2])))
+  box.append(card('span-7', '최근 기록', '', h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table', { class: 'tbl' }, h('tbody', {}, ev.slice(-200).reverse().map(e => h('tr', {}, h('td', { class: 'mono muted', style: { whiteSpace: 'nowrap' }, text: e.t.slice(11) }), h('td', {}, e.ok ? h('span', { class: 'status good' }, h('i', { text: '✓' })) : h('span', { class: 'status bad' }, h('i', { text: '✕' }))), h('td', { class: 'mono', style: { whiteSpace: 'nowrap' }, text: e.feature }), h('td', { class: 'ink2', text: e.detail }))))))))
+  layoutCharts(box)
+}
+setInterval(() => { if (state.tab === 'harness' && $('#hauto').checked) renderHarness() }, 5000)
+$('#hfilter').oninput = () => renderHarness(); $('#hsession').onchange = () => renderHarness()
+
+boot().catch(e => { $('#sub').textContent = e.message })
 </script>
 </body>
 </html>

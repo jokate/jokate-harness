@@ -38,7 +38,7 @@
 | 엔진은 버전별 정적 조각, 프로젝트만 자주 갱신 (clangd 정적/배경 인덱스) | 엔진 범위 인덱스는 엔진 경로당 하나·공유, 프로젝트 범위는 다시 만든다 | `cindex.py` |
 | 측정 전에 인덱스를 데운다 (LSP 파일럿: 차가운 질의는 불완전) | 검증은 만들어진 인덱스에서만, 실패 TU 를 따로 센다 | `cindex.py eval` |
 
-반영하지 **않은** 것: BM25 순위 융합(RRF), PageRank 저장소 지도, 증분 갱신, 줄 예산 지표, 단계별 커버리지.
+반영하지 **않은** 것: BM25 순위 융합(RRF), PageRank 저장소 지도, 줄 예산 지표, 단계별 커버리지. 증분 갱신은 5절(`--mode bg`)로 들어갔다.
 
 ## 3. 검증 기준 — 세 갈래
 
@@ -56,7 +56,7 @@ LSP 파일럿이 언어 서버를 정답으로 쓴 방식. 같은 compile_comman
 | 정규식 오탐 후보 | 구현 | 판정 없이 표본만 (전방 선언·매크로일 수 있다) |
 | clangd 실패 TU, Container 기록 여부, 신선도 | 구현 | 실패 TU 0 |
 | 참조 집합 P/R (ripgrep 대비) | **미구현** | 참고값: LSP 파일럿 grep 정밀도 0.76 (파이썬) |
-| 편집 후 일관성까지 걸리는 시간 | **미구현** (증분 갱신 없음) | — |
+| 편집 후 일관성까지 걸리는 시간 | `--mode bg` 로 측정 가능 — 합성 175 TU 에서 `.cpp` 하나 1.2s, 79 TU 가 포함한 헤더 11.2s (5절) | 하네스 기준값 없음 |
 
 ### B. 맞는 코드를 찾는가 (검색 수준)
 
@@ -82,3 +82,48 @@ LSP 파일럿 설계: 모델·프롬프트·과제를 고정하고 도구 표면
 - 전제(인덱스 존재·엔진 경로·엔진 소스 유무·버전 일치)는 `ue_q.py` 가 조회 직전에 맞추고 경고한다 (조회 첫 회 자동 생성, 헤더 1000개 미만 경고, 버전 경고).
 - 인덱스 **품질**은 위 A·B 를 웹뷰 검증 탭 또는 `cindex.py eval` 로 잰다. clangd 인덱스가 있으면 정규식 인덱스를 컴파일러 기준으로 대조할 수 있다.
 - `ue_q.py` 인덱스의 **신선도**는 여전히 조회 시점에 비교하지 않는다 (`index` 를 돌릴 때만). 웹뷰 자체 검사가 파일 표본으로 낡음을 보여 준다.
+
+## 5. 속도 — clangd 의 약점을 무엇으로 메웠나 (2026-10-06 추가)
+
+**먼저 정직하게**: "C++ 의미 색인을 빠르게" 를 직접 다룬 학술 논문은 찾지 못했다. 근거는 대부분 **엔지니어링 1차 자료**
+(llvm-project clangd 소스, Kythe·scip-clang·Glean·SCIP 설계 문서, Chromium·LLVM 운영 문서)와 이 환경에서 돌린 실험이다.
+논문으로는 Stack Graphs (Creager & van Antwerpen, EVCS 2023) 가 파일 단위 증분 이름 해석을 다루지만 PDF 호스트가 막혀
+요약만 봤고, C++ 문법이 없어 쓰지 않았다. 수집 환경에서 막힌 곳: drops.dagstuhl.de, web.archive.org, *.github.io 등 —
+이때는 GitHub 원본 저장소를 읽었다.
+
+### 비용이 어디서 나오나
+- clang Modules 문서: N 개 TU 가 M 개 헤더를 포함하면 컴파일러가 *M × N* 일을 한다 (모듈이 *M + N* 으로 줄이는 이유).
+  https://github.com/llvm/llvm-project/blob/main/clang/docs/Modules.md
+- scip-clang 설계 문서: Clang 소스 2.6M 줄이 전처리 후 575M 줄 (약 220배 중복). https://github.com/sourcegraph/scip-clang/blob/main/docs/Design.md
+- ClangBuildAnalyzer 표본(Blender): 프런트엔드 2,118.9s vs 백엔드 1,204.1s, `<algorithm>` 하나가 3,389번 포함돼 261.6s.
+  색인기는 프런트엔드 비용만 낸다 → 헤더 중복 파싱이 비용의 거의 전부. https://github.com/aras-p/ClangBuildAnalyzer
+- 실험(합성, clang 18): 공용 헤더가 TU 비용의 약 85%, 전처리만은 0.13s — 파싱·의미 분석이 비싸다.
+
+### 이미 clangd 안에 있는 것
+- 색인 액션은 함수 본문 파싱을 건너뛰고, 이미 다른 TU 가 맡은 헤더의 본문도 건너뛴다 (`index/IndexAction.cpp` `SkipFunctionBodies`, `ShouldTraverseDecl`).
+- clangd-indexer 는 파일마다 처음 닿은 TU 만 심볼을 모은다 (`indexer/IndexerMain.cpp` `Files.insert(...).second`) — 그래서 병렬이면 결과가 실행마다 조금 다르다
+  (Kythe 문서의 "dynamic claiming" 과 같은 방식. https://github.com/kythe/kythe/blob/master/kythe/cxx/indexer/cxx/claiming.md).
+- 같은 이유로 `Symbol.References`(참조한 TU 수)는 clangd-indexer 출력에서 0 또는 1 에 그친다 — 웹뷰는 이 값을 참조 수로 쓰지 않는다 (실측: 값이 있는 139개 전부 1).
+- PCH 는 쓸 수 없다: clangd 가 PCH 옵션을 지운다 (`Compiler.cpp` `disableUnsupportedOptions`). UE 는 C++20 모듈을 안 쓴다.
+
+### 반영한 것
+
+| 기법 | 근거 | 반영 | 합성 측정 (175 TU, 4코어) |
+|---|---|---|---|
+| **증분 — 배경 색인 샤드** | clangd 배경 색인: 파일마다 샤드, 내용 다이제스트로 낡음 판정 (`index/Background.cpp`, `BackgroundIndexLoader.cpp`, `BackgroundIndexStorage.cpp`); clangd 원격 색인 문서 "clangd-indexer 는 비싸고 증분이 아니다" (https://github.com/llvm/clangd-www design/remote-index.md) | `cindex.py build --mode bg` | 변경 없음 0.6s, `.cpp` 1.2s, 헤더(79 TU) 11.2s — 전체 24.8s 대비 |
+| clangd 증분의 구멍 메우기 | `Background.cpp` FIXME (헤더 → TU 하나만), `BackgroundQueue.cpp` (플래그 무시), `Background.h` (세션 안 재색인 없음) | `cindex_speed.py` 무효화 계획: include 그래프·강제 포함·명령 해시·내용 해시 | 결과 = 처음부터 만든 색인 (5절 위 표) |
+| 파일 단위 소유 (Glean "units") | Glean incrementality 문서: 사실을 파일 단위로 소유 → 바뀐 단위만 교체 https://github.com/facebookincubator/Glean (glean/website/docs/implementation/incrementality.md) | 샤드가 곧 단위. **sqlite 는 아직 매번 전체 다시 적재** (175 TU 샤드 658개 읽기 0.3s) | — |
+| **유니티 묶음** | Chromium jumbo 문서 (공용 헤더가 많아 총 작업량이 크게 준다, 대가: 내부 링크 이름 충돌·묶음 단위 재빌드) https://github.com/chromium/chromium/blob/70.0.3515.0/docs/jumbo.md; UE 의 UBT 유니티 빌드와 같은 원리 | `--unity N` (실패 묶음은 원래 TU 로) | 23s → 4s (N=8), 8s (N=4), 결과 동일 |
+| **RIFF 바이너리** | clangd `index/Serialization.cpp`·`RIFF.cpp` 배치를 표준 라이브러리로 읽음 | `clangd_riff.py`, `--format binary` 기본 | 37.6MB → 2.17MB, 적재 1.84s → 0.77s |
+| 스레드 우선순위 | Windows 에서 `low`(기본)·`background` 는 스레드를 백그라운드 모드(I/O 우선순위↓)로 둔다 (llvm `lib/Support/Windows/Threading.inc`) | bg 모드는 `--background-index-priority=normal` | 리눅스에서는 차이를 재지 않았다 |
+
+### 반영하지 않은 것과 이유
+- **TU 줄이기(헤더를 덮는 최소 TU 집합)**: 실험에서 이미 맡은 헤더뿐인 TU 도 약 0.9s 든다 → 효과는 있겠지만 include 그래프가 먼저 있어야 해 다음 단계로 남겼다.
+- **정적 claiming (Kythe) / scip-clang 계획기**: 주된 이득이 속도가 아니라 결정성이다. scip-clang 은 Windows 빌드가 없다.
+- **tree-sitter 등 구문 색인 혼합**: clangd 비용을 줄이지 않는다 (신선도 보완용). 이 하네스는 정규식 인덱스가 그 자리를 맡는다.
+- **PCH·C++20 모듈**: clangd 가 PCH 를 지우고 UE 는 모듈을 안 쓴다.
+
+### 아직 모르는 것
+UE 규모(샤드 수만 개)의 배경 색인 시간·메모리, Windows 에서의 동작, UE compile_commands 로 유니티 묶음이 되는지(TU 마다 rsp 가 다르면 안 묶인다),
+RIFF 버전 21 실파일. 위 수치는 모두 합성 프로젝트 한 번씩의 측정이다.
+

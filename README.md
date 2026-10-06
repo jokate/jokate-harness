@@ -12,7 +12,7 @@
 ```
 skills/
   game-bootstrap/     0층 · 프로젝트 세팅 (/game-bootstrap) · harness/ 훅 원본 · evals/ 평가
-  game-onboard/       1층 · 엔진·프로젝트 파악 · scripts/gq.py, ue_q.py, cindex.py(clangd 의미 인덱스), index_view.py(웹뷰)
+  game-onboard/       1층 · 엔진·프로젝트 파악 · scripts/gq.py, ue_q.py, cindex.py(clangd 의미 인덱스 · 증분·유니티는 cindex_speed.py, RIFF 는 clangd_riff.py), index_view.py(웹뷰)
   game-design-doc/    1층 · 기획서 → 사양 표 → 구현 대응·어긋남
   game-architecture/  2층 · 구현 전 구조 조사 · scripts/evidence.py, render.py
   game-patterns/      2층 · 패턴 카탈로그 + 게임 도메인 증상 + UE/Unity 관용구 (출처 표시)

@@ -73,9 +73,12 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 이미 있는 파일은 덮어쓰지 않는다. 사내 저장소면 개인 선호는 `CLAUDE.local.md`, 팀 합의만 `CLAUDE.md`.
 
 **선택: clangd 의미 인덱스** — "누가 부르나·누가 재정의했나·바꾸면 어디가 영향받나"를 grep 이 아니라 컴파일러 기준으로 보려면.
-1. clangd 릴리스의 `clangd_indexing_tools-windows-<버전>.zip` 에서 `clangd-indexer.exe` 를 `~/.claude/tools/clangd/bin/` 에 둔다.
+1. clangd 릴리스의 `clangd_indexing_tools-windows-<버전>.zip` 에서 `clangd-indexer.exe` 를, 증분을 쓰려면 `clangd-windows-<버전>.zip` 의
+   `clangd.exe` 도 `~/.claude/tools/clangd/bin/` 에 둔다.
 2. 프로젝트에서 `python ~/.claude/skills/game-onboard/scripts/cindex.py cdb` (UBT 로 compile_commands.json) → `cindex.py build`.
    에디터 빌드를 한 번 해 둔다 — `.generated.h` 가 없으면 UCLASS 타입이 빠진다. 상세: `skills/game-onboard/references/cindex.md`.
+3. 속도: 엔진 범위는 `build --scope engine --unity 8` (.cpp 를 묶어 헤더 파싱을 줄인다), 작업 중 프로젝트는 `build --mode bg`
+   (두 번째부터 바뀐 파일과 그것을 포함한 TU 만 다시). 합성 프로젝트 측정은 cindex.md 3절 — 실제 UE 수치는 아직 없다.
 
 **제거** — `uninstall.bat` (프로젝트 폴더를 끌어다 놓으면 그 세팅도). 한 프로젝트에서만 빼려면 `--project-only`, 미리보기는 `--dry-run`. 상세는 README.
 
@@ -93,7 +96,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | MCP 가드·로그 | MCP 호출마다 | 기존부터 동작 |
 | 하네스 이벤트 기록 (`harness_events.py`) | 훅이 무언가 했을 때, 하네스 스킬·조회 스크립트가 불렸을 때 | 훅에 샘플 입력을 넣어 기록 확인 (2026-10-06). 실제 세션에서는 검증 안 됨 |
 | 모니터 mod (`game-harness-monitor`) | 세션 시작부터 (`CLAUDE_CODE_PLUGIN_DIRS` 로 로드) | Claude Code 2.1.290 에서 로드·테스트 통과. **사용자 머신 버전에서 검증 안 됨** — 함수 훅 플러그인은 early access |
-| clangd 의미 인덱스 | 수동 `cindex.py build` | 가짜 UE 구조로 검증. 실제 UE·Windows 검증 안 됨 |
+| clangd 의미 인덱스 | 수동 `cindex.py build` (`--mode bg` 증분, `--unity N` 묶음) | 가짜 UE 구조로 검증. 실제 UE·Windows 검증 안 됨 |
 
 가장 중요한 실측 사실: **훅이 넣는 안내(세션 시작·요청 시점 모두)와 유저 레벨 `~/.claude/CLAUDE.md` 는 스킬 호출을 올리지 못했다.
 프로젝트 규칙 파일은 CLAUDE.md 든 CLAUDE.local.md 든 올렸다.** 그래서 새 프로젝트는 bootstrap 부터.
@@ -213,8 +216,13 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - Claude Code 의 함수 훅 플러그인(early access)이 필요하다. 2.1.290 에서 확인했고, 그보다 낮은 버전에서는 안 뜰 수 있다 — 그때는 웹뷰 하네스 탭으로 본다.
 
 **인덱스 웹뷰** — `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` (프로젝트 폴더에서, 127.0.0.1 에만 열린다)
-- 검색: 엔진·프로젝트 정규식 인덱스와 clangd 인덱스를 골라 검색 → 선언 원문, 부모·자식, 호출하는 쪽·부르는 함수, 재정의.
-- 그래프: 상속 · 호출 · 오버라이드 · 모듈 의존(정규식은 Build.cs 선언, clangd 는 실제 참조로 본 의존). 노드 더블클릭으로 중심 이동, 드래그·휠.
+- 개요: 인덱스 고르기 → 심볼·참조·관계·파일 수, 색인 상태, 심볼 종류, 모듈 지도(넓이 = 심볼 수), 참조 구성, 커버리지(디스크의 소스 중 clangd 가 본 비율).
+- 탐색: 검색 → 선언 원문, 관계 미니맵(위 부모 · 아래 자식 · 옆 호출), 참조마다 위치 + 그 줄 원문 + 감싼 함수.
+- 그래프: 상속 · 호출 · 오버라이드 · 모듈 의존. 배치 세 가지 — 계층(깊이별 띠 + 직교 간선), 트리(접고 펼치기, 직계만), 힘.
+  노드에 올리면 이웃만 남고, 누르면 옆 카드, 더블클릭으로 중심 이동.
+- 모듈 지도: 모듈 × 모듈 실제 참조 행렬. Build.cs 에 선언만 하고 안 쓰는 의존, 선언 없이 쓰는 의존을 표시.
+- 파이프라인: 단계별 시간(compile_commands → 무효화 계획 → clangd → sqlite), 증분이면 이번에 다시 색인한 TU 칸과 이유,
+  빌드 이력, **인덱스 해부**(clangd 가 심볼 하나에 남기는 Symbol · Refs(종류 비트·Container) · Relations 원본).
 - 검증: 소스별 자체 검사(좌표 정확도·신선도·실패 TU), 정규식 ↔ clangd 대조(타입 재현율·파일/줄/부모 일치), 질의 세트(Acc@1·Acc@5·MRR).
   기준과 근거: `skills/game-onboard/references/indexing-research.md`.
 - 하네스: 이벤트 로그를 기능별로 모아 보기, 세션 id 필터, 5초 자동 갱신.

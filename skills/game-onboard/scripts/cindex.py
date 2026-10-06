@@ -10,7 +10,11 @@
 
   python cindex.py cdb [--target <이름>Editor] [--platform Win64] [--config Development]   # UE: compile_commands.json 생성
   python cindex.py build [--cdb <파일|폴더>] [--scope project|engine|all] [--filter 정규식] [--jobs N]
-  python cindex.py ingest <clangd-indexer YAML> [--scope ...]       # 이미 만든 YAML 을 적재만
+                         [--mode indexer|bg] [--format binary|yaml] [--unity N]
+      --mode indexer (기본) clangd-indexer 전체 색인. 출력은 RIFF(binary) 가 기본 — YAML 보다 17배쯤 작고 적재 2배+ 빠름
+      --mode bg      clangd 배경 색인 샤드로 증분: 두 번째부터 바뀐 파일·그 헤더를 포함한 TU·플래그가 바뀐 TU 만 다시 색인
+      --unity N      같은 플래그·같은 모듈의 .cpp 를 N 개씩 한 TU 로 묶어 공용 헤더 파싱을 줄인다 (실패한 묶음은 원래대로 다시)
+  python cindex.py ingest <clangd-indexer 출력(YAML|RIFF)> [--scope ...]   # 이미 만든 출력을 적재만
   python cindex.py status
   python cindex.py sym <이름|A::B>          # 심볼 좌표 (선언·정의·시그니처)
   python cindex.py refs <이름> [--kind decl|def|ref]
@@ -26,6 +30,7 @@
             --scope engine  → ~/.claude/cache/ue_index/<엔진경로>/clangd.sqlite (ue.sqlite 옆)
 --db engine|project|<경로> 로 조회할 인덱스를 고른다 (기본 project, 없으면 engine).
 clangd-indexer 위치: --indexer > 환경 변수 CLANGD_INDEXER > PATH > ~/.claude/tools/clangd/bin
+clangd(--mode bg) 위치: --clangd > 환경 변수 CLANGD > PATH > ~/.claude/tools/clangd/bin > clangd-indexer 옆
 출력은 기본 4KB 에서 끊는다 (--full 로 푼다).
 """
 import argparse
@@ -329,15 +334,98 @@ class FileTable:
         return fid
 
 
-def _loc(d):
-    """{FileURI, Start{Line, Column}} → (uri, line 1-based, col 1-based). clangd 는 0 기준이다."""
+def _yloc(d):
+    """YAML {FileURI, Start{Line, Column}} → (uri, 줄, 열) 0 기준 그대로 (RIFF 와 같은 모양). 없으면 None."""
     if not d or not d.get("FileURI"):
-        return None, None, None
+        return None
     st = d.get("Start") or {}
-    return d["FileURI"], int(st.get("Line", 0)) + 1, int(st.get("Column", 0)) + 1
+    return d["FileURI"], int(st.get("Line", 0)), int(st.get("Column", 0))
 
 
-def ingest(yaml_path, db_path, roots, info=None, keep_doc=300):
+def yaml_records(yaml_path):
+    """clangd-indexer YAML → 공통 레코드. ("S", 심볼 튜플) · ("R", [참조 튜플]) · ("L", [관계 튜플]).
+    튜플 모양은 clangd_riff.read 와 같다 (줄·열 0 기준)."""
+    for kind, d in iter_docs(yaml_path):
+        if kind == "Symbol":
+            info_ = d.get("SymInfo") or {}
+            if "Lang" not in info_ and str(info_.get("Kind", "")).startswith("Lang:"):
+                # clangd 23.1.0 YAML 쓰기 버그: SymbolKind::Concept 등에 문자열이 없어 'Kind: Lang: C' 한 줄로 나온다
+                info_ = {"Kind": "Unmapped(Concept?)", "Lang": str(info_["Kind"]).split(":", 1)[1].strip()}
+            yield "S", (str(d.get("ID")), str(d.get("Name") or ""), str(d.get("Scope") or ""), str(info_.get("Kind", "")),
+                        str(info_.get("Lang", "")), _yloc(d.get("CanonicalDeclaration")), _yloc(d.get("Definition")),
+                        str(d.get("Signature") or ""), str(d.get("ReturnType") or ""), str(d.get("Type") or ""),
+                        str(d.get("TemplateSpecializationArgs") or ""), int(d.get("Flags") or 0),
+                        int(d.get("References") or 0), str(d.get("Documentation") or ""))
+        elif kind == "Refs":
+            sid, out = str(d.get("ID")), []
+            for r in d.get("References") or []:
+                loc = _yloc(r.get("Location"))
+                if loc:
+                    out.append((sid, int(r.get("Kind") or 0), loc[0], loc[1], loc[2],
+                                str((r.get("Container") or {}).get("ID") or NULL_ID)))
+            yield "R", out
+        elif kind == "Relations":
+            yield "L", [(str((d.get("Subject") or {}).get("ID")), int(d.get("Predicate") or 0),
+                         str((d.get("Object") or {}).get("ID")))]
+
+
+def _merge_sym(a, b):
+    """같은 심볼의 두 사본 합치기 (배경 색인은 선언 파일·정의 파일 샤드에 한 번씩 넣는다). 빈 칸을 채우고 플래그는 OR."""
+    if a == b:
+        return a
+    x = list(a)
+    for i in (5, 6, 7, 8, 9, 10, 13):  # 선언·정의·시그니처·반환·타입·템플릿 인자·문서
+        if not x[i] and b[i]:
+            x[i] = b[i]
+    x[11] = a[11] | b[11]
+    x[12] = max(a[12], b[12])
+    return tuple(x)
+
+
+def riff_records(paths, dedupe_refs=False):
+    """RIFF 파일(들) → 공통 레코드. 파일이 여럿이면(배경 색인 샤드, 유니티 실패분 재색인) 심볼을 합치고 관계 중복을 뺀다.
+    참조는 샤드마다 그 위치의 파일이 주인이라 겹치지 않는다. 여러 clangd-indexer 출력을 합칠 때만 dedupe_refs."""
+    import clangd_riff
+    paths = list(paths)
+    if len(paths) == 1:
+        x = clangd_riff.read(Path(paths[0]).read_bytes())
+        for s in x["symbols"]:
+            yield "S", s
+        yield "R", x["refs"]
+        yield "L", x["relations"]
+        return
+    syms, rels, seen = {}, set(), set()
+    # 중복 제거가 필요할 때(유니티 실패분 재색인)는 뒤 파일(작은 재색인 출력)부터 읽어 그 키만 기억하고 큰 첫 출력을 거른다
+    order = list(reversed(paths)) if dedupe_refs else paths
+    for i, p in enumerate(order):
+        x = clangd_riff.read(Path(p).read_bytes(), ("symbols", "refs", "relations"))
+        for s in x["symbols"]:
+            old = syms.get(s[0])
+            syms[s[0]] = _merge_sym(old, s) if old else s
+        refs = x["refs"]
+        if dedupe_refs:
+            last = i == len(order) - 1
+            refs = [r for r in refs if r[:5] not in seen and (last or not seen.add(r[:5]))]
+        yield "R", refs
+        rels.update(x["relations"])
+    for s in syms.values():
+        yield "S", s
+    yield "L", sorted(rels)
+
+
+def records_for(source, dedupe_refs=False):
+    """적재 원본 판별: 경로 목록 = RIFF 묶음(샤드 또는 여러 clangd-indexer 출력), 'RIFF' 로 시작하는 파일 = clangd-indexer 바이너리,
+    그 밖 = YAML."""
+    if isinstance(source, (list, tuple)):
+        return riff_records(source, dedupe_refs), f"RIFF {len(source)}개"
+    with open(source, "rb") as f:
+        magic = f.read(4)
+    return (riff_records([source]), "RIFF") if magic == b"RIFF" else (yaml_records(source), "YAML")
+
+
+def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False):
+    """source: YAML 파일 · RIFF 파일 · RIFF 파일 목록(배경 색인 샤드, 또는 유니티 + 재색인 출력 → dedupe_refs).
+    임시 파일에 다 쓰고 바꿔치기한다."""
     t0 = time.time()
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,51 +445,70 @@ def ingest(yaml_path, db_path, roots, info=None, keep_doc=300):
         cur.executemany("INSERT INTO relations VALUES(?,?,?)", rels)
         syms.clear(), refs.clear(), rels.clear()
 
-    for kind, d in iter_docs(yaml_path):
-        if kind == "Symbol":
-            info_ = d.get("SymInfo") or {}
-            if "Lang" not in info_ and str(info_.get("Kind", "")).startswith("Lang:"):
-                # clangd 23.1.0 YAML 쓰기 버그: SymbolKind::Concept 등에 문자열이 없어 'Kind: Lang: C' 한 줄로 나온다
-                info_ = {"Kind": "Unmapped(Concept?)", "Lang": str(info_["Kind"]).split(":", 1)[1].strip()}
-            duri, dl, dc = _loc(d.get("CanonicalDeclaration"))
-            furi, fl, fc = _loc(d.get("Definition"))
-            scope = str(d.get("Scope") or "")
-            name = str(d.get("Name") or "")
-            doc = str(d.get("Documentation") or "")[:keep_doc]
-            syms.append((str(d.get("ID")), name, scope, scope + name, str(info_.get("Kind", "")),
-                         str(info_.get("Lang", "")), files.get(duri) if duri else None, dl, dc,
-                         files.get(furi) if furi else None, fl, fc, str(d.get("Signature") or ""),
-                         str(d.get("ReturnType") or ""), str(d.get("Type") or ""),
-                         str(d.get("TemplateSpecializationArgs") or ""), int(d.get("Flags") or 0),
-                         int(d.get("References") or 0), doc))
+    def at(loc):  # (uri, 줄0, 열0) → (파일 id, 줄1, 열1)
+        return (files.get(loc[0]), loc[1] + 1, loc[2] + 1) if loc else (None, None, None)
+
+    records, fmt = records_for(source, dedupe_refs)
+    for tag, v in records:
+        if tag == "S":
+            sid, name, scope, kind, lang, decl, defn, sig, ret, typ, targs, flags, nrefs, doc = v
+            syms.append((sid, name, scope, scope + name, kind, lang, *at(decl), *at(defn), sig, ret, typ, targs,
+                         flags, nrefs, doc[:keep_doc]))
             counts["symbols"] += 1
-        elif kind == "Refs":
-            sid = str(d.get("ID"))
-            for r in d.get("References") or []:
-                uri, line, col = _loc(r.get("Location"))
-                if not uri:
-                    continue
-                cont = str((r.get("Container") or {}).get("ID") or NULL_ID)
-                refs.append((sid, int(r.get("Kind") or 0), files.get(uri), line, col, cont))
-                counts["refs"] += 1
-        elif kind == "Relations":
-            rels.append((str((d.get("Subject") or {}).get("ID")), int(d.get("Predicate") or 0),
-                         str((d.get("Object") or {}).get("ID"))))
-            counts["relations"] += 1
+        elif tag == "R":
+            for sid, k, uri, line, col, cont in v:
+                fid = files.get(uri)
+                if fid is not None:
+                    refs.append((sid, k, fid, line + 1, col + 1, cont))
+                    counts["refs"] += 1
+        else:
+            rels.extend(v)
+            counts["relations"] += len(v)
         if len(syms) + len(refs) + len(rels) > 50000:
             flush()
     flush()
     con.executescript(INDEXES)
     counts["files"] = cur.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+    took = time.time() - t0
     meta = {"tool_version": TOOL_VERSION, "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "elapsed_ingest": f"{time.time() - t0:.1f}", "counts": json.dumps(counts),
-            "roots": json.dumps([[n, str(p)] for n, p in roots if p]), "yaml": str(yaml_path)}
+            "elapsed_ingest": f"{took:.2f}", "counts": json.dumps(counts),
+            "roots": json.dumps([[n, str(p)] for n, p in roots if p]), "format": fmt,
+            "input": str(source if not isinstance(source, (list, tuple)) else Path(source[0]).parent)}
     meta.update({k: v if isinstance(v, str) else json.dumps(v, ensure_ascii=False) for k, v in (info or {}).items()})
+    meta["history"] = json.dumps(_history(db_path, info, counts, took, source), ensure_ascii=False)
     cur.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", list(meta.items()))
     con.commit()
     con.close()
     os.replace(tmp, db_path)
     return counts
+
+
+def _history(db_path, info, counts, took_ingest, out_path, keep=30):
+    """빌드 이력: 이전 인덱스의 이력을 이어받아 이번 빌드 한 줄을 붙인다 (웹뷰 파이프라인 탭이 속도 변화를 그린다)."""
+    hist = []
+    if Path(db_path).exists():
+        try:
+            con = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+            row = con.execute("SELECT value FROM meta WHERE key='history'").fetchone()
+            con.close()
+            hist = json.loads(row[0]) if row else []
+        except (sqlite3.Error, ValueError):
+            hist = []
+    info = info or {}
+    errors = info.get("errors") if isinstance(info.get("errors"), dict) else {}
+    out_bytes = info.get("out_bytes")
+    if out_bytes is None:
+        try:
+            out_bytes = Path(out_path).stat().st_size
+        except (OSError, TypeError):
+            out_bytes = 0
+    hist.append({"at": time.strftime("%Y-%m-%d %H:%M:%S"), "mode": info.get("mode", info.get("source", "")),
+                 "scope": info.get("scope", ""), "tus": info.get("tus"), "failed_tu": errors.get("failed_tu", 0),
+                 "t_index": float(info.get("elapsed_index") or 0), "t_ingest": round(took_ingest, 2),
+                 "out_bytes": out_bytes, "symbols": counts["symbols"], "refs": counts["refs"],
+                 "relations": counts["relations"], "files": counts.get("files"),
+                 "reused": info.get("reused"), "rebuilt": info.get("rebuilt")})
+    return hist[-keep:]
 
 
 # ---------------------------------------------------------------- 만들기
@@ -498,6 +605,223 @@ def default_filter(scope, root, eng):
     return None
 
 
+def find_clangd(explicit):
+    """배경 색인 모드용 clangd 본체. --clangd > CLANGD > PATH > ~/.claude/tools/clangd/bin > clangd-indexer 옆."""
+    exe = "clangd.exe" if os.name == "nt" else "clangd"
+    idx = find_indexer(None)
+    cands = [explicit, os.environ.get("CLANGD"), shutil.which("clangd"),
+             str(Path.home() / ".claude" / "tools" / "clangd" / "bin" / exe), str(Path(idx).parent / exe) if idx else None]
+    for c in cands:
+        if c and Path(c).is_file():
+            return c
+    return None
+
+
+def _module_of_path(roots):
+    """유니티 묶음을 모듈 안에서만 만들려고 쓰는 모듈 판정 (FileTable.module 과 같은 규칙: 가장 가까운 *.Build.cs)."""
+    ft = FileTable.__new__(FileTable)
+    ft.mod_cache = {}
+    prefixes = [norm(str(p)).rstrip("/") + "/" for _, p in roots if p]
+
+    def mod(path):
+        n = norm(path)
+        rel_root = next((x for x in prefixes if n.startswith(x)), None)
+        return ft.module(path, rel_root)
+    return mod
+
+
+def _run_indexer(indexer, cdb_file, out_dir, fmt, jobs, extra, flt, tag=""):
+    """clangd-indexer 한 번. 반환: (출력 경로, 걸린 초, 오류 요약, 종료 코드)."""
+    out = out_dir / f"clangd-index{tag}.{'riff' if fmt == 'binary' else 'yaml'}"
+    cmd = [indexer, "--executor=all-TUs", f"--format={fmt}"]
+    if flt:
+        cmd.append(f"--filter={flt}")
+    if jobs:
+        cmd.append(f"--execute-concurrency={jobs}")
+    cmd += [f"--extra-arg={x}" for x in extra or []]
+    cmd.append(str(cdb_file))
+    print("실행:", " ".join(cmd))
+    err_path = out_dir / f"clangd-index{tag}.stderr.txt"
+    t0 = time.time()
+    with open(out, "wb") as o, open(err_path, "wb") as e:
+        r = subprocess.run(cmd, stdout=o, stderr=e)
+    took = time.time() - t0
+    errors = summarize_errors(err_path)
+    print(f"clangd-indexer 종료 {r.returncode} [{took:.0f}s] · TU {errors['tus']} · 실패 TU {errors['failed_tu']} · "
+          f"오류 줄 {errors['count']}" + (f" · .generated.h 관련 {errors['generated_h']}" if errors["generated_h"] else "")
+          + f" (전체: {err_path})")
+    return out, took, errors, r.returncode
+
+
+def build_indexer(root, eng, scope, a, out_dir, roots):
+    """clangd-indexer 전체 색인. --unity N 이면 같은 플래그의 .cpp 를 N 개씩 묶고, 실패한 묶음은 원래 TU 로 다시 돈다."""
+    import cindex_speed as sp
+    indexer = find_indexer(a.indexer)
+    if not indexer:
+        print("clangd-indexer 를 못 찾았다. clangd 릴리스의 indexing tools 를 받아 PATH 나 "
+              "~/.claude/tools/clangd/bin 에 두거나 --indexer / CLANGD_INDEXER 로 준다 (references/cindex.md). "
+              "clangd 만 있으면 --mode bg 를 쓴다.")
+        return None, None
+    cdb = resolve_cdb(a.cdb, root, eng)
+    if not cdb:
+        print("compile_commands.json 을 못 찾았다. UE 는 `cindex.py cdb`, 그 외는 빌드 시스템으로 만들고 --cdb 로 준다.")
+        return None, None
+    flt = a.filter or default_filter(scope, root, eng)
+    fmt = a.format
+    if a.unity and fmt != "binary":
+        print("--unity 는 --format binary 와 같이 쓴다 (실패한 묶음을 다시 돌린 결과를 합칠 때 RIFF 를 읽는다).")
+        return None, None
+    info = {"source": "clangd-indexer", "indexer": indexer, "cdb": str(cdb), "filter": flt or "", "scope": scope,
+            "format": fmt}
+    if not a.unity:
+        out, took, errors, rc = _run_indexer(indexer, staged_cdb(cdb, out_dir), out_dir, fmt, a.jobs, a.extra_arg, flt)
+        errors.pop("failed_all", None)
+        info.update({"mode": "clangd-indexer (전체)", "tus": errors["tus"], "exit": str(rc), "elapsed_index": f"{took:.2f}",
+                     "errors": errors, "out_bytes": out.stat().st_size})
+        if rc != 0 and out.stat().st_size == 0:
+            harness_emit("index.clangd", f"clangd-indexer 실패 (종료 {rc})", ok=False, project=root)
+            return None, None
+        return out, info
+    entries = sp.filter_entries(sp.entries_of(cdb), flt)
+    batched, members = sp.unity_entries(entries, a.unity, out_dir / "unity", _module_of_path(roots))
+    staged = sp.write_cdb(batched, out_dir / "unity-cdb" / "compile_commands.json")
+    print(f"유니티 묶음: TU {len(entries)} → {len(batched)} (묶음 {len(members)}개, 묶음당 최대 {a.unity})")
+    out, took, errors, rc = _run_indexer(indexer, staged, out_dir, fmt, a.jobs, a.extra_arg, None)
+    outs, total = [out], took
+    mem = {sp.npath(b): {sp.npath(x) for x in ms} for b, ms in members.items()}
+    failed_all = [sp.npath(f) for f in errors.pop("failed_all", [])]
+    failed_b = [f for f in failed_all if f in mem]
+    single_failed = [f for f in failed_all if f not in mem]
+    retry_set = set().union(*(mem[b] for b in failed_b)) if failed_b else set()
+    retry = [e for e in entries if sp.npath(e["file"]) in retry_set]
+    if retry:
+        print(f"실패한 묶음 {len(failed_b)}개 → 원래 TU {len(retry)}개로 다시 색인")
+        staged2 = sp.write_cdb(retry, out_dir / "unity-retry-cdb" / "compile_commands.json")
+        out2, took2, e2, _ = _run_indexer(indexer, staged2, out_dir, fmt, a.jobs, a.extra_arg, None, tag="-retry")
+        e2.pop("failed_all", None)
+        outs.append(out2)
+        total += took2
+        # 오류 줄 수에는 유니티 때문에만 난 오류(묶음 안 이름 충돌 등)도 들어 있다
+        errors = {"count": errors["count"] + e2["count"], "generated_h": errors["generated_h"] + e2["generated_h"],
+                  "failed_tu": len(single_failed) + e2["failed_tu"], "failed_sample": (single_failed + e2["failed_sample"])[:30],
+                  "sample": errors["sample"][:15] + e2["sample"][:15], "tus": len(entries), "unity_failed": len(failed_b)}
+    else:
+        errors["unity_failed"] = 0
+    info.update({"mode": f"clangd-indexer (유니티 {a.unity})", "tus": len(entries), "batches": len(batched),
+                 "exit": str(rc), "elapsed_index": f"{total:.2f}", "errors": errors,
+                 "out_bytes": sum(o.stat().st_size for o in outs)})
+    return (outs if len(outs) > 1 else out), info
+
+
+def build_background(root, eng, scope, a, out_dir, roots):
+    """clangd 배경 색인 샤드로 증분 색인 (cindex_speed.py 머리말). 샤드는 <색인 폴더>/bg/.cache/clangd/index 에만 쓴다
+    (--compile-commands-dir 를 주면 모든 파일이 그 CDB 프로젝트에 속해 샤드가 거기로 간다 — GlobalCompilationDatabase.cpp)."""
+    import cindex_speed as sp
+    clangd = find_clangd(a.clangd)
+    if not clangd:
+        print("clangd 를 못 찾았다. PATH 나 ~/.claude/tools/clangd/bin 에 두거나 --clangd / CLANGD 로 준다.")
+        return None, None
+    cdb = resolve_cdb(a.cdb, root, eng)
+    if not cdb:
+        print("compile_commands.json 을 못 찾았다. UE 는 `cindex.py cdb`, 그 외는 빌드 시스템으로 만들고 --cdb 로 준다.")
+        return None, None
+    flt = a.filter or default_filter(scope, root, eng)
+    bg = out_dir / "bg"
+    bg.mkdir(parents=True, exist_ok=True)
+    t_plan = time.time()
+    entries = sp.filter_entries(sp.entries_of(cdb), flt)
+    if not entries:
+        print("필터 뒤 남은 번역 단위가 없다 — --filter 나 --scope 를 확인한다.")
+        return None, None
+    n_tus, originals, members = len(entries), entries, {}
+    state_path = bg / "state.json"
+    state = sp.load_state(state_path)
+    split = set(state.get("split", ()))  # 묶었더니 오류가 난 파일 — --unity 를 껐다 켜도 기억한다
+    if a.unity:
+        entries, members = sp.unity_entries(originals, a.unity, bg / "unity", _module_of_path(roots), split)
+        print(f"유니티 묶음: TU {n_tus} → {len(entries)} (묶음 {len(members)}개" +
+              (f", 오류로 푼 파일 {len(split)}개" if split else "") + ")")
+    sp.write_cdb(entries, bg / "compile_commands.json")
+    store = sp.ShardStore(bg, state.get("shards")).scan()
+    why, changed, files_now = sp.plan(entries, store, state)
+    for k in why:
+        sh = store.own.get(k)
+        if sh and sh.exists():
+            sh.unlink()
+    reasons = {}
+    for r in why.values():
+        reasons[r] = reasons.get(r, 0) + 1
+    t_plan = time.time() - t_plan
+    cold = not store.own
+    print(f"{'처음 색인' if cold else '증분'} · TU {len(entries)} · 바뀐 파일 {len(changed)} · 강제 재색인 TU {len(why)}"
+          + (f" ({', '.join(f'{k} {v}' for k, v in reasons.items())})" if reasons else "") + f" [계획 {t_plan:.2f}s]")
+    # 열 파일: CDB 를 읽게 하는 방아쇠일 뿐. 빈 파일 + .clangd(표준 라이브러리 색인 끔)로 미리보기 비용을 없앤다
+    probe_dir = bg / "probe"
+    probe_dir.mkdir(exist_ok=True)
+    (probe_dir / ".clangd").write_text("Index:\n  StandardLibrary: No\nCompileFlags:\n  Remove: ['*']\n", encoding="utf-8")
+    probe = probe_dir / "cindex_probe.cpp"
+    probe.write_text("// cindex.py 배경 색인 방아쇠\n", encoding="utf-8")
+    print(f"실행: {clangd} --background-index --compile-commands-dir={bg}" + (f" -j={a.jobs}" if a.jobs else ""))
+    try:
+        res = sp.run_background_index(clangd, bg, probe, a.jobs, log_path=bg / "clangd.log", timeout=a.timeout or None)
+    except (TimeoutError, RuntimeError, OSError) as e:
+        print(f"배경 색인 실패: {e} ({bg / 'clangd.log'})")
+        harness_emit("index.clangd", f"배경 색인 실패: {e}", ok=False, project=root)
+        return None, None
+    if res["crashed"]:
+        print(f"clangd 가 도중에 끝났다 — {bg / 'clangd.log'} 를 본다.")
+    store.scan()
+    bad_batches = [b for b in members if sp.npath(b) in store.errors]
+    if bad_batches:
+        # 묶음에서만 나는 오류(파일 범위 이름 충돌 등)일 수 있다 → 그 묶음을 풀어 원래 TU 로 한 번 더 돈다. 다음 빌드도 풀어 둔다
+        for b in bad_batches:
+            split.update(sp.npath(m) for m in members[b])
+            sh = store.own.get(sp.npath(b))
+            if sh and sh.exists():
+                sh.unlink()
+        entries, members = sp.unity_entries(originals, a.unity, bg / "unity", _module_of_path(roots), split)
+        sp.write_cdb(entries, bg / "compile_commands.json")
+        for k in sp.not_tu_yet(entries, store):
+            store.own[k].unlink(missing_ok=True)
+        print(f"오류 난 묶음 {len(bad_batches)}개를 풀어 다시 색인 (TU {len(entries)})")
+        try:
+            res2 = sp.run_background_index(clangd, bg, probe, a.jobs, log_path=bg / "clangd-retry.log",
+                                           timeout=a.timeout or None)
+        except (TimeoutError, RuntimeError, OSError) as e:
+            print(f"묶음을 푼 재색인 실패: {e} ({bg / 'clangd-retry.log'})")
+            res2 = {"elapsed": 0, "indexed": [], "enqueued": None, "crashed": True, "failed": [str(e)]}
+        res = {"elapsed": res["elapsed"] + res2["elapsed"], "indexed": res["indexed"] + res2["indexed"],
+               "enqueued": res2["enqueued"], "crashed": res["crashed"] or res2["crashed"],
+               "failed": res["failed"] + res2["failed"]}
+        store.scan()
+    tu_keys = {sp.npath(e["file"]) for e in entries}
+    forced = {sp.npath(q) for e in entries for q in sp.forced_includes(e)}
+    reach = store.reachable(tu_keys | forced)
+    shards = sorted(str(store.own[k]) for k in reach if k in store.own)
+    keep = {Path(s).name for s in shards}
+    removed = 0
+    for name in list(store.cache):
+        if name not in keep:  # CDB 에서 빠진 TU 와 그것만 포함하던 헤더의 샤드
+            (store.dir / name).unlink(missing_ok=True)
+            store.cache.pop(name)
+            removed += 1
+    sp.save_state(state_path, entries, store, files_now, reach, split)
+    rebuilt = sorted({sp.npath(x) for x in res["indexed"]} & tu_keys)
+    bad = sorted(tu_keys & store.errors)
+    errors = {"count": None, "failed_tu": len(bad), "failed_sample": bad[:30], "sample": res["failed"][:30],
+              "tus": len(entries), "note": "배경 색인은 오류 줄을 세지 않는다 — 샤드의 HadErrors 표시로 오류 TU 를 센다"}
+    print(f"배경 색인 [{res['elapsed']:.1f}s] · 다시 색인 {len(rebuilt)} · 재사용 {len(entries) - len(rebuilt)} · "
+          f"샤드 {len(shards)} · 지운 샤드 {removed} · 오류 있던 TU {len(bad)}")
+    info = {"source": "clangd-background", "clangd": clangd, "cdb": str(cdb), "filter": flt or "", "scope": scope,
+            "mode": "clangd 배경 색인 (증분)" + (f" · 유니티 {a.unity}" if a.unity else ""), "tus": n_tus,
+            "batches": len(entries) if a.unity else None, "elapsed_plan": f"{t_plan:.2f}",
+            "elapsed_index": f"{res['elapsed']:.2f}", "rebuilt": len(rebuilt), "reused": len(entries) - len(rebuilt),
+            "invalidated": len(why), "invalidated_reasons": reasons, "changed_files": len(changed), "shards": len(shards),
+            "unity_split": len(split) if a.unity else None,
+            "errors": errors, "out_bytes": sum(Path(s).stat().st_size for s in shards), "cold": cold}
+    return shards, info
+
+
 def cmd_build(root, kind, a):
     eng = engine_dir_of(root, kind)
     scope = a.scope
@@ -505,71 +829,51 @@ def cmd_build(root, kind, a):
     if db is None:
         print("engine 범위는 UE 프로젝트에서만 쓴다.")
         return 1
-    if a.yaml:
-        yaml_path, info = Path(a.yaml), {"source": "yaml"}
-    else:
-        indexer = find_indexer(a.indexer)
-        if not indexer:
-            print("clangd-indexer 를 못 찾았다. clangd 릴리스의 indexing tools 를 받아 PATH 나 "
-                  "~/.claude/tools/clangd/bin 에 두거나 --indexer / CLANGD_INDEXER 로 준다 (references/cindex.md).")
-            return 1
-        cdb = resolve_cdb(a.cdb, root, eng)
-        if not cdb:
-            print("compile_commands.json 을 못 찾았다. UE 는 `cindex.py cdb`, 그 외는 빌드 시스템으로 만들고 --cdb 로 준다.")
-            return 1
-        flt = a.filter or default_filter(scope, root, eng)
-        out_dir = db.parent
-        out_dir.mkdir(parents=True, exist_ok=True)
-        yaml_path = out_dir / "clangd-index.yaml"
-        cmd = [indexer, "--executor=all-TUs", "--format=yaml"]
-        if flt:
-            cmd.append(f"--filter={flt}")
-        if a.jobs:
-            cmd.append(f"--execute-concurrency={a.jobs}")
-        cmd += [f"--extra-arg={x}" for x in a.extra_arg or []]
-        cmd.append(str(staged_cdb(cdb, out_dir)))
-        print("실행:", " ".join(cmd))
-        t0 = time.time()
-        err_path = out_dir / "clangd-index.stderr.txt"
-        with open(yaml_path, "wb") as out, open(err_path, "wb") as err:
-            r = subprocess.run(cmd, stdout=out, stderr=err)
-        took = time.time() - t0
-        errors = summarize_errors(err_path)
-        info = {"source": "clangd-indexer", "indexer": indexer, "cdb": str(cdb), "filter": flt or "",
-                "exit": str(r.returncode), "elapsed_index": f"{took:.1f}", "errors": errors}
-        print(f"clangd-indexer 종료 {r.returncode} [{took:.0f}s] · 실패 TU {errors['failed_tu']} · 오류 줄 {errors['count']}"
-              f"{' · .generated.h 관련 ' + str(errors['generated_h']) if errors['generated_h'] else ''} (전체: {err_path})")
-        if errors["generated_h"]:
-            print("  [경고] .generated.h 누락·낡음 — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
-        if r.returncode != 0 and yaml_path.stat().st_size == 0:
-            harness_emit("index.clangd", f"clangd-indexer 실패 (종료 {r.returncode})", ok=False, project=root)
-            return 1
     roots = [("project", root), ("engine", eng)]
-    counts = ingest(yaml_path, db, roots, info)
+    out_dir = db.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if a.yaml:
+        src, info = Path(a.yaml), {"source": "file", "mode": "적재만"}
+    elif a.mode == "bg":
+        src, info = build_background(root, eng, scope, a, out_dir, roots)
+    else:
+        src, info = build_indexer(root, eng, scope, a, out_dir, roots)
+    if src is None:
+        return 1
+    errors = info.get("errors") if isinstance(info.get("errors"), dict) else {}
+    if errors.get("generated_h"):
+        print("  [경고] .generated.h 누락·낡음 — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
+    counts = ingest(src, db, roots, info, dedupe_refs=a.mode != "bg" and isinstance(src, list))
     print(f"적재 완료 · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']} · 파일 {counts['files']} → {db}")
-    if not a.keep_yaml and not a.yaml:
-        yaml_path.unlink(missing_ok=True)
-    failed = (info.get("errors") or {}).get("failed_tu", 0) if isinstance(info.get("errors"), dict) else 0
-    harness_emit("index.clangd", f"{scope} · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']}"
-                 + (f" · 실패 TU {failed}" if failed else ""), ok=not failed, project=root)
+    if not a.keep_yaml and not a.yaml and a.mode != "bg":
+        for s in (src if isinstance(src, list) else [src]):
+            Path(s).unlink(missing_ok=True)
+    failed = errors.get("failed_tu", 0)
+    detail = f"{scope} · {info.get('mode', '')} · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']}"
+    if info.get("rebuilt") is not None:
+        detail += f" · 재색인 {info['rebuilt']}/{info.get('batches') or info.get('tus')}"
+    harness_emit("index.clangd", detail + (f" · 실패 TU {failed}" if failed else ""), ok=not failed, project=root)
     return 0
 
 
 GENERATED_RE = re.compile(r"\.generated\.h|_PROLOG\b|GENERATED_BODY|GENERATED_UCLASS_BODY")
+PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\] Processing file")
 
 
 def summarize_errors(err_path, keep=30):
     """clangd-indexer 는 번역 단위(TU)가 실패해도 종료 코드 0 이다 → stderr 로 판정한다.
     'Error while processing <파일>' = 실패한 TU. UE 에서 가장 흔한 원인은 .generated.h 누락·낡음(UHT 미실행)이고,
     그러면 UCLASS 타입과 그 멤버가 인덱스에서 조용히 빠진다."""
-    count, generated, failed, sample, failed_tu = 0, 0, 0, [], []
+    count, generated, failed, sample, failed_all, tus = 0, 0, 0, [], [], 0
     try:
         with open(err_path, encoding="utf-8", errors="replace") as f:
             for line in f:
-                if line.startswith("Error while processing"):
+                m = PROGRESS_RE.match(line)
+                if m:  # all-TUs 실행기의 진행 줄 '[i/N] Processing file …' — N 이 처리 대상 TU 수
+                    tus = max(tus, int(m.group(2)))
+                elif line.startswith("Error while processing"):
                     failed += 1
-                    if len(failed_tu) < keep:
-                        failed_tu.append(line.strip()[len("Error while processing "):].rstrip("."))
+                    failed_all.append(line.strip()[len("Error while processing "):].rstrip("."))
                 elif " error: " in line or line.startswith("error:"):
                     count += 1
                     generated += bool(GENERATED_RE.search(line))
@@ -577,7 +881,8 @@ def summarize_errors(err_path, keep=30):
                         sample.append(line.strip()[:300])
     except OSError:
         pass
-    return {"count": count, "generated_h": generated, "failed_tu": failed, "failed_sample": failed_tu, "sample": sample}
+    return {"count": count, "generated_h": generated, "failed_tu": failed, "failed_sample": failed_all[:keep], "sample": sample,
+            "tus": tus, "failed_all": failed_all}
 
 
 # ---------------------------------------------------------------- 조회
@@ -780,7 +1085,7 @@ def cmd_query(a, root, kind):
         print(f"인덱스 {ix.path} · {ix.meta.get('generated_at')} · 심볼 {counts.get('symbols')} · 참조 {counts.get('refs')} · "
               f"관계 {counts.get('relations')} · 파일 {counts.get('files')}")
         print(f"출처 {ix.meta.get('source')} · cdb {ix.meta.get('cdb', '-')} · 필터 {ix.meta.get('filter', '-') or '-'} · "
-              f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {errors.get('count')}"
+              f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
               + (f" (.generated.h 관련 {errors.get('generated_h')})" if errors.get("generated_h") else ""))
         stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
                  if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
@@ -892,6 +1197,7 @@ class CindexSource:
             rel["호출하는 쪽 (참조 Container)"] = [self._out(x) for x, _ in self.ix.callers(sid) if x][:60]
             rel["부르는 함수"] = [self._out(x) for x, _ in self.ix.callees(sid) if x][:60]
         refs = self.ix.refs(sid, None, 60)
+        s["ref_rows"] = self.ix.q("SELECT COUNT(*) FROM refs WHERE sym=?", (sid,))[0][0]
         rel["참조 위치"] = [{"id": sid, "src": self.name, "name": f"{'정의' if r['kind'] & DEF else '선언' if r['kind'] & DECL else '참조'}",
                           "path": r["path"], "line": r["line"]} for r in refs]
         s["relations"] = rel
@@ -971,9 +1277,11 @@ class CindexSource:
                     "why": "인덱스 뒤 바뀐 파일. 있으면 `cindex.py build`.", "samples": changed[:20]})
         errors = json.loads(ix.meta["errors"]) if ix.meta.get("errors") else None
         if errors is not None:
-            out.append({"name": "clangd 실패 TU", "metric": f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {errors['count']} · "
-                                                       f".generated.h 관련 {errors.get('generated_h', 0)}",
-                        "pass": not errors.get("failed_tu") and errors["count"] == 0,
+            bg = errors.get("count") is None
+            out.append({"name": "clangd 실패 TU" if not bg else "clangd 오류 있던 TU (배경 색인)",
+                        "metric": f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if bg else errors['count']} · "
+                                  f".generated.h 관련 {'-' if bg else errors.get('generated_h', 0)}",
+                        "pass": not errors.get("failed_tu") and errors.get("count") in (0, None),
                         "why": "clangd-indexer 는 TU 가 실패해도 종료 코드 0 이라 stderr 로 센다. 실패한 TU 의 심볼·참조는 빠진다. "
                                "UE 에서 .generated.h 누락·낡음(UHT 미실행)이면 UCLASS 타입과 멤버가 통째로 사라진다 — 에디터 빌드 뒤 다시 build.",
                         "samples": errors.get("failed_sample", []) + errors.get("sample", [])})
@@ -987,6 +1295,189 @@ class CindexSource:
                     "pass": n_sym > 0 and (n_ref == 0 or n_cont > 0),
                     "why": "호출자/피호출 함수는 참조의 Container 로 계산한다. Container 가 전부 비면 그 clangd 버전이 기록하지 않는 것이다."})
         return out
+
+
+    # ---- 웹뷰 개요·파이프라인·행렬·커버리지
+
+    def overview(self):
+        ix = self.ix
+        m = ix.meta
+        kinds = ix.q("SELECT kind, COUNT(*) FROM symbols GROUP BY kind ORDER BY 2 DESC")
+        mods = ix.q("SELECT f.module, f.root, COUNT(s.id), COUNT(DISTINCT f.id) FROM files f LEFT JOIN symbols s "
+                    "ON s.decl_file=f.id WHERE f.module != '' GROUP BY f.module, f.root ORDER BY 3 DESC LIMIT 400")
+        refs_by_mod = dict(ix.q("SELECT f.module, COUNT(*) FROM refs r JOIN files f ON f.id=r.file GROUP BY f.module"))
+        rel = dict(ix.q("SELECT predicate, COUNT(*) FROM relations GROUP BY predicate"))
+        rk = ix.q("SELECT SUM((kind & 1) != 0), SUM((kind & 2) != 0), SUM((kind & 4) != 0), SUM((kind & 20) = 20), "
+                  "SUM(container != ?) FROM refs", (NULL_ID,))[0]
+        errors = json.loads(m["errors"]) if m.get("errors") else {}
+        return {"counts": json.loads(m.get("counts", "{}")), "kinds": kinds,
+                "modules": [{"name": n, "group": root or "외부", "symbols": c, "files": f, "refs": refs_by_mod.get(n, 0)}
+                            for n, root, c, f in mods],
+                "relations": {"BaseOf": rel.get(BASE_OF, 0), "OverriddenBy": rel.get(OVERRIDDEN_BY, 0)},
+                "ref_kinds": {"선언": rk[0] or 0, "정의": rk[1] or 0, "참조": rk[2] or 0, "호출성 참조": rk[3] or 0,
+                              "Container 있음": rk[4] or 0},
+                "failed_tu": errors.get("failed_tu", 0), "generated_h": errors.get("generated_h", 0),
+                "build": {"at": m.get("generated_at"), "mode": m.get("mode", m.get("source")), "tus": m.get("tus"),
+                          "seconds_index": m.get("elapsed_index"), "seconds_ingest": m.get("elapsed_ingest")}}
+
+    def pipeline(self):
+        m = self.ix.meta
+
+        def val(k):  # meta 는 문자열이 아니면 JSON 으로 저장된다
+            v = m.get(k)
+            try:
+                return json.loads(v) if isinstance(v, str) and v[:1] in "{[0123456789-tfn" else v
+            except ValueError:
+                return v
+        errors = val("errors") or {}
+        hist = json.loads(m.get("history", "[]"))
+        last = hist[-1] if hist else {}
+        bg = m.get("source") == "clangd-background"
+        stages = []
+        if m.get("elapsed_cdb"):
+            stages.append({"name": "compile_commands 준비", "seconds": float(m["elapsed_cdb"])})
+        if m.get("elapsed_plan"):
+            stages.append({"name": "무효화 계획 (바뀐 파일 → 포함한 TU)", "seconds": float(m["elapsed_plan"])})
+        stages.append({"name": "clangd 배경 색인 (바뀐 TU 만)" if bg else "clangd 색인 (TU 파싱·심볼 수집)",
+                       "seconds": float(m.get("elapsed_index") or 0)})
+        stages.append({"name": "sqlite 적재" + (" (샤드 읽기)" if bg else ""), "seconds": float(m.get("elapsed_ingest") or 0)})
+        units = val("batches") or val("tus")
+        incr = None
+        if val("rebuilt") is not None:
+            incr = {"units": units, "rebuilt": val("rebuilt"), "reused": val("reused"), "invalidated": val("invalidated"),
+                    "reasons": val("invalidated_reasons") or {}, "changed_files": val("changed_files"),
+                    "shards": val("shards"), "cold": val("cold"), "unity_split": val("unity_split")}
+        facts = [["방식", m.get("mode", m.get("source", "-"))], ["범위", m.get("scope", "-")], ["번역 단위", val("tus") or "-"]]
+        if val("batches"):
+            facts.append(["유니티 묶은 뒤 TU", val("batches")])
+        if incr:
+            facts += [["다시 색인 / 재사용", f"{incr['rebuilt']} / {incr['reused']}"],
+                      ["강제 재색인", f"{incr['invalidated']}" + (" (" + ", ".join(f"{k} {v}" for k, v in incr["reasons"].items()) + ")"
+                                                                if incr["reasons"] else "")],
+                      ["바뀐 파일", incr["changed_files"]], ["샤드", incr["shards"]]]
+        facts += [["실패 TU" if not bg else "오류 있던 TU", errors.get("failed_tu", "-")],
+                  ["출력" if not bg else "샤드 합계", _fmt_bytes(last.get("out_bytes"))],
+                  ["형식", m.get("format", "-")], ["필터", m.get("filter") or "-"], ["compile_commands", m.get("cdb", "-")]]
+        return {"mode": m.get("mode", m.get("source")), "at": m.get("generated_at"), "stages": stages, "facts": facts,
+                "history": hist, "errors": errors, "incremental": incr, "units": units}
+
+    def anatomy(self, name=None):
+        """clangd 가 심볼 하나에 대해 남기는 원본 레코드 셋(Symbol · Refs · Relations)을 그대로 보인다.
+        이름이 없으면 재정의 관계와 참조가 가장 많은 메서드를 고른다 (세 종류가 다 보이게)."""
+        ix = self.ix
+        sid = None
+        if name:
+            hits = ix.find(name, 5)
+            sid = hits[0]["id"] if hits else None
+        if not sid:
+            row = ix.q("SELECT s.id FROM symbols s JOIN relations r ON r.subject=s.id AND r.predicate=? "
+                       "WHERE s.nrefs > 0 GROUP BY s.id ORDER BY COUNT(*) DESC, s.nrefs DESC LIMIT 1", (OVERRIDDEN_BY,))
+            if not row:
+                row = ix.q("SELECT sym FROM refs GROUP BY sym ORDER BY COUNT(*) DESC LIMIT 1")
+            sid = row[0][0] if row else None
+        if not sid:
+            return None
+        r = ix.q("SELECT s.id, s.name, s.scope, s.kind, s.lang, df.rel, s.decl_line, s.decl_col, ff.rel, s.def_line, "
+                 "s.def_col, s.signature, s.return_type, s.flags, s.nrefs, df.module FROM symbols s "
+                 "LEFT JOIN files df ON df.id=s.decl_file LEFT JOIN files ff ON ff.id=s.def_file WHERE s.id=?", (sid,))[0]
+        symbol = [["ID", r[0]], ["Name", r[1]], ["Scope", r[2] or "(전역)"], ["SymInfo.Kind", r[3]], ["SymInfo.Lang", r[4]],
+                  ["CanonicalDeclaration", f"{r[5]}:{r[6]}:{r[7]}" if r[5] else "-"],
+                  ["Definition", f"{r[8]}:{r[9]}:{r[10]}" if r[8] else "- (이 인덱스가 본 TU 에 정의 없음)"],
+                  ["Signature", r[11] or "-"], ["ReturnType", r[12] or "-"], ["Flags", str(r[13] or 0)],
+                  ["References", str(r[14] or 0)]]
+        total = ix.q("SELECT COUNT(*) FROM refs WHERE sym=?", (sid,))[0][0]
+        refs = ix.refs(sid, None, 12)
+        names = ix.names({x["container"] for x in refs})
+        bits = [("Decl", DECL), ("Def", DEF), ("Ref", REF), ("Spelled", SPELLED), ("Call", CALL)]
+        ref_rows = [{"path": x["path"], "line": x["line"], "col": x["col"], "kind": x["kind"],
+                     "bits": [n for n, b in bits if x["kind"] & b],
+                     "container": ((names.get(x["container"]) or {}).get("scope", "") +
+                                   (names.get(x["container"]) or {}).get("name", "")) or "(없음 · 파일 범위)"} for x in refs]
+        rels = []
+        for pred, pname in ((BASE_OF, "BaseOf"), (OVERRIDDEN_BY, "OverriddenBy")):
+            for subj, obj in ix.q("SELECT subject, object FROM relations WHERE (subject=? OR object=?) AND predicate=? "
+                                  "LIMIT 12", (sid, sid, pred)):
+                a, b = ix.by_id(subj), ix.by_id(obj)
+                qn = lambda s, raw: ((s.get("scope") or "") + s["name"]) if s else raw
+                rels.append({"predicate": pname, "subject": qn(a, subj), "object": qn(b, obj),
+                             "self_is": "subject" if subj == sid else "object"})
+        return {"qname": (r[2] or "") + r[1], "module": r[15] or "", "symbol": symbol, "refs": ref_rows,
+                "refs_total": total, "relations": rels}
+
+    def declared(self):
+        return {}
+
+    def matrix(self, focus, limit, declared=None):
+        rows = self.ix.q("SELECT rf.module, df.module, COUNT(*) FROM refs r JOIN files rf ON rf.id=r.file "
+                         "JOIN symbols s ON s.id=r.sym JOIN files df ON df.id=s.decl_file "
+                         "WHERE rf.module != '' AND df.module != '' AND rf.module != df.module "
+                         "AND (r.kind & ?) != 0 GROUP BY rf.module, df.module", (REF,))
+        weight = {}
+        for a, b, n in rows:
+            weight[a] = weight.get(a, 0) + n
+            weight[b] = weight.get(b, 0) + n
+        if focus:
+            f = next((x for x in weight if x.lower() == focus.lower()), None)
+            chosen = [f] + sorted({b for a, b, _ in rows if a == f} | {a for a, b, _ in rows if b == f},
+                                  key=lambda x: -weight[x]) if f else []
+        else:
+            chosen = sorted(weight, key=lambda x: -weight[x])
+        chosen = list(dict.fromkeys(chosen))[:limit]
+        idx = {n: i for i, n in enumerate(chosen)}
+        declared = declared or {}
+        cells = {}
+        for a, b, n in rows:
+            if a in idx and b in idx:
+                cells[(idx[a], idx[b])] = [idx[a], idx[b], n, declared.get(a, {}).get(b, "")]
+        for a, deps in declared.items():
+            for b, kind in deps.items():
+                if a in idx and b in idx and (idx[a], idx[b]) not in cells:
+                    cells[(idx[a], idx[b])] = [idx[a], idx[b], 0, kind]
+        roots = dict(self.ix.q("SELECT module, root FROM files WHERE module != '' GROUP BY module"))
+        return {"modules": [{"name": n, "size": weight.get(n, 0), "group": roots.get(n, "")} for n in chosen],
+                "cells": list(cells.values()), "measure": "refs", "has_declared": bool(declared)}
+
+    def refs_with_text(self, sid, limit):
+        lc = LineCache()
+        rows = self.ix.refs(sid, None, limit)
+        names = self.ix.names({r["container"] for r in rows})
+        return [{"kind": "정의" if r["kind"] & DEF else "선언" if r["kind"] & DECL else "참조", "path": r["path"],
+                 "line": r["line"], "col": r["col"], "text": lc.text(r["abs_path"], r["line"], 200),
+                 "container": ((names.get(r["container"]) or {}).get("scope", "") +
+                               (names.get(r["container"]) or {}).get("name", "(파일 범위)"))} for r in rows]
+
+    def coverage(self):
+        """디스크의 C++ 소스 중 clangd 가 본 파일 비율 (모듈별). 어떤 TU 도 포함하지 않은 헤더는 인덱스에 없다."""
+        from index_view import ModuleResolver, disk_sources
+        root_name = "engine" if self.scope == "engine" else "project"
+        root = self.ix.roots.get(root_name)
+        if not root:
+            return {"modules": [], "note": "루트 정보 없음"}
+        seen = {norm(p) for (p,) in self.ix.q("SELECT path FROM files WHERE root = ?", (root_name,))}
+        res = ModuleResolver()
+        per = {}
+        for f in disk_sources(root, root_name):
+            mod = res.of(f, root)
+            d = per.setdefault(mod, [0, 0, []])
+            d[0] += 1
+            if norm(f) in seen:
+                d[1] += 1
+            elif len(d[2]) < 8:
+                d[2].append(os.path.relpath(f, root).replace("\\", "/"))
+        mods = sorted(per.items(), key=lambda x: -x[1][0])
+        total = sum(v[0] for _, v in mods)
+        hit = sum(v[1] for _, v in mods)
+        return {"root": root, "total": total, "indexed": hit,
+                "modules": [{"name": k, "disk": v[0], "indexed": v[1], "missing_sample": v[2]} for k, v in mods[:200]]}
+
+
+def _fmt_bytes(n):
+    if not n:
+        return "-"
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f}{unit}" if unit == "B" else f"{n:.1f}{unit}"
+        n /= 1024
 
 
 def view_sources(root, kind):
@@ -1168,8 +1659,15 @@ def main():
     ap.add_argument("--jobs", type=int, default=0)
     ap.add_argument("--indexer", default=None)
     ap.add_argument("--extra-arg", action="append", help="clangd-indexer --extra-arg (예: VS Code 생성기 cdb 에 /std:c++20)")
-    ap.add_argument("--yaml", default=None, help="build: 이미 만든 YAML 을 적재만")
-    ap.add_argument("--keep-yaml", action="store_true")
+    ap.add_argument("--yaml", default=None, help="build: 이미 만든 clangd-indexer 출력(YAML·RIFF)을 적재만")
+    ap.add_argument("--keep-yaml", action="store_true", help="build: clangd-indexer 출력 파일을 지우지 않는다")
+    ap.add_argument("--mode", default="indexer", choices=["indexer", "bg"],
+                    help="build: indexer = clangd-indexer 전체 색인, bg = clangd 배경 색인 샤드로 증분 (바뀐 것만)")
+    ap.add_argument("--format", default="binary", choices=["binary", "yaml"],
+                    help="build --mode indexer: 출력 형식. binary(RIFF)가 17배쯤 작고 적재가 빠르다")
+    ap.add_argument("--unity", type=int, default=0, help="build: 같은 플래그의 .cpp 를 N 개씩 한 TU 로 묶는다 (0 = 끔)")
+    ap.add_argument("--clangd", default=None, help="build --mode bg: clangd 경로 (기본 CLANGD > PATH > ~/.claude/tools)")
+    ap.add_argument("--timeout", type=int, default=0, help="build --mode bg: 초 (0 = 없음)")
     ap.add_argument("--kind", default=None, choices=["decl", "def", "ref"])
     ap.add_argument("--limit", type=int, default=40)
     ap.add_argument("--full", action="store_true")
