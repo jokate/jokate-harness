@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Index View</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc;
+  --accent: #2f6fdb; --ok: #1f8a4c; --bad: #c0392b; --warn: #b7791f; --code: #f1f0ec;
+  --k-class: #2f6fdb; --k-struct: #7a4fd6; --k-enum: #1f8a4c; --k-func: #c46a16; --k-module: #4a5568; --k-other: #8a8a84;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --line: #34332f;
+    --accent: #6ea0ff; --ok: #4cc27f; --bad: #ff7b6b; --warn: #e3b25a; --code: #262624;
+    --k-class: #6ea0ff; --k-struct: #b49bff; --k-enum: #4cc27f; --k-func: #f0a35a; --k-module: #aab4c3; --k-other: #8a8a84;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --line: #34332f;
+  --accent: #6ea0ff; --ok: #4cc27f; --bad: #ff7b6b; --warn: #e3b25a; --code: #262624;
+  --k-class: #6ea0ff; --k-struct: #b49bff; --k-enum: #4cc27f; --k-func: #f0a35a; --k-module: #aab4c3; --k-other: #8a8a84;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+header h1 { font-size: 16px; margin: 0; }
+header .root { color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+nav { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav button { border: 0; background: none; color: var(--muted); padding: 8px 12px; cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+nav button.on { color: var(--text); border-bottom-color: var(--accent); }
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+section { display: none; } section.on { display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; background: var(--panel); }
+.chip.off { opacity: .55; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+input, select, button.act { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+input[type=search] { flex: 1 1 220px; min-width: 0; }
+button.act { cursor: pointer; } button.act:hover { border-color: var(--accent); }
+.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: break-word; }
+td.mono { word-break: break-all; }
+th { color: var(--muted); font-weight: 500; }
+tr.click { cursor: pointer; } tr.click:hover { background: var(--code); }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.muted { color: var(--muted); }
+.kind { display: inline-block; min-width: 56px; font-size: 11px; color: var(--muted); }
+pre.code { background: var(--code); border-radius: 6px; padding: 8px; overflow: auto; max-height: 420px; margin: 8px 0; font-size: 12px; line-height: 1.45; }
+pre.code .ln { color: var(--muted); user-select: none; display: inline-block; width: 4.5em; text-align: right; padding-right: 1em; }
+.rel h4 { margin: 10px 0 4px; font-size: 13px; }
+.rel a { color: var(--accent); cursor: pointer; text-decoration: none; }
+.pass { color: var(--ok); } .fail { color: var(--bad); } .warn { color: var(--warn); }
+#graph { width: 100%; height: 620px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; touch-action: none; display: block; }
+#graph text { font-size: 11px; fill: var(--text); pointer-events: none; }
+#graph line { stroke: var(--line); stroke-width: 1.2; }
+#graph line.public, #graph line.calls { stroke: var(--accent); }
+#graph line.base { stroke: var(--k-struct); }
+#graph line.overrides { stroke: var(--warn); stroke-dasharray: 4 3; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.err { color: var(--bad); white-space: pre-wrap; }
+details summary { cursor: pointer; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Harness Index View</h1>
+  <span class="root" id="root">…</span>
+</header>
+<nav id="tabs">
+  <button data-tab="search" class="on">검색</button>
+  <button data-tab="graph">그래프</button>
+  <button data-tab="verify">검증</button>
+  <button data-tab="harness">하네스</button>
+</nav>
+<main>
+  <div class="chips" id="sources"></div>
+
+  <section id="search" class="on">
+    <div class="row">
+      <select id="s-src"></select>
+      <input type="search" id="s-q" placeholder="심볼 이름 (부분 일치)" autocomplete="off">
+      <button class="act" id="s-go">검색</button>
+    </div>
+    <div class="split">
+      <div class="card"><table><thead><tr><th>종류</th><th>이름</th><th>위치</th></tr></thead><tbody id="s-res"></tbody></table></div>
+      <div class="card" id="s-detail"><span class="muted">결과를 누르면 선언 원문과 관계가 나온다.</span></div>
+    </div>
+  </section>
+
+  <section id="graph-tab">
+    <div class="row">
+      <select id="g-src"></select>
+      <select id="g-mode"></select>
+      <input type="search" id="g-focus" placeholder="중심 (심볼 또는 모듈 이름)">
+      <select id="g-depth"><option>1</option><option selected>2</option><option>3</option><option>4</option></select>
+      <button class="act" id="g-go">그리기</button>
+      <span class="muted" id="g-note"></span>
+    </div>
+    <svg id="graph"></svg>
+    <div class="legend" id="g-legend"></div>
+  </section>
+
+  <section id="verify">
+    <div class="row">
+      <select id="v-src"></select>
+      <button class="act" id="v-go">자체 검사</button>
+      <select id="v-pair"></select>
+      <button class="act" id="v-cmp">정규식 ↔ clangd 대조</button>
+      <button class="act" id="v-qs">질의 세트 실행</button>
+    </div>
+    <div class="card" id="v-out"><span class="muted">검사를 고르면 결과가 여기 나온다. 기준은 각 줄의 설명에 있다.</span></div>
+  </section>
+
+  <section id="harness">
+    <div class="row">
+      <input type="search" id="h-filter" placeholder="기능 id 필터 (예: skill. / script.ue_q)">
+      <input type="search" id="h-session" placeholder="세션 id (비우면 전체)">
+      <label class="muted"><input type="checkbox" id="h-auto" checked> 5초마다 갱신</label>
+      <button class="act" id="h-go">새로고침</button>
+    </div>
+    <div class="split">
+      <div class="card"><table><thead><tr><th>기능</th><th>횟수</th><th>실패</th><th>마지막</th></tr></thead><tbody id="h-sum"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>시각</th><th></th><th>기능</th><th>내용</th></tr></thead><tbody id="h-list"></tbody></table></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s)
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const api = async (path, params = {}) => {
+  const r = await fetch('/api/' + path + '?' + new URLSearchParams(params))
+  const j = await r.json()
+  if (j.error) throw new Error(j.error)
+  return j
+}
+const MODE_LABEL = { inherit: '상속', modules: '모듈 의존', calls: '호출', overrides: '오버라이드' }
+const KIND_COLOR = k => {
+  k = (k || '').toLowerCase()
+  if (/class|interface/.test(k)) return 'var(--k-class)'
+  if (/struct|union/.test(k)) return 'var(--k-struct)'
+  if (/enum/.test(k)) return 'var(--k-enum)'
+  if (/func|method|constructor|destructor|delegate/.test(k)) return 'var(--k-func)'
+  if (/module/.test(k)) return 'var(--k-module)'
+  return 'var(--k-other)'
+}
+let INFO = null
+
+async function boot() {
+  INFO = await api('info')
+  $('#root').textContent = `${INFO.root} · ${INFO.kind || '엔진 미감지'}`
+  $('#sources').innerHTML = INFO.sources.map(s =>
+    `<span class="chip ${s.available ? '' : 'off'}" title="${esc(JSON.stringify(s.info))}">${s.available ? '●' : '○'} ${esc(s.label)}${s.available && s.info.counts ? ' · ' + esc(Object.entries(s.info.counts).map(([k, v]) => k + ' ' + v).join(' · ')) : s.info.missing ? ' — ' + esc(s.info.missing) : ''}</span>`).join('') +
+    `<span class="chip ${INFO.harness.available ? '' : 'off'}">${INFO.harness.available ? '●' : '○'} 하네스 로그</span>`
+  const opts = INFO.sources.filter(s => s.available).map(s => `<option value="${s.name}">${esc(s.label)}</option>`).join('') || '<option value="">(인덱스 없음)</option>'
+  for (const id of ['#s-src', '#g-src', '#v-src']) $(id).innerHTML = opts
+  $('#v-pair').innerHTML = (INFO.compare || []).map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('') || '<option value="">(대조할 clangd 인덱스 없음)</option>'
+  syncModes()
+}
+
+function syncModes() {
+  const s = INFO.sources.find(x => x.name === $('#g-src').value)
+  $('#g-mode').innerHTML = (s?.modes || []).map(m => `<option value="${m}">${MODE_LABEL[m] || m}</option>`).join('')
+}
+
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b))
+  document.querySelectorAll('main section').forEach(x => x.classList.remove('on'))
+  $(b.dataset.tab === 'graph' ? '#graph-tab' : '#' + b.dataset.tab).classList.add('on')
+  if (b.dataset.tab === 'harness') loadEvents()
+})
+
+// ---------------------------------------------------------------- 검색
+async function doSearch() {
+  const q = $('#s-q').value.trim()
+  if (!q) return
+  try {
+    const { results } = await api('search', { src: $('#s-src').value, q, limit: 80 })
+    $('#s-res').innerHTML = results.map(r => `<tr class="click" data-id="${esc(r.id)}"><td class="kind">${esc(r.kind)}</td><td>${esc(r.scope ? r.scope + r.name : r.name)}</td><td class="mono muted">${esc(r.path)}:${r.line}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">없음</td></tr>'
+    document.querySelectorAll('#s-res tr.click').forEach(tr => tr.onclick = () => showDetail($('#s-src').value, tr.dataset.id))
+  } catch (e) { $('#s-res').innerHTML = `<tr><td colspan=3 class="err">${esc(e.message)}</td></tr>` }
+}
+async function showDetail(src, id) {
+  const box = $('#s-detail')
+  try {
+    const { symbol: s } = await api('detail', { src, id })
+    if (!s) { box.innerHTML = '<span class="muted">없음</span>'; return }
+    const fields = ['kind', 'module', 'signature', 'type', 'return_type', 'parent', 'api', 'refs']
+      .filter(k => s[k] !== undefined && s[k] !== '' && s[k] !== null)
+      .map(k => `<tr><th>${k}</th><td class="mono">${esc(s[k])}</td></tr>`).join('')
+    const code = s.snippet ? `<pre class="code">${s.snippet.lines.map((l, i) => `<span class="ln">${s.snippet.start + i}</span>${esc(l)}`).join('\n')}</pre>` : '<p class="muted">원문을 읽지 못했다.</p>'
+    const rels = Object.entries(s.relations || {}).filter(([, v]) => v.length).map(([k, v]) =>
+      `<h4>${esc(k)} (${v.length})</h4>` + v.slice(0, 60).map(r => `<div><a data-src="${esc(r.src || src)}" data-id="${esc(r.id)}">${esc(r.scope ? r.scope + r.name : r.name)}</a> <span class="mono muted">${esc(r.path || '')}${r.line ? ':' + r.line : ''}</span></div>`).join('')).join('')
+    box.innerHTML = `<h3 style="margin:0">${esc(s.scope ? s.scope + s.name : s.name)}</h3><div class="mono muted">${esc(s.path)}:${s.line}${s.def_path ? ` · 정의 ${esc(s.def_path)}:${s.def_line}` : ''}</div>
+      <table>${fields}</table>${code}<div class="rel">${rels}</div>
+      <div class="row" style="margin-top:8px"><button class="act" id="d-graph">그래프로 보기</button></div>`
+    box.querySelectorAll('.rel a').forEach(a => a.onclick = () => showDetail(a.dataset.src, a.dataset.id))
+    $('#d-graph').onclick = () => {
+      $('#g-src').value = src; syncModes(); $('#g-focus').value = s.name
+      document.querySelector('#tabs button[data-tab=graph]').click(); drawGraph()
+    }
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>` }
+}
+$('#s-go').onclick = doSearch
+$('#s-q').onkeydown = e => { if (e.key === 'Enter') doSearch() }
+
+// ---------------------------------------------------------------- 그래프 (힘 기반 배치, 의존 없음)
+let sim = null
+async function drawGraph() {
+  const svg = $('#graph')
+  if (sim) cancelAnimationFrame(sim)
+  svg.innerHTML = ''
+  $('#g-note').textContent = '불러오는 중…'
+  let g
+  try { g = await api('graph', { src: $('#g-src').value, mode: $('#g-mode').value, focus: $('#g-focus').value.trim(), depth: $('#g-depth').value }) }
+  catch (e) { $('#g-note').textContent = e.message; return }
+  $('#g-note').textContent = `노드 ${g.nodes.length} · 간선 ${g.edges.length}${g.truncated ? ' (상한에서 잘림)' : ''}`
+  const kinds = [...new Set(g.nodes.map(n => n.kind))]
+  const ekinds = [...new Set(g.edges.map(e => e.kind))]
+  $('#g-legend').innerHTML = kinds.map(k => `<span><i style="background:${KIND_COLOR(k)}"></i>${esc(k)}</span>`).join('') +
+    ' · 간선: ' + ekinds.map(k => `<span>${esc(k)}</span>`).join(' ')
+  const W = svg.clientWidth, H = svg.clientHeight
+  const ns = 'http://www.w3.org/2000/svg'
+  const view = document.createElementNS(ns, 'g'); svg.appendChild(view)
+  const defs = document.createElementNS(ns, 'defs')
+  defs.innerHTML = '<marker id="arr" viewBox="0 0 10 10" refX="16" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" opacity=".5"/></marker>'
+  svg.appendChild(defs)
+  const byId = new Map(g.nodes.map((n, i) => [n.id, Object.assign(n, { x: W / 2 + Math.cos(i) * 80 * Math.sqrt(i), y: H / 2 + Math.sin(i) * 80 * Math.sqrt(i), vx: 0, vy: 0 })]))
+  const edges = g.edges.map(e => ({ ...e, s: byId.get(e.source), t: byId.get(e.target) })).filter(e => e.s && e.t)
+  const lines = edges.map(e => { const l = document.createElementNS(ns, 'line'); l.setAttribute('class', e.kind); l.setAttribute('marker-end', 'url(#arr)'); view.appendChild(l); return l })
+  const nodeEls = g.nodes.map(n => {
+    const el = document.createElementNS(ns, 'g'); el.style.cursor = 'grab'
+    el.innerHTML = `<circle r="${n.focus ? 9 : 6}" fill="${KIND_COLOR(n.kind)}" stroke="var(--panel)" stroke-width="2"></circle><text x="10" y="4">${esc(n.label)}</text><title>${esc(n.kind)} ${esc(n.label)}</title>`
+    view.appendChild(el)
+    let drag = false
+    el.addEventListener('pointerdown', ev => { drag = true; el.setPointerCapture(ev.pointerId); n.fixed = true })
+    el.addEventListener('pointermove', ev => { if (!drag) return; const p = toLocal(ev); n.x = p.x; n.y = p.y; heat = Math.max(heat, 0.3) })
+    el.addEventListener('pointerup', () => { drag = false })
+    el.addEventListener('dblclick', () => { $('#g-focus').value = n.label; drawGraph() })
+    return el
+  })
+  let zoom = 1, panX = 0, panY = 0
+  const apply = () => view.setAttribute('transform', `translate(${panX},${panY}) scale(${zoom})`)
+  const toLocal = ev => { const r = svg.getBoundingClientRect(); return { x: (ev.clientX - r.left - panX) / zoom, y: (ev.clientY - r.top - panY) / zoom } }
+  svg.onwheel = ev => { ev.preventDefault(); const f = ev.deltaY < 0 ? 1.1 : 0.9; const r = svg.getBoundingClientRect(); const mx = ev.clientX - r.left, my = ev.clientY - r.top; panX = mx - (mx - panX) * f; panY = my - (my - panY) * f; zoom *= f; apply() }
+  let panning = null
+  svg.onpointerdown = ev => { if (ev.target === svg) panning = { x: ev.clientX - panX, y: ev.clientY - panY } }
+  svg.onpointermove = ev => { if (panning) { panX = ev.clientX - panning.x; panY = ev.clientY - panning.y; apply() } }
+  svg.onpointerup = () => { panning = null }
+  let heat = 1
+  const tick = () => {
+    const N = g.nodes
+    for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) {
+      const a = N[i], b = N[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx * dx + dy * dy + 0.01
+      if (d2 > 90000) continue
+      const f = 900 / d2; dx *= f; dy *= f; a.vx += dx; a.vy += dy; b.vx -= dx; b.vy -= dy
+    }
+    for (const e of edges) { const dx = e.t.x - e.s.x, dy = e.t.y - e.s.y; const d = Math.sqrt(dx * dx + dy * dy) || 1; const f = (d - 90) * 0.02; e.s.vx += dx / d * f; e.s.vy += dy / d * f; e.t.vx -= dx / d * f; e.t.vy -= dy / d * f }
+    for (const n of N) {
+      n.vx += (W / 2 - n.x) * 0.002; n.vy += (H / 2 - n.y) * 0.002
+      if (!n.fixed) { n.x += n.vx * heat; n.y += n.vy * heat }
+      n.vx *= 0.6; n.vy *= 0.6
+    }
+    edges.forEach((e, i) => { const l = lines[i]; l.setAttribute('x1', e.s.x); l.setAttribute('y1', e.s.y); l.setAttribute('x2', e.t.x); l.setAttribute('y2', e.t.y) })
+    N.forEach((n, i) => nodeEls[i].setAttribute('transform', `translate(${n.x},${n.y})`))
+    heat *= 0.985
+    if (heat > 0.02) sim = requestAnimationFrame(tick)
+  }
+  const reheat = () => { if (heat <= 0.02) { heat = 0.3; sim = requestAnimationFrame(tick) } }
+  svg.addEventListener('pointermove', () => { if (heat > 0.02 && heat < 0.3) return; if (g.nodes.some(n => n.fixed)) reheat() })
+  apply(); tick()
+}
+$('#g-go').onclick = drawGraph
+$('#g-src').onchange = syncModes
+$('#g-focus').onkeydown = e => { if (e.key === 'Enter') drawGraph() }
+
+// ---------------------------------------------------------------- 검증
+const checkTable = rows => `<table><thead><tr><th>검사</th><th>결과</th><th>기준</th></tr></thead><tbody>` + rows.map(c =>
+  `<tr><td>${esc(c.name)}</td><td class="${c.pass === null || c.pass === undefined ? 'warn' : c.pass ? 'pass' : 'fail'}">${c.pass === null || c.pass === undefined ? '–' : c.pass ? '통과' : '실패'} · <span class="mono">${esc(c.metric)}</span></td><td class="muted">${esc(c.why || '')}${c.samples && c.samples.length ? `<details><summary>표본 ${c.samples.length}</summary><div class="mono">${c.samples.map(esc).join('<br>')}</div></details>` : ''}</td></tr>`).join('') + '</tbody></table>'
+$('#v-go').onclick = async () => {
+  $('#v-out').innerHTML = '<span class="muted">검사 중…</span>'
+  try { const { checks } = await api('checks', { src: $('#v-src').value }); $('#v-out').innerHTML = checkTable(checks) }
+  catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+}
+$('#v-cmp').onclick = async () => {
+  if (!$('#v-pair').value) return
+  $('#v-out').innerHTML = '<span class="muted">대조 중…</span>'
+  try { const r = await api('compare', { pair: $('#v-pair').value }); $('#v-out').innerHTML = `<p class="muted">${esc(r.note || '')}</p>` + checkTable(r.checks) }
+  catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+}
+$('#v-qs').onclick = async () => {
+  $('#v-out').innerHTML = '<span class="muted">질의 세트 실행 중…</span>'
+  try {
+    const r = await api('queryset')
+    const per = (r.results || []).map(x => `<tr><td class="mono">${esc(x.query)}</td><td class="mono">${esc(x.expect)}</td>${(r.sources || []).map(s => { const v = x.ranks[s]; return `<td class="${v === null ? 'fail' : v === 1 ? 'pass' : 'warn'}">${v === null ? '없음' : v}</td>` }).join('')}</tr>`).join('')
+    $('#v-out').innerHTML = `<p class="muted">${esc(r.note || '')}</p>` + checkTable(r.summary || []) +
+      (per ? `<h4>질의별 순위</h4><table><thead><tr><th>질의</th><th>정답</th>${(r.sources || []).map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody>${per}</tbody></table>` : '')
+  } catch (e) { $('#v-out').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+}
+
+// ---------------------------------------------------------------- 하네스
+async function loadEvents() {
+  try {
+    const { events } = await api('events', { limit: 2000, session: $('#h-session').value.trim() })
+    const f = $('#h-filter').value.trim()
+    const list = f ? events.filter(e => e.feature.includes(f)) : events
+    const sum = new Map()
+    for (const e of list) { const r = sum.get(e.feature) || { n: 0, bad: 0, last: '' }; r.n++; r.bad += e.ok ? 0 : 1; r.last = e.t; sum.set(e.feature, r) }
+    $('#h-sum').innerHTML = [...sum.entries()].sort((a, b) => b[1].last.localeCompare(a[1].last)).map(([k, r]) => `<tr><td class="mono">${esc(k)}</td><td>${r.n}</td><td class="${r.bad ? 'fail' : 'muted'}">${r.bad}</td><td class="mono muted">${esc(r.last)}</td></tr>`).join('') || '<tr><td colspan=4 class="muted">기록 없음</td></tr>'
+    $('#h-list').innerHTML = list.slice(-300).reverse().map(e => `<tr><td class="mono muted">${esc(e.t)}</td><td class="${e.ok ? 'pass' : 'fail'}">${e.ok ? '✓' : '✗'}</td><td class="mono">${esc(e.feature)}</td><td class="muted">${esc(e.detail)}<div class="mono" style="font-size:11px">${esc(e.session ? e.session.slice(0, 8) : '')} ${esc(e.project)}</div></td></tr>`).join('')
+  } catch (e) { $('#h-list').innerHTML = `<tr><td colspan=4 class="err">${esc(e.message)}</td></tr>` }
+}
+$('#h-go').onclick = loadEvents
+setInterval(() => { if ($('#h-auto').checked && $('#harness').classList.contains('on')) loadEvents() }, 5000)
+
+boot().catch(e => { $('#root').innerHTML = `<span class="err">${esc(e.message)}</span>` })
+</script>
+</body>
+</html>
