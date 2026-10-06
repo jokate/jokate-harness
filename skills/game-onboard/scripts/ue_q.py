@@ -20,7 +20,9 @@
   python ue_q.py rg "OnAnimNotify" --module Engine --type h
   python ue_q.py find MetaSound
 
-엔진 루트: env UE_ROOT > 이 프로젝트용으로 저장한 경로 > <프로젝트>.uproject EngineAssociation + 레지스트리 > C:/Unreal/UE_5.7/Engine
+엔진 루트: env UE_ROOT > 이 프로젝트용으로 저장한 경로 > <프로젝트>.uproject EngineAssociation > C:/Unreal/UE_5.7/Engine
+  EngineAssociation 이 빈 값이면 프로젝트 위 폴더의 Engine/, 아니면 HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds(소스 빌드) · HKLM\\SOFTWARE\\EpicGames\\Unreal Engine\\<버전>(런처, 64비트 보기 먼저) · C:\\ProgramData\\Epic\\UnrealEngineLauncher\\LauncherInstalled.dat
+  못 찾으면 찾아본 곳을 출력한다 (engine_report).
   저장: index_all.py --engine-root <엔진 폴더> (index_build.bat 은 못 찾으면 묻는다) → ~/.claude/cache/game-harness/engine_roots.json
 """
 
@@ -121,26 +123,94 @@ def engine_root(project):
 
 @lru_cache(maxsize=None)
 def engine_source(project):
-    """(엔진 폴더, 어디서 찾았나) — 어디서: UE_ROOT · 저장 · 레지스트리 · 기본값."""
+    """(엔진 폴더, 어디서 찾았나). 못 찾으면 (기본 경로, "기본값") — 그 폴더가 없을 수 있다."""
+    return _resolve_engine(project, [])
+
+
+def engine_report(project):
+    """엔진을 찾아본 곳과 결과 (못 찾았을 때 이유를 보이려고). 캐시하지 않는다."""
+    trail = []
+    eng, how = _resolve_engine(project, trail)
+    ok = (eng / "Source").is_dir()
+    return trail + [f"→ {eng} ({how})" if ok else f"→ 못 찾음 (기본 경로 {eng} 도 없다)"]
+
+
+def _reg_value(hive, key, name):
+    """레지스트리 값. 64비트 보기를 먼저 본다 — 32비트 Python 은 HKLM\\SOFTWARE 가 WOW6432Node 로 돌려진다."""
+    import winreg
+    for flags in (winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0), winreg.KEY_READ):
+        try:
+            with winreg.OpenKey(hive, key, 0, flags) as k:
+                return winreg.QueryValueEx(k, name)[0]
+        except OSError:
+            continue
+    return None
+
+
+def _launcher_installs():
+    """에픽 런처가 설치한 엔진 {"5.7": 설치 폴더} — 런처와 UE 에디터가 읽는 LauncherInstalled.dat."""
+    f = Path(os.environ.get("PROGRAMDATA") or "C:/ProgramData") / "Epic" / "UnrealEngineLauncher" / "LauncherInstalled.dat"
+    try:
+        items = json.loads(f.read_text(encoding="utf-8")).get("InstallationList", [])
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return {it["AppName"][3:]: Path(it["InstallLocation"]) for it in items
+            if isinstance(it, dict) and str(it.get("AppName", "")).startswith("UE_") and it.get("InstallLocation")}
+
+
+def _resolve_engine(project, trail):
+    """UE 가 엔진을 찾는 곳을 같은 순서로 본다. trail 에 본 곳·결과를 적는다.
+    UE_ROOT > 저장(index_build --engine-root) > .uproject EngineAssociation:
+      빈 값 → 프로젝트 위 폴더의 Engine/ (엔진 폴더 안에 둔 프로젝트)
+      GUID  → HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds (소스 빌드 엔진)
+      버전  → HKLM\\SOFTWARE\\EpicGames\\Unreal Engine\\<버전> InstalledDirectory, LauncherInstalled.dat (런처 설치)
+    > 기본 경로."""
     env = os.environ.get("UE_ROOT")
     if env:
         p = Path(env)
         for c in (p, p / "Engine"):
             if (c / "Source").is_dir():
                 return c, "UE_ROOT"
+        trail.append(f"UE_ROOT={env}: Source 폴더 없음")
+    else:
+        trail.append("UE_ROOT: 없음")
     saved = _saved_roots().get(_project_key(project)) if project else None
     if saved and (Path(saved) / "Source").is_dir():
         return Path(saved), "저장"
+    trail.append(f"저장값: {saved} (폴더 없음)" if saved else "저장값: 없음")
     try:
-        ver = json.loads(uproject(project).read_text(encoding="utf-8"))["EngineAssociation"]
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                            r"SOFTWARE\EpicGames\Unreal Engine\%s" % ver) as k:
-            p = Path(winreg.QueryValueEx(k, "InstalledDirectory")[0]) / "Engine"
-            if (p / "Source").is_dir():
-                return p, "레지스트리"
-    except Exception:
-        pass
+        assoc = json.loads(uproject(project).read_text(encoding="utf-8")).get("EngineAssociation", "")
+    except Exception:  # noqa: BLE001 — .uproject 없음·깨짐
+        trail.append(".uproject 를 못 읽었다")
+        assoc = None
+    if assoc is not None:
+        trail.append(f"EngineAssociation: {assoc!r}")
+        cands = []
+        if not assoc:
+            cands += [(d / "Engine", "프로젝트 위 폴더") for d in Path(project).resolve().parents
+                      if (d / "Engine" / "Source" / "Runtime").is_dir()][:1]
+        else:
+            try:
+                import winreg
+            except ImportError:
+                winreg = None
+            if winreg is not None:
+                for hive, hive_name, key, name, how in (
+                        (winreg.HKEY_CURRENT_USER, "HKCU", r"SOFTWARE\Epic Games\Unreal Engine\Builds", assoc, "레지스트리(소스 빌드)"),
+                        (winreg.HKEY_LOCAL_MACHINE, "HKLM", r"SOFTWARE\EpicGames\Unreal Engine\%s" % assoc,
+                         "InstalledDirectory", "레지스트리(런처)")):
+                    v = _reg_value(hive, key, name)
+                    trail.append(f"{hive_name}\\{key} [{name}]: {v or '없음'}")
+                    if v:
+                        cands.append((Path(v) / "Engine", how))
+            inst = _launcher_installs().get(assoc)
+            trail.append(f"LauncherInstalled.dat UE_{assoc}: {inst or '없음'}")
+            if inst:
+                cands.append((inst / "Engine", "런처 설치 목록"))
+        for c, how in cands:
+            if (c / "Source").is_dir():
+                return c, how
+            trail.append(f"{c}: Source 폴더 없음")
     return Path(DEFAULT_ENGINE), "기본값"
 
 
@@ -345,6 +415,7 @@ def cmd_index(project, eng, force, quiet):
     t0 = time.time()
     if not (eng / "Source").is_dir():
         print("엔진 루트가 아니다: %s (index_build.bat --engine-root <엔진 폴더> 로 저장하거나 UE_ROOT 로 지정)" % eng, file=sys.stderr)
+        print("찾아본 곳:\n  " + "\n  ".join(engine_report(project)), file=sys.stderr)
         return 1
     con = open_db(project, create=True)
     if force or meta_get(con, "engine_root") not in (None, str(eng)):

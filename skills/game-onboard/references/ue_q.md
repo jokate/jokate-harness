@@ -62,7 +62,11 @@ python ~/.claude/skills/game-onboard/scripts/ue_q.py rg "UMetaSoundSource::Creat
 ## 4. 재색인·엔진 경로
 
 - 증분: `index` (size+mtime 서명, 수 초). 전체: `index --force` (16 코어 기준 약 10초).
-- 엔진 루트: env `UE_ROOT` > 이 프로젝트용으로 저장한 경로 > `<프로젝트>.uproject` 의 `EngineAssociation` + 레지스트리 > `C:/Unreal/UE_5.7/Engine`.
+- 엔진 루트: env `UE_ROOT` > 이 프로젝트용으로 저장한 경로 > `<프로젝트>.uproject` 의 `EngineAssociation` > `C:/Unreal/UE_5.7/Engine`.
+  `EngineAssociation` 이 빈 값이면 프로젝트 위 폴더의 `Engine/`(엔진 폴더 안에 둔 프로젝트), 아니면 UE 가 엔진을 등록하는 세 곳:
+  `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`(소스 빌드, 값 이름 = GUID) · `HKLM\SOFTWARE\EpicGames\Unreal Engine\<버전>` 의
+  `InstalledDirectory`(런처, 32비트 Python 이라도 64비트 보기를 먼저) · `C:\ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat`(런처 설치 목록).
+  못 찾으면 `ue_q.py index`·`index_build.bat` 이 찾아본 곳과 결과를 줄마다 출력한다.
   저장은 `index_all.py --engine-root <엔진 폴더>` (`index_build.bat` 은 못 찾으면 창에서 묻는다) — `~/.claude/cache/game-harness/engine_roots.json`,
   프로젝트 경로 → 엔진 폴더. 머신마다 경로가 달라 프로젝트 폴더(VCS)가 아니라 홈에 둔다. `UE_5.7` 과 `UE_5.7/Engine` 둘 다 받고, `Source/Runtime` 이 없으면 거부한다.
 - 인덱스는 엔진 경로별 캐시라 같은 엔진을 쓰는 프로젝트끼리 공유한다. 엔진 패치 후엔 한 번만 `index`.
