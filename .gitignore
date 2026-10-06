@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 harness_eval/
 *.bak
+# Claude Code 가 mod 를 읽을 때 놓는 타입 선언 (엔진 버전마다 다시 쓴다)
+mods/*/.claude-plugin/types/
+mods/*/tsconfig.json

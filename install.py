@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""game-harness 설치. 스킬을 ~/.claude/skills 로, 훅을 ~/.claude/hooks 로 옮기고 settings 조각을 출력한다.
+"""game-harness 설치. 스킬을 ~/.claude/skills 로, 훅을 ~/.claude/hooks 로, mod 를 ~/.claude/mods 로 옮기고 settings 조각을 출력한다.
 
   python install.py            # 복사
   python install.py --link     # 스킬을 저장소로 링크 (Windows 정션 / 그 외 심볼릭 링크)
   python install.py --dry-run  # 무엇을 할지만 출력
 
   python install.py --apply-settings  # settings.json 에 훅까지 등록 (setup.bat 이 쓰는 방식)
+                                      # mod(하네스 모니터)는 settings.json 의 env.CLAUDE_CODE_PLUGIN_DIRS 에 폴더를 더해 켠다
 
 --apply-settings 없이는 settings.json 을 고치지 않는다. 출력된 조각을 직접 합친다.
 같은 이름이 이미 있으면 건너뛴다 (--force 로 덮어쓰기, 기존 것은 .bak 로 남긴다).
@@ -28,7 +29,10 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "handoff.py", "stuck_watch.py"]
+HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "handoff.py", "stuck_watch.py",
+         "harness_trace.py"]
+LIBS = ["harness_events.py"]  # 훅이 import 하는 모듈. settings 에는 등록하지 않는다
+PLUGIN_DIRS_ENV = "CLAUDE_CODE_PLUGIN_DIRS"
 
 
 def link(src, dst):
@@ -64,7 +68,7 @@ def install_skills(a):
 def install_hooks(a):
     dst_root = CLAUDE / "hooks"
     dst_root.mkdir(parents=True, exist_ok=True)
-    for name in HOOKS:
+    for name in HOOKS + LIBS:
         src = REPO / "skills" / "game-bootstrap" / "harness" / name
         dst = dst_root / name
         if dst.exists() and filecmp.cmp(src, dst, shallow=False):
@@ -78,6 +82,35 @@ def install_hooks(a):
             if dst.exists():
                 shutil.copy2(dst, str(dst) + ".bak")
             shutil.copy2(src, dst)
+
+
+def mod_dirs():
+    return sorted(d for d in (REPO / "mods").glob("*") if (d / ".claude-plugin" / "plugin.json").is_file())
+
+
+def install_mods(a):
+    """Claude Code mod(함수 훅 플러그인)를 ~/.claude/mods/<이름> 으로. 등록은 apply_settings 가 env 로 한다."""
+    dst_root = CLAUDE / "mods"
+    for src in mod_dirs():
+        dst = dst_root / src.name
+        if dst.exists() or dst.is_symlink():
+            if dst.resolve() == src.resolve():
+                print(f"  = {src.name} (이미 저장소를 가리킴)")
+                continue
+            if not a.force:
+                print(f"  - {src.name} 건너뜀 (이미 있음, --force)")
+                continue
+            if not a.dry_run:
+                shutil.move(str(dst), str(dst) + ".bak")
+        print(f"  + {src.name} ({'링크' if a.link else '복사'})")
+        if a.dry_run:
+            continue
+        dst_root.mkdir(parents=True, exist_ok=True)
+        if a.link:
+            link(src, dst)
+        else:
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "types", "tests"))
+            shutil.copytree(src / "types", dst / "types")
 
 
 RULES_BEGIN = "<!-- game-harness:begin (install.py 가 관리한다. 고치려면 저장소의 rules/common.md) -->"
@@ -120,15 +153,32 @@ def settings_snippet():
 
     mcp_log = cmd("mcp_log.py", 10, {"async": True})
     stuck = cmd("stuck_watch.py", 5)
+    trace = cmd("harness_trace.py", 10, {"async": True})
     return {"hooks": {
         "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15), cmd("handoff.py", 10)]}],
         "UserPromptSubmit": [{"hooks": [cmd("handoff.py", 180)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
         "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
-                        {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [stuck]}],
+                        {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [stuck]},
+                        {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
         "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
-                               {"matcher": "Bash|PowerShell", "hooks": [stuck]}],
+                               {"matcher": "Bash|PowerShell", "hooks": [stuck]},
+                               {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
     }}
+
+
+def mod_paths():
+    return [str(CLAUDE / "mods" / d.name) for d in mod_dirs()]
+
+
+def add_plugin_dirs(settings):
+    """settings.env.CLAUDE_CODE_PLUGIN_DIRS 에 mod 폴더를 더한다 (경로 구분자는 OS 의 것). 있던 값은 그대로 둔다."""
+    env = settings.setdefault("env", {})
+    cur = [x for x in str(env.get(PLUGIN_DIRS_ENV, "")).split(os.pathsep) if x]
+    new = [p for p in mod_paths() if p not in cur]
+    if new:
+        env[PLUGIN_DIRS_ENV] = os.pathsep.join(cur + new)
+    return new
 
 
 def apply_settings(dry):
@@ -155,10 +205,11 @@ def apply_settings(dry):
             else:
                 cur.append({**g, "hooks": new})
             added += [f"{event}:{os.path.basename(h['args'][0])}" for h in new]
+    added += [f"env.{PLUGIN_DIRS_ENV}+={p}" for p in add_plugin_dirs(settings)]
     if not added:
-        print("  = settings.json 훅 이미 등록됨")
+        print("  = settings.json 훅·mod 이미 등록됨")
         return True
-    print("  + settings.json 훅 등록:", ", ".join(added))
+    print("  + settings.json 등록:", ", ".join(added))
     if not dry:
         if path.exists():
             shutil.copy2(path, str(path) + ".bak")
@@ -186,6 +237,8 @@ def main():
     install_skills(a)
     print("훅 →", CLAUDE / "hooks")
     install_hooks(a)
+    print("mod →", CLAUDE / "mods", "(하네스 모니터: Claude Code 함수 훅 플러그인)")
+    install_mods(a)
     print("공용 규칙 →", CLAUDE / "CLAUDE.md")
     install_rules(a)
     if a.apply_settings:
@@ -197,6 +250,8 @@ def main():
         print("\n~/.claude/settings.json 에 등록 안 된 훅:", ", ".join(missing))
         print("아래 조각을 hooks 에 합친다 (이미 있는 이벤트 배열에는 항목만 추가):\n")
         print(json.dumps(settings_snippet(), ensure_ascii=False, indent=2))
+        print(f"\nmod 를 켜려면 settings.json 의 env.{PLUGIN_DIRS_ENV} 에 더한다 (구분자 '{os.pathsep}'):",
+              os.pathsep.join(mod_paths()))
     else:
         print("\nsettings.json 훅 등록 확인됨.")
     print("\n다음: 프로젝트에서 Claude Code 를 열고 /game-bootstrap")

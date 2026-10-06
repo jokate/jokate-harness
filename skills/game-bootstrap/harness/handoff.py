@@ -17,6 +17,12 @@ import tempfile
 import time
 from pathlib import Path
 
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
+
 KEYWORD = "[RESET]"
 GUARD_ENV = "GAME_HARNESS_HANDOFF"
 MAX_INPUT = 90_000      # 모델에 넘기는 기록 상한 (문자)
@@ -160,14 +166,18 @@ def on_prompt(data):
         return
     transcript = data.get("transcript_path")
     out = project_root(data) / ".claude" / "handoff.md"
+    trace = {"session": data.get("session_id", ""), "project": project_root(data), "source": "handoff"}
     if not transcript or not os.path.isfile(transcript):
         emit({"decision": "block", "reason": "[handoff] 대화 기록 파일을 찾지 못해 HandOff 를 쓰지 못했다."})
+        harness_emit("handoff.write", "대화 기록 없음", ok=False, **trace)
         return
     try:
         took = write_handoff(transcript, out)
     except Exception as e:  # 실패해도 사용자가 알아야 한다
         emit({"decision": "block", "reason": f"[handoff] HandOff 작성 실패: {e}"})
+        harness_emit("handoff.write", f"실패: {e}", ok=False, **trace)
         return
+    harness_emit("handoff.write", f"{out} ({took:.0f}s)", **trace)
     emit({"decision": "block",
           "reason": f"[handoff] HandOff 작성됨 ({took:.0f}초): {out}\n"
                     f"읽어 보고 /clear 를 치면 새 세션이 이 문서로 시작한다. 고칠 게 있으면 /clear 전에 파일을 고친다."})
@@ -185,6 +195,8 @@ def on_session_start(data):
         os.replace(path, used)
     except OSError:
         pass
+    harness_emit("handoff.inject", str(used), session=data.get("session_id", ""), project=project_root(data),
+                 source="handoff")
     sys.stdout.buffer.write((
         "[handoff] 이전 세션이 매몰 의심으로 끊겼다. 아래 HandOff 가 이 세션의 출발점이다.\n"
         "- '원래 요청'과 '사용자가 내린 결정'이 기준이다. '어시스턴트의 추정'은 사실이 아니다 — 필요하면 다시 확인한다.\n"

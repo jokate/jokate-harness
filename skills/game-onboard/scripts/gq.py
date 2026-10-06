@@ -42,6 +42,18 @@ UNITY_ASSET_EXT = {".prefab", ".unity", ".asset", ".controller", ".overrideContr
                    ".playable", ".inputactions", ".mixer", ".shadergraph", ".vfx", ".mat"}
 
 
+def harness_emit(feature, detail="", ok=True, project=""):
+    """하네스 이벤트 로그(모니터·웹뷰용). 하네스 훅이 설치된 머신에서만 남는다. 실패는 삼킨다."""
+    try:
+        hooks = str(Path.home() / ".claude" / "hooks")
+        if hooks not in sys.path:
+            sys.path.append(hooks)
+        from harness_events import emit
+        emit(feature, detail, ok=ok, project=project, source=Path(__file__).name)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------- 프로젝트
 
 def detect(start):
@@ -292,6 +304,8 @@ def cmd_index(root, kind, marker, quiet):
     for name, obj in (("meta", meta), ("docs", docs), ("symbols", syms), ("tags", tags),
                       ("modules", mods), ("assets", assets)):
         (idx / f"{name}.json").write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    harness_emit("index.project", f"{kind or '엔진 미감지'} · 문서 {len(docs)} · 심볼 {len(syms)} · 애셋 {len(assets)} "
+                 f"[{time.time() - t0:.1f}s]", project=root)
     if not quiet:
         print(f"인덱스 {meta['built']} [{time.time() - t0:.1f}s] · {kind or '엔진 미감지'} {meta['version'] or ''} · "
               f"문서 {len(docs)} · 심볼 {len(syms)} · 모듈 {len(mods)} · 애셋 {len(assets)} · 태그 {len(tags)}")

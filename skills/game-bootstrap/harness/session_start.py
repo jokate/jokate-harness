@@ -11,7 +11,14 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
 
 DECL = Path(".claude") / "session_start.json"
 MAX_OUT = 9000
@@ -36,24 +43,32 @@ def main():
         return
 
     commands = json.loads((root / DECL).read_text(encoding="utf-8")).get("commands", [])
+    session = data.get("session_id", "")
     out = []
     for c in commands:
         run = [os.path.expanduser(x) for x in c.get("run") or []]
         if not run:
             continue
+        feature = "session_start." + Path(run[0]).stem
+        label = " ".join(c["run"])
         if run[0].endswith(".py"):
             run.insert(0, sys.executable)
+        t0 = time.time()
         try:
             r = subprocess.run(run, cwd=str(root), capture_output=True, timeout=c.get("timeout", 30),
                                encoding="utf-8", errors="replace")
             if r.stdout.strip():
                 out.append(r.stdout.strip())
             if r.returncode != 0:
-                out.append(f"[session_start] 실패({r.returncode}): {' '.join(c['run'])}\n{r.stderr.strip()[:500]}")
+                out.append(f"[session_start] 실패({r.returncode}): {label}\n{r.stderr.strip()[:500]}")
+            harness_emit(feature, f"{label} ({time.time() - t0:.1f}s, 종료 {r.returncode})", ok=r.returncode == 0,
+                         session=session, project=root, source="session_start")
         except subprocess.TimeoutExpired:
-            out.append(f"[session_start] 시간 초과: {' '.join(c['run'])}")
+            out.append(f"[session_start] 시간 초과: {label}")
+            harness_emit(feature, f"{label} 시간 초과", ok=False, session=session, project=root, source="session_start")
         except OSError as e:
-            out.append(f"[session_start] 실행 불가: {' '.join(c['run'])} ({e})")
+            out.append(f"[session_start] 실행 불가: {label} ({e})")
+            harness_emit(feature, f"{label} 실행 불가 ({e})", ok=False, session=session, project=root, source="session_start")
 
     if out:
         sys.stdout.buffer.write("\n".join(out)[:MAX_OUT].encode("utf-8"))

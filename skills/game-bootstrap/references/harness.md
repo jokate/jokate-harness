@@ -50,6 +50,9 @@
 }
 ```
 
+위는 최소 조각이다. `install.py` 가 출력하는 조각에는 handoff·stuck_watch·harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)도 들어 있다.
+`harness_events.py` 는 훅이 import 하는 모듈이라 `~/.claude/hooks/` 에 같이 두기만 하고 settings 에는 등록하지 않는다.
+
 `command` + `args` 형식과 `async` 는 이 설정을 만든 머신(2026-10 Claude Code)에서 동작 중인 형식이다. 다른 버전에서 안 되면
 `"command": "<PYTHON> <스크립트경로>"` 한 줄 형식으로 바꿔 본다 (확인 필요).
 

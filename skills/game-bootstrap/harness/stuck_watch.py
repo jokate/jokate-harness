@@ -14,6 +14,12 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    from harness_events import emit as harness_emit
+except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
+    def harness_emit(*a, **k):
+        pass
+
 DEFAULTS = {"edit": 5, "fail": 3}
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 SHELL_TOOLS = {"Bash", "PowerShell"}
@@ -84,6 +90,7 @@ def main():
                    "hookEventName": event,
                    "additionalContext": msg + " (사용자에게 같은 경고가 떴다. 같은 접근을 반복 중이면 멈추고 한 줄로 상황을 알린다.)"}}
         sys.stdout.buffer.write(json.dumps(out, ensure_ascii=False).encode("utf-8"))
+        harness_emit("stuck.warn", " · ".join(hits), session=session, project=data.get("cwd", ""), source="stuck_watch")
 
 
 if __name__ == "__main__":

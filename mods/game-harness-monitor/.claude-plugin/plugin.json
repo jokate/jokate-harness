@@ -1,0 +1,7 @@
+{
+  "name": "game-harness-monitor",
+  "version": "0.1.0",
+  "description": "game-harness 의 훅·스킬·조회 스크립트가 이 세션에서 동작하기 시작하면 상태줄·토스트·/harness 패널로 보여준다",
+  "author": { "name": "jokate" },
+  "types": "./types/index.d.ts"
+}

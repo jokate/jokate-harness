@@ -1,7 +1,7 @@
 # game-harness 사용 가이드
 
 사람이 읽는 문서다. 이 저장소로 Claude Code 작업 환경을 세팅하고, 지시하고, 쓰면서 고치는 법.
-기준일 2026-10-01. Claude Code 2.1.x, UE 5.x / Unity 6 대상.
+기준일 2026-10-06. Claude Code 2.1.x, UE 5.x / Unity 6 대상.
 
 ## 목차
 1. 이게 뭔가
@@ -11,7 +11,8 @@
 5. Claude 에게 지시하는 법
 6. 요청 템플릿
 7. 쓰면서 고치는 법
-8. 출처
+8. 하네스가 동작하는지 보기 — 모니터와 웹뷰
+9. 출처
 
 ---
 
@@ -24,10 +25,11 @@
 |---|---|---|
 | 지시 | 프로젝트 `CLAUDE.md` (bootstrap 이 템플릿으로 생성) | 항상 필요한 규칙 |
 | 필요할 때 가져오는 맥락 | `skills/game-*` (SKILL.md + references) | 트리거될 때만 로드 |
-| 조회 도구 | `gq.py`(프로젝트), `ue_q.py`(엔진) | 통째로 읽지 않고 좌표로 |
+| 조회 도구 | `gq.py`(프로젝트), `ue_q.py`(엔진), `cindex.py`(clangd 의미 인덱스: 참조·호출·상속·오버라이드) | 통째로 읽지 않고 좌표로 |
 | 센서 | `evidence.py` (변경 이력 → hotspot·co-change) | 구조 판단의 근거를 계측 |
 | 결정론적 강제 | 훅: SessionStart 인덱스 갱신·라우팅, MCP 가드·로그 | 모델 판단에 기대지 않는 것 |
-| 평가 | `evals/run_evals.py` | 하네스가 의도대로 도는지 재검증 |
+| 평가 | `evals/run_evals.py`, 인덱스 검증(`cindex.py eval`, 웹뷰 검증 탭) | 하네스·인덱스가 의도대로 도는지 재검증 |
+| 관찰 | 하네스 이벤트 로그 → 모니터 mod(상태줄·토스트·`/harness`), 웹뷰 하네스 탭 | 어떤 기능이 지금 동작했는지 사람이 본다 |
 
 핵심 목적은 하나다: **AI 가 한 기능에 매몰되어 국소 패치를 쌓는 것을 막고, 그 프로젝트에서 유지보수가 가장 좋은 구조를 근거와 함께 사람이 고르게 한다.**
 
@@ -36,10 +38,10 @@
 | 층 | 스킬 | 언제 | 산출 |
 |---|---|---|---|
 | 0 | `game-bootstrap` | `/game-bootstrap` 직접 호출 | 프로젝트 CLAUDE.md, 인덱스 갱신 선언, MCP 가드 파일 |
-| 1 | `game-onboard` | 구조·위치·엔진 API 질문 | 좌표 (file:line, 모듈 그래프) |
+| 1 | `game-onboard` | 구조·위치·엔진 API 질문, 누가 부르나·누가 재정의했나 | 좌표 (file:line, 모듈 그래프), 참조·호출·영향 범위 |
 | 1 | `game-design-doc` | 기획서 읽기·기획과 구현 대조 | 사양 표, 구현 대응, 판단 대기, 어긋남 |
 | 2 | `game-architecture` | 기능 추가·구현·설계 요청 (코드 전) | 선택지 A/B/C + "다음 요청 때 고칠 곳" + 근거 그림 → **사람이 고른다** |
-| 2 | `game-patterns` | 패턴 비교 | 증상 → 후보 패턴 → 엔진 관용구, 트레이드오프 한 줄 |
+| 2 | `game-patterns` | 패턴 비교, 게임 도메인 문제(버프 중첩·선입력·네트워크 예측·세이브 호환 등) | 증상 → 신호 → 후보 패턴 → 엔진 관용구, 얻음/잃음/쓰지 말 때 (출처 표시 포함) |
 | 3 | `game-testing` | 검증 기준·테스트 | 완료 기준 먼저, 검증됨(자동/수동)/검증 안 됨 표기 |
 | 4 | `game-mcp` | 에디터 MCP 조작 | 읽기 먼저·쓰고 재조회·실패는 가드로 |
 
@@ -70,6 +72,14 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
   기본값대로 만들면 기존 규칙과 겹치거나(전제·범위·정직) 충돌한다(조회 도구). 미리보기(`--dry-run`)가 겹침을 경고한다.
 - 이미 있는 파일은 덮어쓰지 않는다. 사내 저장소면 개인 선호는 `CLAUDE.local.md`, 팀 합의만 `CLAUDE.md`.
 
+**선택: clangd 의미 인덱스** — "누가 부르나·누가 재정의했나·바꾸면 어디가 영향받나"를 grep 이 아니라 컴파일러 기준으로 보려면.
+1. clangd 릴리스의 `clangd_indexing_tools-windows-<버전>.zip` 에서 `clangd-indexer.exe` 를, 증분을 쓰려면 `clangd-windows-<버전>.zip` 의
+   `clangd.exe` 도 `~/.claude/tools/clangd/bin/` 에 둔다.
+2. 프로젝트에서 `python ~/.claude/skills/game-onboard/scripts/cindex.py cdb` (UBT 로 compile_commands.json) → `cindex.py build`.
+   에디터 빌드를 한 번 해 둔다 — `.generated.h` 가 없으면 UCLASS 타입이 빠진다. 상세: `skills/game-onboard/references/cindex.md`.
+3. 속도: 엔진 범위는 `build --scope engine --unity 8` (.cpp 를 묶어 헤더 파싱을 줄인다), 작업 중 프로젝트는 `build --mode bg`
+   (두 번째부터 바뀐 파일과 그것을 포함한 TU 만 다시). 합성 프로젝트 측정은 cindex.md 3절 — 실제 UE 수치는 아직 없다.
+
 **제거** — `uninstall.bat` (프로젝트 폴더를 끌어다 놓으면 그 세팅도). 한 프로젝트에서만 빼려면 `--project-only`, 미리보기는 `--dry-run`. 상세는 README.
 
 ## 4. 언제 무엇이 적용되나
@@ -84,6 +94,9 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 프로젝트 인덱스 갱신 | 세션 시작, `.claude/session_start.json` 이 있을 때만 | 검증됨 |
 | `game-bootstrap` | 직접 호출할 때만 (`bootstrap.bat` 도 같은 일) | 설계상 |
 | MCP 가드·로그 | MCP 호출마다 | 기존부터 동작 |
+| 하네스 이벤트 기록 (`harness_events.py`) | 훅이 무언가 했을 때, 하네스 스킬·조회 스크립트가 불렸을 때 | 훅에 샘플 입력을 넣어 기록 확인 (2026-10-06). 실제 세션에서는 검증 안 됨 |
+| 모니터 mod (`game-harness-monitor`) | 세션 시작부터 (`CLAUDE_CODE_PLUGIN_DIRS` 로 로드) | Claude Code 2.1.290 에서 로드·테스트 통과. **사용자 머신 버전에서 검증 안 됨** — 함수 훅 플러그인은 early access |
+| clangd 의미 인덱스 | 수동 `cindex.py build` (`--mode bg` 증분, `--unity N` 묶음) | 가짜 UE 구조로 검증. 실제 UE·Windows 검증 안 됨 |
 
 가장 중요한 실측 사실: **훅이 넣는 안내(세션 시작·요청 시점 모두)와 유저 레벨 `~/.claude/CLAUDE.md` 는 스킬 호출을 올리지 못했다.
 프로젝트 규칙 파일은 CLAUDE.md 든 CLAUDE.local.md 든 올렸다.** 그래서 새 프로젝트는 bootstrap 부터.
@@ -181,7 +194,8 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 그 파일의 라우팅 줄, 그다음 스킬 description 트리거 문구 |
 | 스킬은 불렸는데 절차를 건너뜀 | SKILL.md 본문 (references 는 안 읽힐 수 있다 — 핵심 규칙은 본문으로) |
 | 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 |
-| 조회 도구가 틀린 좌표·누락 | `gq.py` / `ue_q.py` 스크립트, 제외 경로는 `.claude/gq.json` |
+| 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
+| 인덱스가 기대 위치를 못 찾는다 | `<프로젝트>/.claude/index_eval.json` 에 그 질의를 넣고 웹뷰 "질의 세트" 로 Acc@1·MRR 을 본다 |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
 | 매몰을 놓쳤다 / 경고가 너무 잦다 | `stuck_watch.py` 의 `SIGNALS` 에 신호 한 줄, 임계값은 프로젝트 `.claude/stuck_watch.json` |
 | HandOff 가 틀리거나 빠뜨림 | `handoff.py` 의 `INSTRUCTION` (형식), `extract` (무엇을 넘기나) |
@@ -189,7 +203,35 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.
 
-## 8. 출처
+## 8. 하네스가 동작하는지 보기 — 모니터와 웹뷰
+
+하네스의 훅과 조회 스크립트는 동작할 때마다 `~/.claude/cache/game-harness/events.jsonl` 에 한 줄을 남긴다
+(기능 id 예: `context.routing`, `session_start.gq`, `skill.game-architecture`, `script.ue_q.sym`, `index.clangd`, `stuck.warn`, `handoff.write`).
+
+**모니터 mod** (`mods/game-harness-monitor`, setup 이 켠다)
+- 상태줄: 이 세션에서 하나라도 동작한 뒤부터 `harness ● 기능 N개 · 마지막 <기능>` (실패가 있으면 `· 실패 N`).
+- 토스트: 기능이 이 세션에서 **처음** 동작할 때 한 번 — "하네스 기능 시작: 스킬 game-architecture".
+- `/harness`: 기능별 횟수와 시간순 기록 패널.
+- 로그를 읽기만 한다. 도구 호출을 막거나 바꾸지 않는다. 상태줄에 아무것도 없으면 이 세션에서 하네스가 아직 아무것도 안 한 것이다.
+- Claude Code 의 함수 훅 플러그인(early access)이 필요하다. 2.1.290 에서 확인했고, 그보다 낮은 버전에서는 안 뜰 수 있다 — 그때는 웹뷰 하네스 탭으로 본다.
+
+**인덱스 웹뷰** — `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` (프로젝트 폴더에서, 127.0.0.1 에만 열린다)
+- 개요: 인덱스 고르기 → 심볼·참조·관계·파일 수, 색인 상태, 심볼 종류, 모듈 지도(넓이 = 심볼 수), 참조 구성, 커버리지(디스크의 소스 중 clangd 가 본 비율).
+- 탐색: 검색 → 선언 원문, 관계 미니맵(위 부모 · 아래 자식 · 옆 호출), 참조마다 위치 + 그 줄 원문 + 감싼 함수.
+- 그래프: 상속 · 호출 · 오버라이드 · 모듈 의존. 배치 네 가지 — 계층(깊이별 띠 + 직교 간선), 트리, 3D 트리, 힘.
+  노드에 올리면 이웃만 남고, 누르면 옆 카드, 더블클릭으로 중심 이동.
+  - 트리(접기): 형제가 많으면 모듈별로 묶고, 행마다 모듈·파일:줄. 이름 찾기, 모두 펼치기/접기. **찾을 때는 이것.**
+  - 3D 트리(이동): 콘 트리 — 자식이 부모 아래 원 위에 놓인다(위 갈래는 위로). 화살표로 트리를 따라 이동하면 카메라가 날아가고,
+    고른 노드까지의 경로와 형제 원이 강조된다. Enter = 코드, C = 그 노드를 중심으로 다시 그리기, ⌫ = 뒤로, F = 전체, 왼쪽 깊이 자로 층 이동.
+    구조를 훑고 따라가기용이다 — 콘 트리 평가 연구에서 찾기는 일반 트리보다 느렸다.
+- 모듈 지도: 모듈 × 모듈 실제 참조 행렬. Build.cs 에 선언만 하고 안 쓰는 의존, 선언 없이 쓰는 의존을 표시.
+- 파이프라인: 단계별 시간(compile_commands → 무효화 계획 → clangd → sqlite), 증분이면 이번에 다시 색인한 TU 칸과 이유,
+  빌드 이력, **인덱스 해부**(clangd 가 심볼 하나에 남기는 Symbol · Refs(종류 비트·Container) · Relations 원본).
+- 검증: 소스별 자체 검사(좌표 정확도·신선도·실패 TU), 정규식 ↔ clangd 대조(타입 재현율·파일/줄/부모 일치), 질의 세트(Acc@1·Acc@5·MRR).
+  기준과 근거: `skills/game-onboard/references/indexing-research.md`.
+- 하네스: 이벤트 로그를 기능별로 모아 보기, 세션 id 필터, 5초 자동 갱신.
+
+## 9. 출처
 
 - 프롬프팅: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices
 - Claude Code best practices: https://code.claude.com/docs/en/best-practices
