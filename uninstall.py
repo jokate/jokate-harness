@@ -11,7 +11,8 @@
   ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
   ~/.claude/cache/stuck        매몰 카운터 상태
   ~/.claude/cache/game-harness 하네스 이벤트 로그, 프로젝트별로 저장한 엔진 경로(engine_roots.json)
-  --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 도 지운다
+  --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 와
+            ~/.claude/tools/clangd 중 setup 이 내려받은 파일 (clangd 도구, 다시 받으려면 setup.bat) 도 지운다
 
 프로젝트 폴더를 주면:
   CLAUDE.local.md              → CLAUDE.local.md.removed 로 이름만 바꾼다 (직접 고친 내용이 있을 수 있어 지우지 않는다)
@@ -25,6 +26,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -244,6 +246,11 @@ def main():
             remove_tree(ue, a.dry_run)
         elif ue.is_dir():
             print(f"  = {ue} 는 남긴다 (엔진 인덱스. 지우려면 --purge)")
+        tools = REPO / "skills" / "game-onboard" / "scripts" / "clangd_tools.py"
+        if a.purge:
+            subprocess.run([sys.executable, str(tools), "remove"] + (["--dry-run"] if a.dry_run else []))
+        elif (CLAUDE / "tools" / "clangd" / "game-harness-tools.json").is_file():
+            print(f"  = {CLAUDE / 'tools' / 'clangd'} 는 남긴다 (clangd 도구. 지우려면 --purge)")
     for p in a.projects:
         remove_project(p, a.dry_run)
 

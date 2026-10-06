@@ -7,10 +7,12 @@
   python install.py --dry-run  # 무엇을 할지만 출력
 
   python install.py --apply-settings  # settings.json 에 훅까지 등록 (setup.bat 이 쓰는 방식)
+  python install.py --no-tools        # clangd 도구(의미 인덱스용, 약 60MB~)를 내려받지 않는다
                                       # mod(하네스 모니터)는 settings.json 의 env.CLAUDE_CODE_PLUGIN_DIRS 에 폴더를 더해 켠다
 
 --apply-settings 없이는 settings.json 을 고치지 않는다. 출력된 조각을 직접 합친다.
 같은 이름이 이미 있으면 건너뛴다 (--force 로 덮어쓰기, 기존 것은 .bak 로 남긴다).
+clangd 도구는 못 찾을 때만 ~/.claude/tools/clangd 에 받는다 (skills/game-onboard/scripts/clangd_tools.py). 실패해도 설치는 계속한다.
 """
 import argparse
 import filecmp
@@ -142,6 +144,16 @@ def install_rules(a):
         dst.write_text(new, encoding="utf-8")
 
 
+def install_tools(a):
+    script = REPO / "skills" / "game-onboard" / "scripts" / "clangd_tools.py"
+    if a.dry_run:
+        print(f"  (미리보기) {script.name} install — 못 찾는 clangd 도구만 내려받는다")
+        return
+    if subprocess.run([sys.executable, str(script), "install"]).returncode != 0:
+        print("  [경고] clangd 도구를 설치하지 못했다 — 의미 인덱스(clangd) 단계만 빠지고 나머지는 동작한다.\n"
+              f"         나중에 setup.bat 을 다시 돌리거나 python \"{script}\" install")
+
+
 def settings_snippet():
     py = sys.executable
     h = str(CLAUDE / "hooks")
@@ -232,6 +244,7 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--apply-settings", action="store_true", help="settings.json 에 훅을 직접 등록한다 (백업 후, 빠진 것만)")
+    ap.add_argument("--no-tools", action="store_true", help="clangd 도구를 내려받지 않는다")
     a = ap.parse_args()
     print("스킬 →", CLAUDE / "skills")
     install_skills(a)
@@ -241,6 +254,10 @@ def main():
     install_mods(a)
     print("공용 규칙 →", CLAUDE / "CLAUDE.md")
     install_rules(a)
+    if not a.no_tools:
+        print("clangd 도구 →", Path.home() / ".claude" / "tools" / "clangd", "(의미 인덱스용, 못 찾을 때만 내려받는다)",
+              flush=True)  # 하위 프로세스 출력보다 먼저 보이게
+        install_tools(a)
     if a.apply_settings:
         print("설정 →", CLAUDE / "settings.json")
         if apply_settings(a.dry_run):

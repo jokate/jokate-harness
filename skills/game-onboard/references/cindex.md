@@ -33,6 +33,11 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   `https://github.com/clangd/clangd/releases/download/23.1.0/clangd_indexing_tools-windows-23.1.0.zip` (`clangd-indexer.exe`)
   — 리눅스·맥은 이름의 `windows` 를 `linux`/`mac` 으로. `dexp` 는 어느 배포에도 없다.
 - 둘 곳: PATH, `~/.claude/tools/clangd/bin/`, 또는 `--indexer <경로>` / 환경 변수 `CLANGD_INDEXER`.
+- **setup 이 설치한다**: `clangd_tools.py install` (install.py 단계) — 못 찾는 것만 23.1.0 릴리스에서 받아 SHA-256 을 대조하고
+  `~/.claude/tools/clangd/{bin, lib/clang/23/include, share}` 에 푼다. `lib/clang/23/include` 는 clang 내장 헤더(`stddef.h` 등)로
+  실행 파일이 `../lib/clang/<버전>` 에서 찾는다 — 없으면 표준 헤더를 쓰는 TU 가 전부 실패한다(시험에서 33/33).
+  `lib/clang/23/lib`(링크용 컴파일러 런타임)는 색인에 안 쓰여 뺀다. 버전 고정 이유: RIFF 리더와 시험이 23.1.0 출력으로 검증됐다.
+  `status` 로 확인, `remove` 는 이 스크립트가 설치한 파일만 지운다 (`uninstall --purge` 가 부른다).
 
 ### clangd (`--mode bg`, 증분)
 - 배경 색인은 clangd 본체를 쓴다 — 같은 릴리스의 `clangd-windows-23.1.0.zip` (릴리스 자산 목록 기준) 또는 이미 깔린 clangd.

@@ -73,8 +73,9 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 이미 있는 파일은 덮어쓰지 않는다. 사내 저장소면 개인 선호는 `CLAUDE.local.md`, 팀 합의만 `CLAUDE.md`.
 
 **선택: clangd 의미 인덱스** — "누가 부르나·누가 재정의했나·바꾸면 어디가 영향받나"를 grep 이 아니라 컴파일러 기준으로 보려면.
-1. clangd 릴리스의 `clangd_indexing_tools-windows-<버전>.zip` 에서 `clangd-indexer.exe` 를, 증분을 쓰려면 `clangd-windows-<버전>.zip` 의
-   `clangd.exe` 도 `~/.claude/tools/clangd/bin/` 에 둔다.
+1. 도구는 `setup.bat` 이 설치한다 — clangd·clangd-indexer 를 못 찾으면 clangd 23.1.0 릴리스(Windows 약 63MB)를 받아 SHA-256 을 대조하고
+   `~/.claude/tools/clangd/` 에 푼다. 받지 못했으면(오프라인·프록시) 경고만 남기고 나머지 설치는 계속한다 — 나중에 setup.bat 을 다시 돌린다.
+   확인: `python ~/.claude/skills/game-onboard/scripts/clangd_tools.py status`. 직접 둔 clangd(PATH·`CLANGD`)가 있으면 그것을 쓰고 받지 않는다.
 2. 프로젝트에서 `python ~/.claude/skills/game-onboard/scripts/cindex.py cdb` (UBT 로 compile_commands.json) → `cindex.py build`.
    에디터 빌드를 한 번 해 둔다 — `.generated.h` 가 없으면 UCLASS 타입이 빠진다. 상세: `skills/game-onboard/references/cindex.md`.
 3. 속도: 엔진 범위는 `build --scope engine --unity 8` (.cpp 를 묶어 헤더 파싱을 줄인다), 작업 중 프로젝트는 `build --mode bg`

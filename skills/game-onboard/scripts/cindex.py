@@ -659,9 +659,8 @@ def build_indexer(root, eng, scope, a, out_dir, roots):
     import cindex_speed as sp
     indexer = find_indexer(a.indexer)
     if not indexer:
-        print("clangd-indexer 를 못 찾았다. clangd 릴리스의 indexing tools 를 받아 PATH 나 "
-              "~/.claude/tools/clangd/bin 에 두거나 --indexer / CLANGD_INDEXER 로 준다 (references/cindex.md). "
-              "clangd 만 있으면 --mode bg 를 쓴다.")
+        print("clangd-indexer 를 못 찾았다. setup.bat(또는 clangd_tools.py install)이 ~/.claude/tools/clangd 에 설치한다. "
+              "직접 둔 것이면 PATH · --indexer · CLANGD_INDEXER (references/cindex.md). clangd 만 있으면 --mode bg 를 쓴다.")
         return None, None
     cdb = resolve_cdb(a.cdb, root, eng)
     if not cdb:
@@ -720,7 +719,8 @@ def build_background(root, eng, scope, a, out_dir, roots):
     import cindex_speed as sp
     clangd = find_clangd(a.clangd)
     if not clangd:
-        print("clangd 를 못 찾았다. PATH 나 ~/.claude/tools/clangd/bin 에 두거나 --clangd / CLANGD 로 준다.")
+        print("clangd 를 못 찾았다. setup.bat(또는 clangd_tools.py install)이 ~/.claude/tools/clangd 에 설치한다. "
+              "직접 둔 것이면 PATH · --clangd · CLANGD.")
         return None, None
     cdb = resolve_cdb(a.cdb, root, eng)
     if not cdb:
