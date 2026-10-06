@@ -60,7 +60,8 @@ def main():
     if rc != 0:
         print("\n[오류] 프로젝트 세팅에 실패했다. 폴더 경로가 맞는지 확인한다.")
     else:
-        print("\n인덱스 웹뷰: 이 폴더의 index_view.bat 을 더블클릭한다 (프로젝트 폴더를 끌어다 놓으면 그 프로젝트로 연다).")
+        print("\n인덱스 지금 만들기: 이 폴더의 index_build.bat 에 프로젝트 폴더를 끌어다 놓는다 (clangd 는 docs/GUIDE.md 3절).")
+        print("인덱스 웹뷰: 이 폴더의 index_view.bat 을 더블클릭한다 (프로젝트 폴더를 끌어다 놓으면 그 프로젝트로 연다).")
     wait()
     return rc
 

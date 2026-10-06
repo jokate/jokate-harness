@@ -68,6 +68,10 @@ python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --un
 python ~/.claude/skills/game-onboard/scripts/cindex.py ingest <clangd-indexer 출력(YAML|RIFF)>   # 이미 만든 출력 적재만
 ```
 
+한 번에: `index_all.py [<프로젝트>]` (저장소의 `index_build.bat`) — gq·ue_q 인덱스 다음에 compile_commands.json 이 없을 때만 `cdb`,
+프로젝트는 `--mode bg`(clangd 가 없으면 clangd-indexer 전체), 엔진은 엔진 clangd 인덱스가 없을 때만 `--scope engine --unity 8`.
+cdb 에 엔진 TU 가 없으면(런처 설치 엔진) 엔진 단계는 빈 인덱스를 만들지 않고 건너뛴다 — 아래 2절의 VS Code cdb 를 `--cdb` 로 준다.
+
 | 상황 | 권장 |
 |---|---|
 | 엔진 범위 (버전당 한 번, 오래 걸림) | `--unity 8` — 처음 색인이 가장 크게 준다 |

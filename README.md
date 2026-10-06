@@ -25,6 +25,8 @@ uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더�
 rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
+index_build.bat       인덱스 지금 만들기: 프로젝트 좌표 → 엔진 좌표 → clangd (프로젝트 증분, 엔진은 없을 때만)
+index_view.bat        인덱스 웹뷰
 ```
 
 ## 빠른 시작
@@ -40,6 +42,10 @@ PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하�
 
 나눠서 하려면 `install.bat`(머신) + `bootstrap.bat`(프로젝트). 프로젝트 규칙 파일이 없으면 스킬이 거의 불리지 않는다 —
 평가로 확인한 사실이다 ([검증 기록](docs/VERIFICATION.md)).
+
+인덱스를 지금 만들려면 프로젝트 폴더를 `index_build.bat` 위에 끌어다 놓는다 (더블클릭이면 하네스가 최근에 돈 프로젝트).
+프로젝트 좌표 → 엔진 좌표 → clangd 의미 인덱스 순으로 돌고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다.
+clangd 도구가 없으면 clangd 단계는 건너뛴다 — 준비는 [docs/GUIDE.md](docs/GUIDE.md) 3절.
 
 ## 제거
 

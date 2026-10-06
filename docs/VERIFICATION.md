@@ -230,6 +230,35 @@ bases/derived/overrides 가 끝까지 따라간 트리를 한 번에 준다 · i
 
 검증 안 됨: 실제 UE 엔진, 대화형 세션(권한 프롬프트), 반복을 늘린 Opus, 다른 생성기·실제 코드로 만든 과제.
 
+## 2026-10-06 (4) — 인덱스 한 번에 만들기 (`index_build.bat` → `index_all.py`)
+
+`index_build.bat` 은 Python 을 찾아 `index_all.py` 에 인자를 그대로 넘기고, 끝나면 창을 멈춰 둔다. 순서·건너뛰는 조건은 전부 `index_all.py` 에 있다:
+gq → ue_q → compile_commands.json(없을 때만) → clangd 프로젝트(`--mode bg`, clangd 가 없으면 clangd-indexer 전체) → clangd 엔진(엔진 인덱스가 없을 때만, `--unity 8`).
+
+시험: 리눅스, 합성 UE 픽스처(`gen_fixture.py --engine-modules 24 --project-modules 5 --classes 6`, TU 175), clangd·clangd-indexer 23.1.0.
+매번 빈 HOME 을 따로 두고 도구는 설치 위치(`~/.claude/tools/clangd/bin`)에 두었다.
+
+| 경우 | 결과 |
+|---|---|
+| 새 환경 첫 실행 (도구 둘 다, cdb 있음) | 1·2·4·5 완료, 3 건너뜀(있음), 종료 0. 하네스 이벤트 4줄(index.project·engine·clangd×2). `cindex.py status`·`derived` 조회 정상 |
+| 두 번째 실행 | 4 증분(재사용 30), 5 건너뜀(엔진 인덱스 있음), 1초 |
+| cpp 한 파일 수정 뒤 인자 없이 저장소 폴더에서 | 하네스 기록의 최근 프로젝트를 골랐고, 다시 색인 1 · 재사용 29 |
+| 프로젝트 하위 폴더에서 인자 없이 | 위로 올라가 프로젝트 루트를 찾았다 |
+| `--no-clangd` | 1·2 만 |
+| clangd 도구 없음 | 3~5 건너뜀(이유 표시), 종료 0 |
+| compile_commands.json 없음 + UBT 없음 | 3 실패(UBT 안내), 4·5 건너뜀, 종료 1 |
+| clangd-indexer 만 | 프로젝트는 clangd-indexer 전체 색인, 엔진은 `--unity 8` |
+| clangd 만 | 엔진도 `--mode bg --unity 8` — 심볼 728·참조 4,464 로 clangd-indexer 결과와 같다 |
+| cdb 에 엔진 TU 없음 (런처 설치 엔진 흉내) | 엔진 단계 건너뜀, 빈 엔진 인덱스를 만들지 않았다 (ue.sqlite 만 있음) |
+| 엔진 폴더 못 찾음 (UE_ROOT 없음) | 2 실패, 4 완료, 5 건너뜀, 종료 1 |
+| Unity 프로젝트 | 1 만, 나머지는 "UE 프로젝트가 아니다" |
+| 프로젝트가 아닌 폴더 | 아무것도 만들지 않고 종료 2 |
+| `--cdb --engine` (UBT 없음) | 3 실패, 4 완료, 5 다시 색인, 종료 1 |
+| Ctrl+C (4단계 도중) | 결과 표에 중단한 단계가 나오고 종료 1. 새 함수를 넣고 0.35·0.5·0.8초에 중단 → 다시 돌린 뒤 세 번 모두 새 함수가 인덱스에 있었다 |
+
+검증 안 됨: **`index_build.bat` 자체는 실행해 보지 않았다** (이 환경에 Windows·cmd 가 없다 — CRLF·UTF-8 과 `index_view.bat` 과 같은 구조만 확인).
+실제 UE 에서 `cdb`(UBT)와 엔진 clangd 색인 시간, Windows 경로.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -239,6 +268,7 @@ bases/derived/overrides 가 끝까지 따라간 트리를 한 번에 준다 · i
 - `game-design-doc`, 비대화식 bootstrap
 - 하네스 이벤트 로그 + 추적 훅 + 모니터 mod, `cindex.py`(clangd 의미 인덱스), `index_view.py`(웹뷰), game-patterns 도메인 증상·패턴 심화·UE 관용구 (2026-10-06)
 - `cindex.py` 속도: RIFF 기본, `--unity N`, `--mode bg` 증분(`cindex_speed.py`) · 웹뷰 계층/트리 그래프·증분 칸·인덱스 해부 (2026-10-06)
+- `index_build.bat` / `index_all.py`: 인덱스 한 번에 만들기 (gq → ue_q → clangd, 단계별 결과) (2026-10-06)
 
 ## 검증 안 된 것
 

@@ -79,6 +79,12 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
    에디터 빌드를 한 번 해 둔다 — `.generated.h` 가 없으면 UCLASS 타입이 빠진다. 상세: `skills/game-onboard/references/cindex.md`.
 3. 속도: 엔진 범위는 `build --scope engine --unity 8` (.cpp 를 묶어 헤더 파싱을 줄인다), 작업 중 프로젝트는 `build --mode bg`
    (두 번째부터 바뀐 파일과 그것을 포함한 TU 만 다시). 합성 프로젝트 측정은 cindex.md 3절 — 실제 UE 수치는 아직 없다.
+4. **한 번에**: 저장소의 `index_build.bat` 에 프로젝트 폴더를 끌어다 놓는다 (더블클릭이면 하네스가 최근에 돈 프로젝트).
+   순서는 프로젝트 좌표(`gq.py index`) → 엔진 좌표(`ue_q.py index`) → compile_commands.json(없을 때만 `cindex.py cdb`)
+   → clangd 프로젝트(`build --mode bg`, clangd 가 없으면 clangd-indexer 전체) → clangd 엔진(`build --scope engine --unity 8`, 엔진 인덱스가 없을 때만).
+   한 단계가 실패해도 다음 단계로 가고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다. 명령 창에서는 옵션을 붙인다:
+   `index_build.bat <폴더> --no-clangd`(정규식 인덱스만) · `--cdb`(compile_commands.json 다시) · `--engine`(엔진 clangd 인덱스 다시).
+   엔진 폴더를 못 찾으면 먼저 `set UE_ROOT=<엔진 폴더>`. 터미널: `python ~/.claude/skills/game-onboard/scripts/index_all.py [<폴더>] [옵션]`.
 
 **제거** — `uninstall.bat` (프로젝트 폴더를 끌어다 놓으면 그 세팅도). 한 프로젝트에서만 빼려면 `--project-only`, 미리보기는 `--dry-run`. 상세는 README.
 
@@ -96,7 +102,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | MCP 가드·로그 | MCP 호출마다 | 기존부터 동작 |
 | 하네스 이벤트 기록 (`harness_events.py`) | 훅이 무언가 했을 때, 하네스 스킬·조회 스크립트가 불렸을 때 | 훅에 샘플 입력을 넣어 기록 확인 (2026-10-06). 실제 세션에서는 검증 안 됨 |
 | 모니터 mod (`game-harness-monitor`) | 세션 시작부터 (`CLAUDE_CODE_PLUGIN_DIRS` 로 로드) | Claude Code 2.1.290 에서 로드·테스트 통과. **사용자 머신 버전에서 검증 안 됨** — 함수 훅 플러그인은 early access |
-| clangd 의미 인덱스 | 수동 `cindex.py build` (`--mode bg` 증분, `--unity N` 묶음) | 가짜 UE 구조로 검증. 실제 UE·Windows 검증 안 됨 |
+| clangd 의미 인덱스 | 수동 `cindex.py build` (`--mode bg` 증분, `--unity N` 묶음) 또는 `index_build.bat` | 가짜 UE 구조로 검증. 실제 UE·Windows 검증 안 됨 |
 
 가장 중요한 실측 사실: **훅이 넣는 안내(세션 시작·요청 시점 모두)와 유저 레벨 `~/.claude/CLAUDE.md` 는 스킬 호출을 올리지 못했다.
 프로젝트 규칙 파일은 CLAUDE.md 든 CLAUDE.local.md 든 올렸다.** 그래서 새 프로젝트는 bootstrap 부터.
