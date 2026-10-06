@@ -347,6 +347,27 @@ gq 만 엔진이 필요 없다. 사용자 출력은 보지 못했다.
 | `EngineAssociation` 빈 값, 엔진 폴더 안 프로젝트 | 프로젝트 위 폴더로 찾음 |
 | GUID 인데 등록 안 됨 | `index_all` 이 본 곳을 출력, 2 실패·5 건너뜀 |
 
+## 2026-10-06 (8) — compile_commands 만들기가 Clang 구성 요소를 요구하던 문제
+
+보고: Windows 에서 MSVC·C++ 관련 메시지가 났다 (정확한 문구는 못 봤다). 그 뒤 BeginPlay 가 어디서도 안 찾아졌다 — 정규식 인덱스는
+타입 선언만 담아 메서드는 clangd 인덱스에만 있는데, clangd 인덱스가 안 만들어져 검색이 정규식 인덱스로 넘어갔다.
+
+원인 (UE 5.5·5.6 UBT 소스 `Modes/GenerateClangDatabase.cs` — 공개 미러에서 읽음): `-Compiler=` 인자가 없으면 `-Compiler=Clang` 을
+붙인다. Visual Studio 의 Clang(LLVM) 구성 요소가 없으면 UBT 가 실패 → 3단계 실패 → 4·5 건너뜀. `cindex.py cdb` 는 `-Compiler=` 를 넘기지 않았다.
+고침: Win64 에서 `-Compiler=Default`(평소 빌드와 같은 컴파일러) 를 기본으로 넘긴다 (`--compiler` 로 바꾼다). `WindowsCompiler` 열거형에
+`VisualStudio` 단독 값은 없어서 `Default` 를 쓴다.
+
+시험 (리눅스, 받은 인자를 남기고 `-Compiler=` 가 없으면 Clang 강제 실패를 흉내 내는 가짜 UBT):
+
+| 경우 | 결과 |
+|---|---|
+| `index_all` (cdb 없음) | UBT 에 `-Compiler=Default` 가 넘어가 cdb 생성 → 1~5 완료 |
+| `--compiler ""` (예전 동작) | 흉내 낸 "Clang x64 must be installed" 로 실패 |
+| `--compiler Clang` / `--platform Linux` | `-Compiler=Clang` / `-Compiler=` 안 붙임 |
+
+검증 안 됨: 실제 UBT 가 `-Compiler=Default` 로 만든 `cl.exe @rsp` 항목을 clangd 가 UE 코드에서 제대로 색인하는지 (cl.exe + rsp 자체는 실험실에서 확인),
+UE 5.7 의 GenerateClangDatabase 동작.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -361,6 +382,7 @@ gq 만 엔진이 필요 없다. 사용자 출력은 보지 못했다.
 - setup 이 clangd 도구 설치: `clangd_tools.py` (23.1.0 고정, SHA-256 대조, 못 찾는 것만, 실패해도 계속) (2026-10-06)
 - 웹뷰: 인덱스 파일이 바뀌면 화면을 열 때 다시 읽음 · cindex: Windows 에서 열린 DB 는 backup API 로 덮어쓰기 (2026-10-06)
 - 엔진 찾기: HKCU Builds(소스 빌드) · HKLM 64비트 보기 · LauncherInstalled.dat · 엔진 폴더 안 프로젝트, 못 찾으면 본 곳 출력 (2026-10-06)
+- `cindex.py cdb`: Win64 에서 `-Compiler=Default` — UBT 가 Clang 구성 요소를 요구하지 않게 (2026-10-06)
 
 ## 검증 안 된 것
 

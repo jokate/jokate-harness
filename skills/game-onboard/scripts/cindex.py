@@ -8,7 +8,8 @@
   - 관계가 있다 (상속 BaseOf, 오버라이드 OverriddenBy)
 대신 compile_commands.json 이 필요하고, 컴파일이 되는 상태여야 정확하다 (UE 는 UHT 가 만든 .generated.h 가 있어야 한다).
 
-  python cindex.py cdb [--target <이름>Editor] [--platform Win64] [--config Development]   # UE: compile_commands.json 생성
+  python cindex.py cdb [--target <이름>Editor] [--platform Win64] [--config Development] [--compiler Default]   # UE: compile_commands.json 생성
+      Win64 는 기본으로 -Compiler=Default 를 넘긴다 — 안 넘기면 UBT 가 Clang 을 강제해 VS 의 Clang 구성 요소 없이는 실패한다
   python cindex.py build [--cdb <파일|폴더>] [--scope project|engine|all] [--filter 정규식] [--jobs N]
                          [--mode indexer|bg] [--format binary|yaml] [--unity N]
       --mode indexer (기본) clangd-indexer 전체 색인. 출력은 RIFF(binary) 가 기본 — YAML 보다 17배쯤 작고 적재 2배+ 빠름
@@ -566,6 +567,11 @@ def cmd_cdb(root, kind, a):
     out = a.out or str(root)
     cmd = ([str(ubt)] if ubt.suffix != ".dll" else ["dotnet", str(ubt)]) + [
         "-mode=GenerateClangDatabase", f"-project={upro}", target, a.platform, a.config, f"-OutputDir={out}"]
+    if a.platform.lower() == "win64" and a.compiler:
+        # GenerateClangDatabase 는 -Compiler= 가 없으면 -Compiler=Clang 을 붙여 Visual Studio 의 Clang(LLVM) 구성 요소를 요구한다
+        # (UE 5.5·5.6 UBT 소스, Modes/GenerateClangDatabase.cs). Default = 평소 빌드와 같은 컴파일러(보통 MSVC) → 그 구성 요소 없이 돈다.
+        # MSVC 면 항목이 cl.exe @rsp 가 되고 clangd 는 실행 파일 이름으로 cl 모드를 고른다.
+        cmd.append(f"-Compiler={a.compiler}")
     print("실행:", " ".join(f'"{c}"' if " " in c else c for c in cmd))
     t0 = time.time()
     r = subprocess.run(cmd, cwd=str(eng.parent if eng else root))
@@ -1837,6 +1843,9 @@ def main():
     ap.add_argument("--platform", default="Win64")
     ap.add_argument("--config", default="Development")
     ap.add_argument("--ubt", default=None)
+    ap.add_argument("--compiler", default="Default",
+                    help="cdb (Win64): UBT -Compiler=. Default = 평소 빌드 컴파일러(보통 MSVC), Clang = clang-cl (VS 의 Clang 구성 요소 필요), "
+                         "VisualStudio2022 등. 빈 값이면 넘기지 않는다 (UBT 가 Clang 을 강제)")
     ap.add_argument("--out", default=None, help="cdb: -OutputDir")
     a = ap.parse_args()
     root, kind = project_of(a.root)
