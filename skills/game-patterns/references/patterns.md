@@ -1,57 +1,277 @@
-# 게임 프로그래밍 패턴 — 얻는 것과 잃는 것
+# 게임 프로그래밍 패턴 — 언제 · 신호 · 얻음/잃음 · 쓰지 말 때 · 설계 결정
 
-주 출처: Robert Nystrom, *Game Programming Patterns* (https://gameprogrammingpatterns.com/contents.html) [서적].
-Unity 공식 e-book (Unity 6판 "design patterns and SOLID", 샘플 https://github.com/Unity-Technologies/game-programming-patterns-demo) [공식].
+출처 표기와 약칭(GPP, Gaffer, UnityMP, GGPO, GASDoc, UnityDemo)은 [domain.md](domain.md) 첫 절과 같다.
+`‡` = 검색 요약만 확인 · `(추론)` = 출처가 직접 말하지 않음 · "출처 미확보" = 찾지 못함 — 답에 그대로 밝힌다.
+GPP 항목은 각 장의 "When to Use It / Keep in Mind / Design Decisions" 를 요약했다 (출처: 그 장 원고).
 
 ## 목차
-- 구조: Component, Type Object, Subclass Sandbox, Bytecode
-- 결합 분리: Observer, Event Queue, Command, Service Locator
-- 상태: State (FSM, 계층, 푸시다운)
-- 성능: Object Pool, Data Locality, Dirty Flag, Spatial Partition
-- 흐름: Game Loop, Update Method, Double Buffer
+- 구조: Component · Type Object · Subclass Sandbox · Bytecode · Strategy · Decorator/Modifier · Mediator
+- 결합 분리: Observer · Event Queue · Command · Service Locator
+- 상태: State (FSM · 계층 · 푸시다운)
+- 데이터·생성: Flyweight · Prototype · Memento
+- 성능: Object Pool · Data Locality · Dirty Flag · Spatial Partition
+- 흐름·시간: Game Loop · Update Method · Double Buffer · Fixed timestep
+- 입력: Input Buffer
+- UI: MVVM (MVP)
+- AI 의사결정: Blackboard · Utility AI · GOAP · HTN
+- 네트워크: Client-side prediction & reconciliation · Snapshot interpolation · Lag compensation · Deterministic lockstep · Rollback
+
+---
 
 ## 구조
 
-**Component** — 여러 도메인이 한 클래스에 뭉친 것을 나눈다.
-얻음: 도메인별 독립 변경, 조합으로 새 개체. 잃음: 컴포넌트 간 통신 설계(직접 참조 / 메시지 / 공유 상태 중 선택)가 새 문제가 된다.
+### Component
+여러 도메인이 한 클래스에 뭉친 것을 나눈다. [서적] GPP component
+- **언제**: 한 클래스가 떼고 싶은 여러 도메인을 건드린다. 클래스가 거대해졌다. 상속으로는 재사용 부분을 정밀하게 못 고른다.
+- **얻음 / 잃음**: 도메인별 독립 변경, 조합으로 새 개체 / 객체 하나가 객체 묶음이 되어 생성·초기화·연결이 복잡, 컴포넌트 간 통신과 메모리 배치 통제가 어렵다. 없는 문제에 과설계 주의.
+- **설계 결정**: ① 컴포넌트를 객체가 직접 만드나(필요한 것 보장) 외부가 넣나(유연). ② 통신: 컨테이너 공유 상태(분리 유지, 대신 처리 순서에 암묵 의존 → 한 프레임 늦는 버그) / 직접 참조(단순·빠름, 강결합) / 메시지(가장 분리, 가장 복잡). 섞어 쓰는 게 보통 — 위치·크기 같은 기본값은 공유 상태, 밀접한 짝(애니↔렌더, 입력↔AI, 물리↔충돌)은 직접 참조, 덜 중요한 통지는 메시지.
 
-**Type Object** — "종류"를 클래스가 아니라 데이터 인스턴스로 만든다.
-얻음: 새 종류 = 데이터 추가, 코드 변경 0. 잃음: 데이터로 표현 가능한 행동만 가능. 넘어서면 Subclass Sandbox 나 Bytecode 가 필요.
+### Type Object
+"종류"를 클래스가 아니라 데이터 인스턴스로. [서적] GPP type-object
+- **언제**: 종류가 많은데 언어 타입에 굽기엔 경직. 필요한 종류를 미리 모르거나(DLC) 재컴파일 없이 추가·수정하고 싶다.
+- **신호**: 새 종류마다 클래스나 enum+switch 가 는다.
+- **얻음 / 잃음**: 새 종류 = 데이터 추가 / 타입 객체를 직접 추적·관리, 종류별 *데이터*는 쉽지만 *행동*은 어렵다 → 미리 정의한 행동 중 선택(사실상 vtable 재구현), 더 가면 Bytecode.
+- **설계 결정**: ① 타입 객체를 감추나(포워딩 노가다) 노출하나(공개 API 넓어짐). ② 생성: 객체에 타입을 넘기나, 타입의 "생성자" 함수를 부르나(풀 강제 가능). ③ 타입 변경 허용(불변이 단순). ④ 상속: 없음(중복) / 단일(속성 조회 느림) / 다중(복잡).
+- **짝**: 데이터 실수는 저장 시점 검증으로 막는다 (UE Data Validation, ue-idioms.md 19절).
 
-**Subclass Sandbox** — 기반 클래스가 보호된 연산 집합을 주고, 하위 클래스는 그것만으로 행동을 구현.
-얻음: 하위 클래스 간 결합 제거, 기반 클래스에 결합 집중. 잃음: 기반 클래스가 비대해진다.
+### Subclass Sandbox
+기반 클래스가 보호된 연산 집합을 주고 하위 클래스는 그것만으로 행동을 구현. [서적] GPP subclass-sandbox
+- **언제**: 기반 하나에 파생 다수, 기반이 필요한 연산을 다 줄 수 있고, 파생과 나머지 프로그램의 결합을 줄이고 싶다.
+- **잃음**: 기반이 코드를 빨아들여 모든 시스템과 결합 → 깨지기 쉬운 기반 클래스. 비대해지면 연산 묶음을 Component 로 뺀다.
+- **설계 결정**: ① 어떤 연산을 줄까 — 소수 파생만 쓰는 연산은 이득이 적다, 상태를 안 바꾸는 외부 호출은 안전한 결합. ② 기반 메서드로 줄까, 보조 객체(SoundPlayer 등)로 줄까. ③ 기반이 상태를 얻는 법: 생성자 / 2단계 초기화 / static / Service Locator.
 
-**Bytecode / 그래프 인터프리터** — 행동을 데이터(명령 시퀀스·노드 그래프)로.
-얻음: 디자이너 자율, 핫 리로드. 잃음: 인터프리터 구현·디버깅 도구 비용. 엔진에 이미 있으면(BP, StateTree, GAS) 다시 만들지 않는다.
+### Bytecode / 그래프 인터프리터
+행동을 데이터(명령 시퀀스·노드 그래프)로. 책에서 가장 복잡한 패턴. [서적] GPP bytecode
+- **언제**: 정의할 행동이 많고, 구현 언어가 너무 저수준이거나, 반복이 느리거나(컴파일), 행동을 샌드박스에 가둬야 할 때.
+- **잃음**: 언어는 덩굴처럼 자란다, 저작 도구가 필요하다, 디버거를 잃는다.
+- **엔진에 이미 있으면(BP, StateTree, GAS) 다시 만들지 않는다.**
+- **설계 결정**: 스택 vs 레지스터 기반, 명령 종류, 값 표현(단일 타입 / 태그 variant / 태그 없는 union / 인터페이스), 텍스트 언어 vs 그래픽 도구.
+
+### Strategy
+행동의 일부(알고리즘)를 본체에서 떼어 교체한다. [서적] GPP state·component 장의 구분 · [공식] UnityDemo `8_Strategy/Scripts/AbilityRunner.cs`
+- **구분 (GPP)**: Strategy = 본체와 행동 일부의 *분리*, Type Object = 여러 객체가 같은 타입 객체를 *공유*, State = 위임 대상을 *바꿔서* 행동을 바꿈. Strategy 객체는 보통 무상태로 '어떻게'만, Component 는 상태를 가지고 '무엇인지'를 정한다.
+- **신호**: 같은 알고리즘의 변형을 고르는 거대 조건문, 행동만 다른 비슷한 클래스 다수 ‡.
+- **잃음**: 단순한 경우 클래스만 는다 ‡.
+- **쓰지 말 때**: 변형이 적고 거의 안 바뀔 때 ‡. 상태에 따라 바뀌면 State, 데이터만 다르면 Type Object (GPP 구분에서 나온 추론).
+- **UE**: 행마다 다른 판정기를 데이터로 고르게 하려면 `TInstancedStruct<Base>` 나 UObject 서브클래스 (ue-idioms.md 14절).
+
+### Decorator / Modifier
+같은 인터페이스를 유지하며 행동·값을 층층이 덧붙인다. [서적] GPP service-locator(로깅 Decorator) · [커뮤니티] GASDoc
+- **두 형태**: 래퍼 체인(객체를 감싼다) / 집계형(기본값 + 수정치 목록, GAS Aggregator).
+- **잃음**: 래퍼 체인은 중간의 특정 래퍼를 빼기 어렵다 ‡. 집계형은 연산 순서 공식을 고정해야 한다 — GAS 는 `((Base+Add)*Mul)/Div`, Mul/Div 는 합산 후 적용 [커뮤니티].
+- **쓰지 말 때**: 자주 붙었다 떨어지고 개별 제거가 필요한 효과를 래퍼 체인으로 만들 때 (위 비용에서 나온 추론).
+- **신호**: 버프 적용·해제가 스탯 필드를 직접 증감한다.
+
+### Mediator
+여러 객체가 서로 직접 알지 않고 중간 객체를 거쳐 통신한다. [서적] GPP component · [공식] UnityDemo MVVM 주석
+- GPP: 컴포넌트 메시징에서 컨테이너가 곧 Mediator. Unity 샘플: ViewModel 이 Model 과 View 사이의 중재자.
+- **잃음**: 시간이 지나며 Mediator 가 God Object 가 된다 ‡.
+- **쓰지 말 때**: 밀접한 짝은 직접 참조가 단순·빠르다 (GPP component 의 통신 방식 비교).
+
+---
 
 ## 결합 분리
 
-**Observer** — 대상이 관찰자 목록에 알린다.
-얻음: 송신자가 수신자를 모름. 잃음: 흐름이 정적으로 안 보임, 수신자 수명 관리(댕글링) 필요, 동기 호출이라 연쇄 반응 순서 문제.
+### Observer
+대상이 관찰자 목록에 알린다. [서적] GPP observer
+- **언제 / 언제 아님**: 대체로 무관한 덩어리(물리 ↔ 업적)를 최소 통신으로 잇는다. 한 기능 덩어리 *안*에는 덜 유용 — 이해하려고 양쪽을 자주 같이 봐야 하면 더 명시적인 연결을 쓴다. 핫 경로 밖에 둔다.
+- **잃음**: 동기 호출이라 느린 관찰자가 송신자를 막는다(무거운 일은 큐·다른 스레드로). 락과 섞으면 교착. 댕글링 — 해제·"마지막 숨" 통지·자동 해제로 대응. GC 언어에선 해제를 잊은 lapsed listener. 흐름이 정적으로 안 보인다. 같은 대상의 관찰자끼리 순서에 의존하면 숨은 결합.
+- **설계 변형**: 할당 없는 연결 리스트, 노드 풀, 함수·델리게이트 기반.
 
-**Event Queue** — 이벤트를 큐에 넣고 나중에 처리.
-얻음: 시점 분리, 프레임 분산. 잃음: 발생 시점의 상태가 처리 시점에 없을 수 있음, 피드백 루프 위험.
+### Event Queue
+이벤트를 큐에 넣고 나중에 처리. [서적] GPP event-queue
+- **언제**: *누가* 받는지만 떼려면 Observer/Command 로 충분하다. *시간*을 떼야 할 때만 큐. 송신자가 응답을 받아야 하면 부적합.
+- **잃음**: 중앙 큐 = 전역 변수. 처리 시점에 세계가 바뀌어 있을 수 있다 → 필요한 데이터를 이벤트에 담는다. 피드백 루프(비동기라 스택 오버플로로 안 드러나고 계속 돈다) → 처리 중 송신 금지 규칙이나 루프 감지 로그.
+- **설계 결정**: 이벤트(일어난 일, 다수 리스너) vs 메시지(요청, 단일 리스너) · 단일 캐스트 / 브로드캐스트 / 작업 큐 · 작성자 단일 vs 다수 · 큐 안 객체 수명(소유권 이전 / 공유 / 큐 소유).
 
-**Command** — 요청을 객체로.
-얻음: 입력·AI·리플레이·되돌리기가 같은 경로. 잃음: 커맨드 클래스 증식.
+### Command
+요청을 객체로. [서적] GPP command
+- **용도**: 입력 리매핑, 플레이어·AI 가 같은 명령으로 조종, 명령 스트림(큐), 직렬화 → 네트워크·리플레이, undo/redo.
+- **잃음**: 명령 클래스·클로저 증식.
+- **설계 결정**: 재사용 명령("할 수 있는 일") vs 일회용 명령(undo 용, 매번 생성). undo 는 명령이 이전 값을 저장(Memento 는 낭비). 다단계 undo = 명령 리스트 + current 포인터, undo 뒤 새 명령이 오면 뒤를 버린다. 모든 변경이 명령을 거치게 하는 규율.
 
-**Service Locator** — 전역 접근 지점 + 구현 교체.
-얻음: 싱글톤보다 교체·널 서비스가 쉬움. 잃음: 의존이 호출부에 안 보임, 등록 시점 버그.
+### Service Locator
+전역 접근 지점 + 구현 교체. [서적] GPP service-locator
+- **언제**: *아껴서*. 먼저 객체를 넘겨주는 걸 고려한다. 로깅·메모리 관리, 오디오·디스플레이처럼 본질적으로 하나뿐인 환경에만.
+- **잃음**: 의존이 런타임까지 숨는다, 찾기가 실패할 수 있다, 서비스는 누가 부르는지 모르니 어떤 상황에서도 맞게 동작해야 한다.
+- **설계 결정**: ① 찾는 법: 외부 등록 / 컴파일 타임 바인딩 / 런타임 설정. ② 못 찾으면: 사용자에게 / assert / Null 서비스(미완성 의존을 기다리지 않아도 됨, 대신 의도치 않게 빠진 서비스를 디버깅하기 어려움). ③ 범위: 전역 vs 특정 클래스 계층.
+- **UE**: Subsystem 이 범위가 정해진 Service Locator 다 (ue-idioms.md 1·21절).
+
+---
 
 ## 상태
 
-**State** — 상태를 객체로, 전이를 명시적으로.
-얻음: bool 조합 폭발 제거, 상태별 코드 격리. 잃음: 상태 간 공유 데이터 위치 결정, 상태 수가 늘면 전이 표 관리.
-계층 상태머신: 공통 처리를 상위 상태로. 푸시다운 오토마톤: "이전 상태로 복귀"가 필요할 때(메뉴, 피격 경직).
+### State (FSM · 계층 · 푸시다운)
+상태를 객체로, 전이를 명시적으로. [서적] GPP state
+- **언제**: 내부 상태에 따라 행동이 바뀌고, 상태가 소수의 뚜렷한 선택지로 나뉘고, 시간에 걸친 입력에 반응할 때 (AI, 입력, 메뉴, 프로토콜).
+- **신호**: bool 플래그 조합으로 상태를 표현, 분기 폭발.
+- **잃음**: 강점(고정 상태 집합, 단일 현재 상태, 하드코딩 전이)이 곧 한계. 두 종류의 상태(하는 일 × 들고 있는 것)를 한 머신에 넣으면 조합 폭발. 단일 FSM 은 이력이 없다.
+- **설계 결정**: 상태 객체 static vs 인스턴스 · 진입/퇴장 액션 · 무관한 축은 동시 상태 머신 · 계층형(못 처리한 입력을 상위로) · 푸시다운(스택 push/pop 으로 "끝나면 이전 상태로": 메뉴, 피격 경직, 공격 후 복귀) · 복잡한 AI 면 BT·플래닝 쪽.
+
+---
+
+## 데이터·생성
+
+### Flyweight
+공유 가능한 내재 상태와 인스턴스별 외재 상태를 나눈다. [서적] GPP flyweight · [공식] UnityDemo `9_Flyweight`
+- **신호**: enum 을 만들고 그 위에서 switch 를 많이 한다 (GPP 가 직접 지목).
+- **얻음 / 잃음**: 메모리·전송량 / 포인터 간접, 상태 분리 이유가 덜 자명 ‡.
+- **쓰지 말 때**: 메모리 문제가 실제로 확인되지 않았을 때 ‡. GPP 는 먼저 프로파일 — 저자 테스트에서는 enum 보다 오히려 빨랐다.
+- **옮기는 경로**: enum 지형 → 지형 객체 인스턴스를 공유하고 격자는 포인터를 가진다 (GPP 본문 예).
+
+### Prototype
+기존 인스턴스를 복제해 새 객체를 만든다. [서적] GPP prototype
+- **신호**: 몬스터 종류마다 Spawner 클래스, 데이터 파일의 같은 필드 복붙.
+- **잃음**: 클래스마다 clone 구현, 깊은/얕은 복제 의미론(악마를 복제하면 쇠스랑도?).
+- **쓰지 말 때**: "종류마다 클래스" 전제 자체가 요즘 엔진 방식이 아니다 — 대개 Component/Type Object 로 종류를 표현. 저자는 디자인 패턴으로서의 Prototype 이 최선이었던 경우를 못 봤다고 쓴다.
+- **유용한 형태**: 데이터 위임 — 엔티티 데이터에 `"prototype"` 필드를 두고 없는 속성은 원형에서 찾는다. 보스·유니크 아이템처럼 "일반 + 약간"에 맞는다.
+
+### Memento
+캡슐화를 지키며 상태 스냅샷을 만들고 복원한다 ‡. [서적] GPP command · [커뮤니티] GGPO
+- **잃음**: 잦으면 메모리, 오래된 스냅샷 정리 ‡.
+- **쓰지 말 때**: 명령 단위 undo — 명령은 상태의 작은 일부만 바꾸므로 바뀐 부분만 저장한다 (GPP).
+- **게임 특화 형태**: 롤백 넷코드의 save/load 콜백 = 매 프레임 전체 상태 스냅샷. 상태를 작고 연속된 블록으로 격리할수록 싸다 (GGPO).
+
+---
 
 ## 성능
 
-**Object Pool** — 미리 할당한 객체 재사용. 얻음: 할당·GC·스폰 비용 제거. 잃음: 반납 누락, 재사용 시 상태 초기화 버그. 반납 주체를 하나로 고정.
-**Data Locality** — 같이 쓰는 데이터를 연속 메모리로. 얻음: 캐시 효율. 잃음: 객체 지향 표현을 포기, 코드 가독성.
-**Dirty Flag** — 파생 데이터를 필요할 때만 재계산. 잃음: 플래그 갱신 누락 버그.
-**Spatial Partition** — 위치 기반 조회를 격자·트리로. 엔진 물리·내비 쿼리가 이미 하면 쓰지 않는다.
+### Object Pool
+미리 할당한 객체 재사용. [서적] GPP object-pool
+- **언제**: 자주 만들고 버림, 크기가 비슷함, 힙 할당이 느리거나 단편화 위험, 획득 비용이 큰 자원.
+- **잃음**: 크기를 잘못 잡으면 낭비. 꽉 찼을 때 정책이 필요 — 넘치지 않게 크기 조정 / 그냥 생성 안 함(파티클) / 기존 것 강제 종료(사운드) / 확장. 재사용 객체의 이전 상태 버그(디버그 빌드에서 반납 시 매직값으로 채우기). 반납 주체를 하나로.
+- **설계 결정**: 객체가 풀과 결합되나(구현 단순) 아니나(아무 타입이나) · 재초기화를 풀 안에서(캡슐화) 밖에서(인터페이스 단순).
 
-## 흐름
+### Data Locality
+같이 쓰는 데이터를 연속 메모리로. [서적] GPP data-locality
+- **언제**: 성능 문제가 있고 원인이 *캐시 미스*임을 프로파일러로 확인했을 때만. 설계 내내 캐시 친화성은 염두에.
+- **잃음**: 추상화(인터페이스·포인터·상속) 포기.
+- **설계 결정**: 다형성(안 씀 / 타입별 배열 / 포인터 컬렉션) · 엔티티 정의(컴포넌트 포인터 / 컴포넌트 ID / 엔티티 = ID).
+- **엔진**: UE Mass (ue-idioms.md 17절).
 
-**Game Loop / Update Method / Double Buffer** — 엔진이 제공한다. 직접 구현하지 않는다.
-의미가 있는 것은 **틱 순서 의존**: A 의 Tick 결과를 B 가 같은 프레임에 읽는다면 순서를 명시(UE Tick Group·prerequisite, Unity Script Execution Order)하거나 이벤트로 바꾼다.
+### Dirty Flag
+파생 데이터를 필요할 때만 재계산. [서적] GPP dirty-flag
+- **언제** (성능 문제가 충분히 클 때만): 원본이 파생보다 자주 바뀌고, 파생을 점진적으로 갱신하기 어려울 때.
+- **잃음**: 너무 미루면 필요할 때 히치. 바뀔 때마다 *반드시* 플래그 — 변경을 한 API 뒤로 모으면 도움. 이전 파생 데이터 유지.
+- **설계 결정**: 정리 시점(필요할 때 / 체크포인트 / 백그라운드) · 추적 세분도(세밀 vs 거침).
+
+### Spatial Partition
+위치 기반 조회를 격자·트리로. [서적] GPP spatial-partition
+- **잃음**: n 이 작으면 가치 없음, 움직이는 객체의 재배치 비용, 추가 메모리.
+- **설계 결정**: 계층형 vs 평면 · 분할이 객체 집합에 의존하나 · 객체를 분할에만 저장하나.
+- **엔진 물리·내비 쿼리, World Partition 이 이미 하면 쓰지 않는다.**
+
+---
+
+## 흐름·시간
+
+### Game Loop · Update Method · Double Buffer
+엔진이 제공한다. 직접 구현하지 않는다. 의미가 있는 것은 아래 함정이다. [서적] GPP game-loop · update-method · double-buffer
+- **틱 순서 의존**: 순차 갱신이라 앞 객체는 뒤 객체의 이전 상태를, 뒤 객체는 앞 객체의 새 상태를 본다. A 의 결과를 B 가 같은 프레임에 읽으면 순서를 명시(UE Tick Group·Tick 선행 조건 — ue-idioms.md 20절, Unity Script Execution Order)하거나 이벤트로 바꾸거나 Double Buffer.
+- **갱신 중 목록 수정**: 추가된 객체는 생성 프레임에 행동할 수 있다(시작 시 개수 캐시), 제거하면 다음 객체를 건너뛸 수 있다("죽음" 표시 후 나중에 제거).
+- **Double Buffer 결정**: 포인터 교환(빠름, 다음 버퍼 내용이 두 프레임 전) vs 복사(한 프레임 전, 느림).
+
+### Fixed timestep
+렌더가 시간을 "생산"하고 시뮬레이션은 고정 dt 로 "소비"(누산기), 남은 비율로 이전/현재 상태를 보간해 그린다. [커뮤니티] Gaffer fix_your_timestep · [서적] GPP game-loop
+- **신호**: 물리·로직에 프레임 dt 를 그대로 넘긴다, 프레임레이트에 따라 결과가 다르다.
+- **얻음 / 잃음**: 재현성·안정성 / 이전 상태 보관, 화면이 최대 한 스텝 늦음, 스텝 처리 시간이 dt 보다 길면 따라잡지 못하는 "spiral of death" — 가장 느린 하드웨어에서도 update 시간 < 스텝. 프레임 시간 상한(예: 0.25s).
+- **대안**: semi-fixed(상한 있는 가변 dt)도 대부분 충분 — 단 결정론적 lockstep 에는 부적합 (Gaffer).
+
+---
+
+## 입력
+
+### Input Buffer
+행동 불가 구간에 들어온 입력을 짧게 보관했다가 가능해지는 첫 프레임에 실행하고, 최근 입력 시퀀스를 커맨드(236 등)와 매칭한다. [커뮤니티] UE4InputBuffer README · ‡ 대전 게임 위키 수치
+- **신호**: 입력 핸들러가 즉시 행동을 실행하고 실패하면 입력을 버린다.
+- **잃음**: 버퍼 길이가 곧 게임 감각 (너무 길면 의도 안 한 행동, 너무 짧으면 씹힘).
+- **옮기는 경로**: 직접 호출 → Command 객체화 (GPP) → 프레임 단위 입력 구조체 샘플링 (Gaffer) → 시간 태그와 함께 링버퍼에 저장하고 소비 시점에 매칭 (마지막 결합은 추론).
+- **UE**: 엔진 기능으로 문서화돼 있지 않다 — 게임 코드나 Ability 쪽 (ue-idioms.md 11절).
+
+---
+
+## UI
+
+### MVVM (MVP)
+ViewModel 의 변경이 바인딩으로 View 에 반영되고, UI 이벤트는 ViewModel 메서드를 거쳐 Model 을 바꾼다. [공식] UnityDemo `7_MVVM` · [공식·요약] UE UMG Viewmodel
+- **신호**: 게임플레이 코드가 위젯을 직접 참조하거나 위젯이 매 프레임 게임 값을 조회한다 (추론).
+- **잃음**: MVP 계열 보일러플레이트·학습 곡선 ‡, 바인딩 경로가 간접 (추론). UE 바인딩 폴링 보고 ‡.
+- **쓰지 말 때**: 출처 미확보. (추론) 화면 하나, 값 몇 개뿐인 HUD.
+- **MVP 와의 차이**: Unity e-book 개정판은 MVVM 을 "MVP + 런타임 데이터 바인딩"으로 소개 ‡.
+
+---
+
+## AI 의사결정
+
+### Blackboard
+여러 AI 구성요소(또는 에이전트)가 공유하는 지식 공간. 각자 읽고 쓰며 서로 직접 모른다. [서적] GPP event-queue(유사성 언급) · [커뮤니티] Fluid HTN README · [공식·요약] UE BT 데코레이터
+- UE BT Blackboard: 키/값 작업 메모리, 데코레이터가 키를 관찰하다 바뀌면 분기를 중단(Observer Aborts) ‡.
+- **잃음 (추론)**: 공유 키는 사실상 전역 상태 — GPP 가 중앙 이벤트 큐를 "전역 변수"라 한 논리가 그대로 적용. 누가 언제 썼는지 추적 어려움, 키 이름 규약 필요.
+- **쓰지 말 때 / 신호**: 출처 미확보.
+
+### Utility AI
+가능한 행동마다 점수를 매겨 최고점(또는 상위 N 중 가중 무작위)을 고른다. [커뮤니티] https://raw.githubusercontent.com/wiki/apoch/curvature/Utility-Theory-Crash-Course.md · https://raw.githubusercontent.com/apoch/curvature/master/README.md
+- **구조 (IAUS)**: consideration = 입력 → 응답 곡선 → 점수, 행동 점수 = 모든 consideration 의 *곱* (하나라도 0 이면 무효). 상황별 behavior set.
+- **얻음 / 잃음**: 복잡하고 동적인 상황에서도 늘 "괜찮은" 선택 / 논리적이지만 플레이어에게 "읽히지" 않는 선택 → 디버깅·시각화 도구가 필요.
+- **함정**: 거의 같은 점수 두 행동 사이를 왔다 갔다 → 직전 선택에 momentum 보너스(히스테리시스).
+- **쓰지 말 때**: 출처 미확보. (추론) 엄격한 순서·스크립트가 필요한 경우(컷신, 보스 패턴 단계).
+- **UE**: StateTree 유틸리티 선택(Consideration × Weight)부터 본다 (ue-idioms.md 18절).
+
+### GOAP (Goal-Oriented Action Planning)
+행동마다 전제조건·효과를 두고, 목표 세계 상태에 도달하는 행동 순서를 플래너가 찾는다. 상황이 바뀌면 재계획. [커뮤니티] https://raw.githubusercontent.com/crashkonijn/GOAP/master/Package/Documentation/Introduction/Theory.md
+- 사례: F.E.A.R. 의 FSM 은 상태 3개뿐이고 A* 로 행동 순서까지 계획했다 ‡ (Orkin, GDC 2006).
+- **비용 / 쓰지 말 때 / 신호**: 출처 본문 미확보. (추론) 에이전트별 탐색 비용, 계획 결과 예측·디버깅 어려움, 세계 상태를 기호로 표현하는 설계 비용.
+
+### HTN (Hierarchical Task Network)
+고수준 과제를 하위 과제로 분해해 계획한다. 복합 과제 = Selector(하나만 분해) / Sequence(모두 분해), 원시 과제 = operator·effects·conditions. 효과 3종: PlanOnly / PlanAndExecute / Permanent. 부분 계획, 도메인 접합, 재계획, 분해 로그 디버깅. [커뮤니티] https://raw.githubusercontent.com/ptrefall/fluid-hierarchical-task-network/master/README.md
+- **비용 / 쓰지 말 때**: 출처 미확보. (추론) 도메인이 코드로 짜이는 구조라 디자이너 저작 부담, 분해 실패 원인 추적이 필요.
+
+---
+
+## 네트워크
+
+선택의 큰 틀은 domain.md f절 (UnityMP 요약표: 클라 권한 / action anticipation / prediction / server-side rewind).
+
+### Client-side prediction & server reconciliation
+서버 권한을 유지하면서 입력 후 RTT 를 기다리지 않고 자기 캐릭터를 즉시 움직인다. [커뮤니티] Gaffer what_every_programmer_needs_to_know_about_game_networking · [공식] UnityMP dealing-with-latency · [커뮤니티] Valve 위키 gist 사본 https://gist.github.com/CoolOppo/fe0586836de3fb2f90f9
+- **방식**: 클라는 과거 상태+입력을 원형 버퍼에 보관, 서버 보정이 오면 그보다 오래된 것을 버리고 보정 상태에서 남은 입력을 재생 (Gaffer). 예측 오차는 시간에 걸쳐 부드럽게 (Valve 사본).
+- **신호**: 입력 → 서버 RPC → 서버 위치 수신 후에만 이동. 서버 상태로 무조건 덮어써서 rubber banding.
+- **잃음**: "복잡하고 여기저기 촉수를 뻗는다", 클라가 서버와 같은 게임 코드를 돌려야 한다, 오예측 보정이 몰입을 깬다.
+- **쓰지 말 때**: 클라·서버 결과가 다를 수 있는 비결정적 행동(예: 수류탄) → action anticipation. 치트 우려가 없으면 클라 권한이 더 단순. [공식] UnityMP
+- **UE**: GAS 는 "가능한 최소만 예측" — GE 제거·주기 효과 예측 안 됨, 데미지·사망 예측 비권장 [커뮤니티] GASDoc.
+
+### Snapshot interpolation (엔티티 보간)
+권한측이 시각 상태 스냅샷을 보내고, 받는 쪽은 버퍼에 쌓은 두 스냅샷 사이를 보간해 과거 시점을 그린다. [커뮤니티] Gaffer snapshot_interpolation · Valve 사본 · [공식] UnityMP clientside-interpolation
+- **얻음 / 잃음**: 결정론 불필요, 인원 많아도 됨 / 대역폭(전체 시각 상태), 의도적 지연 — Gaffer 경험칙은 송신 간격의 약 3배(패킷 두 개 연속 손실 견딤), Source 기본은 초당 약 20 스냅샷·보간 100ms (Valve 사본). 선형 보간의 떨림은 Hermite 로. 외삽으로 지연을 숨기면 품질이 나쁘다.
+- 스냅샷은 비신뢰 전송으로 충분 (잃으면 다음 것으로).
+- **쓰지 말 때**: 자기 캐릭터 입력 반응(지연이 그대로 체감 → 예측과 병행). 상태가 거대한 RTS → lockstep.
+- **변형**: State synchronization — 입력과 상태를 함께 보내 양쪽이 시뮬레이션, 일부 객체만 우선순위로. Gaffer state_synchronization.
+
+### Lag compensation (서버 되감기)
+클라는 보간 때문에 다른 플레이어의 과거 모습을 조준한다 → 서버가 명령 실행 시점으로 세계를 되감아 판정. [커뮤니티] Valve 사본 · [공식] UnityMP dealing-with-latency
+- **방식**: 서버가 약 1초의 플레이어 위치 이력 보관, 실행 시각 = 현재 − 패킷 지연 − 클라 보간 지연, 다른 *플레이어만* 그 시각으로 되돌려 판정하고 원위치.
+- **잃음**: 공격자 우대 — 엄폐한 뒤에도 맞는다(shot behind cover), 이력 메모리와 되감기 비용.
+- **쓰지 말 때**: 출처 미확보. (추론) 서버 현재 상태로 충분한 느린 투사체.
+- **UE 관용구**: 출처 미확보. Unity NGO 는 미구현 [공식].
+
+### Deterministic lockstep
+상태 대신 입력만 보내 양쪽이 같은 시뮬레이션을 돌린다. 대역폭이 객체 수와 무관 (RTS). [커뮤니티] Gaffer deterministic_lockstep · [공식] UnityMP
+- **잃음**: 비트 단위 결정론(프레임 끝 체크섬), 부동소수 결정론은 컴파일러·OS·아키텍처를 넘으면 매우 어렵다, 물리 엔진 내부 RNG 도 깬다. 가장 느린 플레이어의 지연을 모두가 겪는다 (Gaffer 는 2~4인 권장), 중간 합류 어려움, playout delay 버퍼.
+- **쓰지 말 때**: 결정론을 확보할 수 없을 때, 인원이 많을 때 (→ snapshot interpolation).
+
+### Rollback
+상대 입력을 예측해 바로 진행하고, 실제 입력이 다르면 과거 프레임으로 되감아 재시뮬레이션. Unity 문서 정의: "결정론적 lockstep 의 개선". [커뮤니티] GGPO · [공식] UnityMP
+- **전제 (GGPO)**: 완전한 결정론, 게임 상태 완전 캡슐화·직렬화, 렌더 없이 한 프레임 저장/로드/실행, 고정 시간 단위.
+- **잃음**: 롤백 중 advance 가 여러 번 불리니 효과·사운드는 롤백 뒤로 미룬다(게임 상태와 렌더 상태 분리), RNG 상태는 게임 상태에 포함, 벽시계 금지, 포인터는 베이스+오프셋, 정적·숨은 상태 색출. 롤백이 길수록 불연속이 눈에 띈다.
+- **튜닝 축**: 프레임 지연(입력 지연) vs 추측 실행. 품질을 해치지 않는 한 지연을 높게 (격투 게임은 1프레임 넘는 지연을 중급자도 느낀다).
+- **검증 도구**: SyncTest — 매 프레임 1프레임 롤백 후 첫 실행 상태와 비교, 개발 중 상시로 비결정성 버그를 잡는다.
+- **옮기는 경로 (GGPO 가이드)**: ① 게임 상태·입력 식별 → ② 로컬 입력을 직접 쓰던 곳을 `add_local_input` + `synchronize_input` 결과로 → ③ save/load/free 콜백 → ④ 프레임 끝 `advance_frame` → ⑤ 고정 dt·렌더 분리·RNG·시계·포인터·정적 상태 정리 → ⑥ SyncTest.
+- **쓰지 말 때**: 상태가 너무 커서 프레임당 저장/로드가 감당 안 될 때, 결정론을 확보할 수 없을 때 (GGPO 의 "상태를 작게 격리하라" 에서 나온 추론 포함).
+
+---
+
+## 부록 — 확인 못 한 것 (답에 쓰려면 원문 확인)
+
+- Gambetta 4부작, Valve 원본 위키(사본만), Game AI Pro 장(Utility 9장·구조 5장·HTN 12장), Orkin GDC 2006, GDC 발표(Overwatch·롤백·Centaur): 요약 또는 존재만 확인.
+- refactoring.guru 장단점 전부, Unity e-book 본문, dev.epicgames.com 페이지 전부: 검색 요약.
+- 출처 없음: Blackboard 의 쓰지 말 때, GOAP·HTN 의 비용·쓰지 말 때, Unity 입력 버퍼·세이브 버전 관용구, UE lag compensation 관용구, 애니메이션 캔슬 창을 다룬 권위 있는 발표.
