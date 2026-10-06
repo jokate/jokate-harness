@@ -59,6 +59,8 @@ def main():
     rc = subprocess.run([sys.executable, str(BOOTSTRAP), target, "--auto"]).returncode
     if rc != 0:
         print("\n[오류] 프로젝트 세팅에 실패했다. 폴더 경로가 맞는지 확인한다.")
+    else:
+        print("\n인덱스 웹뷰: 이 폴더의 index_view.bat 을 더블클릭한다 (프로젝트 폴더를 끌어다 놓으면 그 프로젝트로 연다).")
     wait()
     return rc
 
