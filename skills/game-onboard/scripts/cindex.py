@@ -1225,7 +1225,8 @@ class CindexSource:
                         [(x["id"], "overrides", False) for x in ix.related(i, OVERRIDDEN_BY, True)])
             out = [(x["id"], "calls", True) for x, _ in ix.callees(i) if x][:25]
             return out + [(x["id"], "calls", False) for x, _ in ix.callers(i) if x and x["kind"] in FUNC_KINDS][:25]
-        return bfs_graph(starts, nb, lambda i: sym(i)["scope"] + sym(i)["name"], lambda i: sym(i)["kind"], depth)
+        return bfs_graph(starts, nb, lambda i: sym(i)["scope"] + sym(i)["name"], lambda i: sym(i)["kind"], depth,
+                         lambda i: {"module": sym(i).get("module"), "path": sym(i).get("path"), "line": sym(i).get("line")})
 
     def _module_graph(self, focus, depth):
         """실제 참조로 본 모듈 의존: 모듈 A 파일의 참조가 모듈 B 에 선언된 심볼을 가리키면 A → B."""

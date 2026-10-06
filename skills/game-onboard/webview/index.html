@@ -165,18 +165,44 @@ pre.code .ln { display: inline-block; width: 3.6em; color: var(--muted); user-se
 #graph .band-label { fill: var(--muted); font-size: 11px; font-weight: 600; }
 .graph-side { position: absolute; top: 12px; right: 12px; width: min(320px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; }
 .graph-tools { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
-.gtree { min-height: 320px; max-height: 760px; overflow: auto; padding: 14px 16px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ring); }
-.gtree h4 { margin: 4px 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
-.gtree details > div, .gtree .kids { margin-left: 11px; padding-left: 14px; border-left: 1px solid var(--grid); }
+.gtree { min-height: 320px; max-height: 780px; overflow: auto; padding: 0 16px 14px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ring); }
+.tbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 10px; background: var(--surface); border-bottom: 1px solid var(--grid); margin-bottom: 6px; }
+.tbar .field { flex: 1 1 220px; min-width: 0; }
+.gtree h4 { margin: 12px 0 6px; font-size: 13px; color: var(--ink-2); font-weight: 650; }
+.gtree .kids { margin-left: 13px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--axis) 55%, transparent); }
+.gtree details > .kids:hover { border-left-color: var(--accent); }
 .gtree summary { list-style: none; cursor: pointer; color: var(--ink); } .gtree summary::-webkit-details-marker { display: none; }
-.trow { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 8px; font-size: 13px; min-width: 0; }
-.trow:hover { background: var(--raise); }
-.trow .tw { width: 14px; flex: none; color: var(--muted); font-size: 10px; text-align: center; }
+.trow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 8px; border-radius: 9px; font-size: 14px; min-width: 0; }
+.trow:hover, .trow:focus-visible { background: var(--raise); outline: none; }
+.trow.root { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.trow .tw, .grow .tw { width: 16px; flex: none; color: var(--muted); font-size: 10px; text-align: center; transition: transform .15s; }
 details[open] > summary .tw.can { transform: rotate(90deg); }
-.trow .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.trow .nm { overflow-wrap: anywhere; } .trow .nm.focus { font-weight: 700; }
-.trow .cnt { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
-.trow .rep { font-size: 11px; color: var(--muted); }
+.trow .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px var(--surface); }
+.trow .nm { overflow-wrap: anywhere; font-weight: 550; } .trow.root .nm { font-weight: 750; }
+.trow .pill, .grow .pill { font-size: 11px; padding: 0 8px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--ring); color: var(--ink-2); white-space: nowrap; }
+.trow .mod, .g3-crumb .mod { font-size: 11px; padding: 0 7px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2); white-space: nowrap; }
+.trow .loc { margin-left: auto; font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.grow { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 12px; }
+.grow .gname { font-weight: 650; color: var(--ink-2); }
+.gtree mark { background: color-mix(in srgb, var(--warning) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.gtree .tnone { font-size: 12px; padding: 2px 8px 8px; } .gtree .tnote { font-size: 12px; margin: 14px 6px 0; }
+.g3d { position: relative; height: clamp(440px, 74vh, 780px); border-radius: 16px; overflow: hidden; background: radial-gradient(ellipse at 50% 32%, color-mix(in srgb, var(--accent) 11%, var(--surface)), var(--surface) 72%); box-shadow: inset 0 0 0 1px var(--ring); }
+.g3d canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+.g3d canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.g3-crumb, .g3-ruler, .g3-help { position: absolute; background: color-mix(in srgb, var(--card) 86%, transparent); backdrop-filter: blur(6px); box-shadow: var(--shadow), inset 0 0 0 1px var(--ring); }
+.g3-crumb { left: 12px; top: 12px; max-width: min(760px, calc(100% - 24px)); border-radius: 12px; padding: 8px 10px; font-size: 12px; }
+.g3-crumb .path { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.g3-crumb .path button { border: 0; background: var(--raise); color: var(--ink); border-radius: 999px; padding: 2px 9px; cursor: pointer; font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g3-crumb .path button.cur { background: var(--accent); color: #fff; font-weight: 650; }
+.g3-crumb .sep { color: var(--muted); }
+.g3-crumb .info { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--ink-2); }
+.g3-crumb .info .btn { padding: 2px 9px; font-size: 12px; }
+.g3-ruler { left: 12px; top: 50%; transform: translateY(-40%); display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 10px; font-size: 11px; max-height: 50%; overflow: auto; }
+.g3-ruler button { border: 0; background: none; color: var(--ink-2); text-align: left; padding: 3px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 11px; }
+.g3-ruler button:hover { background: var(--raise); } .g3-ruler button.on { background: var(--accent); color: #fff; font-weight: 650; }
+.g3-btns { position: absolute; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 60%; }
+.g3-help { left: 12px; bottom: 12px; font-size: 11px; color: var(--muted); padding: 5px 9px; border-radius: 8px; max-width: calc(40% - 24px); }
+@media (max-width: 760px) { .g3-ruler, .g3-help { display: none; } .g3-btns { max-width: calc(100% - 24px); } .trow .loc { margin-left: 27px; flex-basis: 100%; } }
 
 /* modules matrix */
 .matrix-wrap { overflow: auto; max-height: 760px; }
@@ -267,13 +293,14 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
       <select class="field" id="gmode"></select>
       <input class="field" type="search" id="gfocus" placeholder="중심 심볼 / 모듈">
       <select class="field" id="gdepth"><option value="1">깊이 1</option><option value="2" selected>깊이 2</option><option value="3">깊이 3</option><option value="4">깊이 4</option></select>
-      <select class="field" id="glayout"><option value="layered">계층 배치</option><option value="tree">트리 (접기)</option><option value="force">힘 배치</option></select>
+      <select class="field" id="glayout"><option value="layered">계층 배치</option><option value="tree">트리 (접기)</option><option value="tree3d">3D 트리 (이동)</option><option value="force">힘 배치</option></select>
       <button class="btn primary" id="gdraw">그리기</button>
       <span class="muted" id="gnote"></span>
     </div>
     <div class="graph-wrap">
       <svg id="graph" role="img" aria-label="관계 그래프"></svg>
       <div id="gtree" class="gtree" hidden></div>
+      <div id="g3d" class="g3d" hidden></div>
       <div class="graph-tools"><button class="btn" id="gfit">맞춤</button><button class="btn" id="gtable">표</button></div>
       <div class="card graph-side" id="gside" hidden></div>
     </div>
@@ -659,15 +686,16 @@ let gData = null, gSim = 0
 const EDGE_COLORS = { base: 'var(--s1)', calls: 'var(--s2)', overrides: 'var(--s3)', public: 'var(--s1)', private: 'var(--s2)' }
 async function drawGraph() {
   const svg = clear($('#graph')); $('#gside').hidden = true
-  const treeMode = $('#glayout').value === 'tree'
-  svg.style.display = treeMode ? 'none' : ''; $('#gtree').hidden = !treeMode; document.querySelector('.graph-tools').style.display = treeMode ? 'none' : ''
+  const lay = $('#glayout').value, treeMode = lay === 'tree' || lay === 'tree3d'
+  showLayout(lay)
   $('#gnote').textContent = '불러오는 중…'
   try { gData = await api('graph', { src: SRC, mode: $('#gmode').value, focus: $('#gfocus').value.trim(), depth: $('#gdepth').value }) }
   catch (e) { $('#gnote').textContent = e.message; return }
   const { nodes, edges } = gData
   $('#gnote').textContent = `노드 ${nodes.length} · 간선 ${edges.length}${gData.truncated ? ' · 상한에서 잘림' : ''}`
-  if (!nodes.length) { if (treeMode) clear($('#gtree')).append(h('div', { class: 'empty', text: '그릴 것이 없다 — 중심 이름을 확인한다' })); else svg.append(h('text', { x: 24, y: 40, text: '그릴 것이 없다 — 중심 이름을 확인한다' })); return }
-  if (treeMode) { drawTree(nodes, edges); return }
+  if (!nodes.length) { if (treeMode) clear($(lay === 'tree' ? '#gtree' : '#g3d')).append(h('div', { class: 'empty', text: '그릴 것이 없다 — 중심 이름을 확인한다' })); else svg.append(h('text', { x: 24, y: 40, text: '그릴 것이 없다 — 중심 이름을 확인한다' })); return }
+  if (lay === 'tree') { drawTree(nodes, edges); return }
+  if (lay === 'tree3d') { drawTree3D(nodes, edges); return }
   svg.style.height = ''
   let W = svg.clientWidth, H = svg.clientHeight
   const deg = {}; edges.forEach(e => { deg[e.source] = (deg[e.source] || 0) + 1; deg[e.target] = (deg[e.target] || 0) + 1 })
@@ -756,40 +784,450 @@ async function drawGraph() {
   $('#gtable').onclick = () => { tb.hidden = !tb.hidden }
 }
 const COL_W = 176, BAND_H = 100, LABEL_DY = 26
-// 트리(접기): 중심에서 간선을 따라 위(target 쪽)·아래(source 쪽)로 펼친다. 이미 나온 노드는 다시 펼치지 않고 ↻ 로 표시
-function drawTree(nodes, edges) {
-  const box = clear($('#gtree')), byId = new Map(nodes.map(n => [n.id, n]))
-  const up = new Map(), down = new Map()
-  for (const e of edges) { (up.get(e.source) || up.set(e.source, []).get(e.source)).push(e.target); (down.get(e.target) || down.set(e.target, []).get(e.target)).push(e.source) }
-  const mode = $('#gmode').value
-  const names = { inherit: ['부모 쪽 (상속 대상)', '자식 쪽 (상속한 클래스)'], calls: ['불리는 쪽 (이 함수가 부르는 함수)', '부르는 쪽 (이 함수를 부르는 함수)'], overrides: ['재정의 대상 쪽', '재정의한 쪽'], modules: ['의존 대상 쪽', '의존하는 쪽'] }[mode] || ['위', '아래']
+// ======================================================================= 트리 모델 (2D 트리 · 3D 트리 공용)
+// 중심에서 간선 방향으로 두 갈래: 위 = 간선이 가리키는 쪽(부모·불리는 쪽·재정의 대상·의존 대상), 아래 = 반대쪽.
+// 노드는 한 번만 둔다 (넓이 우선으로 처음 닿은 부모 밑). 나머지 간선은 교차 간선으로 따로 센다.
+const TREE_NAMES = { inherit: ['부모 쪽 (상속 대상)', '자식 쪽 (상속한 클래스)'], calls: ['불리는 쪽 (이 함수가 부르는 함수)', '부르는 쪽 (이 함수를 부르는 함수)'], overrides: ['재정의 대상 쪽', '재정의한 쪽'], modules: ['의존 대상 쪽', '의존하는 쪽'] }
+const treeNames = () => TREE_NAMES[$('#gmode').value] || ['위', '아래']
+const baseName = p => String(p || '').split(/[\\/]/).pop()
+const kindColor = k => k === 'external' ? 'var(--axis)' : groupColor(kindGroup(k === 'module' ? '' : k))
+function treeModel(nodes, edges) {
+  const byId = new Map(nodes.map(n => [n.id, n])), outE = new Map(), inE = new Map()
+  for (const e of edges) {
+    if (!byId.has(e.source) || !byId.has(e.target) || e.source === e.target) continue
+    if (!outE.has(e.source)) outE.set(e.source, [])
+    if (!inE.has(e.target)) inE.set(e.target, [])
+    outE.get(e.source).push(e); inE.get(e.target).push(e)
+  }
   const start = nodes.find(n => n.focus) || nodes[0]
-  function rowOf(n, kids, rep, isFocus) {
-    const can = kids > 0 && !rep
-    return h('div', { class: 'trow', tabindex: 0, onclick: ev => { if (ev.target.closest('summary') && can && !ev.target.classList.contains('nm')) return; ev.preventDefault(); sideCard(n) } },
-      h('span', { class: 'tw' + (can ? ' can' : ''), text: can ? '▶' : '' }),
-      h('span', { class: 'dot', style: { background: n.kind === 'external' ? 'var(--axis)' : groupColor(kindGroup(n.kind === 'module' ? '' : n.kind)) } }),
-      h('span', { class: 'nm' + (isFocus ? ' focus' : ''), text: n.label }), rep ? h('span', { class: 'rep', text: '↻ 위에 이미 있음' }) : null,
-      h('span', { class: 'cnt', text: kids && !rep ? `${kids}` : '' }))
+  const root = { ...start, dir: 0, depth: 0, parent: null, kids: [], kidsUp: [], kidsDown: [] }
+  const all = new Map([[start.id, root]]), used = new Set()
+  const grow = (map, dir, other) => {
+    let frontier = [root]
+    for (let d = 1; frontier.length; d++) {
+      const next = []
+      for (const p of frontier) for (const e of map.get(p.id) || []) {
+        const cid = other(e)
+        if (all.has(cid)) continue
+        const c = { ...byId.get(cid), focus: false, dir, depth: d, parent: p, kids: [], ekind: String(e.kind).split(' ')[0] }
+        all.set(cid, c); used.add(e)
+        ;(p === root ? (dir > 0 ? root.kidsUp : root.kidsDown) : p.kids).push(c)
+        next.push(c)
+      }
+      frontier = next
+    }
   }
-  const shown = new Set()
-  function rec(id, map, seen, depth) {
-    const n = byId.get(id); if (!n) return null
-    shown.add(id)
-    const kids = (map.get(id) || []).filter(k => byId.has(k)), rep = seen.has(id) && depth > 0
-    if (rep || !kids.length) return rowOf(n, kids.length, rep, depth === 0)
-    seen.add(id)
-    const sorted = [...kids].sort((a, b) => ((map.get(b) || []).length - (map.get(a) || []).length) || String(byId.get(a).label).localeCompare(byId.get(b).label))
-    return h('details', { open: depth < 2 || nodes.length < 120 }, h('summary', {}, rowOf(n, kids.length, false, depth === 0)), h('div', {}, sorted.map(k => rec(k, map, seen, depth + 1))))
+  grow(outE, 1, e => e.target)
+  grow(inE, -1, e => e.source)
+  // 같은 모듈끼리 붙여 둔다 — 2D 는 모듈로 묶고, 3D 는 원 위에서 이웃이 된다
+  const cmp = (a, b) => String(a.module || '').localeCompare(String(b.module || '')) || String(a.label).localeCompare(String(b.label))
+  for (const n of all.values()) n.kids.sort(cmp)
+  root.kidsUp.sort(cmp); root.kidsDown.sort(cmp)
+  const cross = edges.filter(e => !used.has(e) && e.source !== e.target && all.has(e.source) && all.has(e.target))
+  return { root, all, cross, rest: nodes.length - all.size }
+}
+const kidsOf = (m, n, dir) => n === m.root ? (dir > 0 ? m.root.kidsUp : m.root.kidsDown) : n.kids
+
+// ======================================================================= 2D 트리 (접기)
+function drawTree(nodes, edges) {
+  const box = clear($('#gtree')), m = treeModel(nodes, edges), names = treeNames(), modulesMode = $('#gmode').value === 'modules'
+  const big = nodes.length >= 120, body = h('div', { class: 'tbody' }), keep = new Map()
+  let query = ''
+  const filt = h('input', { type: 'search', class: 'field', placeholder: '트리 안에서 이름 찾기', 'aria-label': '트리 안에서 이름 찾기' })
+  filt.addEventListener('input', () => { query = filt.value.trim().toLowerCase(); render() })
+  const setAll = open => body.querySelectorAll('details').forEach(d => { d.open = open })
+  box.append(h('div', { class: 'tbar' }, filt,
+    h('button', { class: 'btn', text: '모두 펼치기', onclick: () => setAll(true) }),
+    h('button', { class: 'btn', text: '모두 접기', onclick: () => setAll(false) }),
+    h('button', { class: 'btn primary', text: '3D 로 이동하며 보기', onclick: () => { $('#glayout').value = 'tree3d'; showLayout('tree3d'); drawTree3D(gData.nodes, gData.edges) } })), body)
+  const mark = text => {
+    const i = query ? text.toLowerCase().indexOf(query) : -1
+    return i < 0 ? [text] : [text.slice(0, i), h('mark', { text: text.slice(i, i + query.length) }), text.slice(i + query.length)]
   }
-  const upKids = (up.get(start.id) || []).length, downKids = (down.get(start.id) || []).length
-  box.append(h('h4', { text: `↑ ${names[0]} · ${upKids}` }), upKids ? rec(start.id, up, new Set(), 0) : h('div', { class: 'muted', style: { fontSize: '12px', padding: '2px 6px 8px' }, text: '없음' }),
-    h('h4', { style: { marginTop: '14px' }, text: `↓ ${names[1]} · ${downKids}` }), downKids ? rec(start.id, down, new Set(), 0) : h('div', { class: 'muted', style: { fontSize: '12px', padding: '2px 6px' }, text: '없음' }))
-  const rest = nodes.filter(n => !shown.has(n.id) && n.id !== start.id).length
-  if (rest) box.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '14px 6px 0' }, text: `나머지 ${rest}개는 위로 올라갔다가 다른 갈래로 내려온 노드(형제·사촌 등)다. 트리는 중심의 직계만 보인다 — 전체는 계층·힘 배치에서.` }))
-  clear($('#glegend')).append(h('span', {}, '▶ 펼치기 · 숫자 = 바로 아래 개수 · 이름을 누르면 옆 카드'))
+  const hit = (n, dir) => {
+    if (!query) return true
+    const key = n.id + '|' + dir
+    if (!keep.has(key)) keep.set(key, String(n.label).toLowerCase().includes(query) || kidsOf(m, n, dir).some(k => hit(k, dir)))
+    return keep.get(key)
+  }
+  const row = (n, nk, isRoot, inGroup) => {
+    const loc = n.path ? `${baseName(n.path)}${n.line ? ':' + n.line : ''}` : ''
+    return h('div', { class: 'trow' + (isRoot ? ' root' : ''), tabindex: 0, title: n.path ? `${n.path}${n.line ? ':' + n.line : ''}` : n.label,
+      onclick: ev => { if (ev.target.closest('.tw')) return; ev.preventDefault(); sideCard(n) },
+      onkeydown: ev => { if (ev.key === 'Enter') { ev.preventDefault(); sideCard(n) } } },
+      h('span', { class: 'tw' + (nk ? ' can' : ''), text: nk ? '▶' : '' }),
+      h('span', { class: 'dot', style: { background: kindColor(n.kind) } }),
+      h('span', { class: 'nm' }, mark(String(n.label))),
+      nk ? h('span', { class: 'pill', text: `하위 ${nk}` }) : null,
+      n.module && !modulesMode && !inGroup ? h('span', { class: 'mod', text: n.module }) : null,
+      loc ? h('span', { class: 'loc', text: loc }) : null)
+  }
+  const node = (n, dir, depth, inGroup) => {
+    const ks = kidsOf(m, n, dir).filter(k => hit(k, dir))
+    if (!ks.length) return row(n, 0, n === m.root, inGroup)
+    return h('details', { open: !!query || depth < 2 || !big }, h('summary', {}, row(n, ks.length, n === m.root, inGroup)), h('div', { class: 'kids' }, group(ks, dir, depth + 1)))
+  }
+  // 형제가 많으면(9개 이상, 모듈 2개 이상) 모듈별로 묶어 훑기 쉽게 한다
+  const group = (ks, dir, depth) => {
+    const mods = new Map()
+    for (const k of ks) { const key = k.module || ''; if (!mods.has(key)) mods.set(key, []); mods.get(key).push(k) }
+    if (ks.length <= 8 || mods.size < 2 || modulesMode) return ks.map(k => node(k, dir, depth))
+    return [...mods.entries()].map(([mod, list]) => h('details', { class: 'tgroup', open: !!query || !big || list.length <= 6 },
+      h('summary', {}, h('div', { class: 'grow' }, h('span', { class: 'tw can', text: '▶' }), h('span', { class: 'gname', text: mod || '(모듈 없음)' }), h('span', { class: 'pill', text: String(list.length) }))),
+      h('div', { class: 'kids' }, list.map(k => node(k, dir, depth, true)))))
+  }
+  function render() {
+    keep.clear(); clear(body)
+    for (const [dir, label] of [[1, names[0]], [-1, names[1]]]) {
+      const ks = kidsOf(m, m.root, dir)
+      body.append(h('h4', { text: `${dir > 0 ? '↑' : '↓'} ${label} · ${ks.length}` }), ks.length ? node(m.root, dir, 0) : h('div', { class: 'muted tnone', text: '없음' }))
+    }
+    const notes = []
+    if (m.rest) notes.push(`나머지 ${m.rest}개는 중심에서 한 번 방향을 바꿔야 닿는 노드(형제·사촌, 부르는 함수가 부르는 다른 함수 등)다 — 그 노드를 중심으로 다시 그리면 보인다`)
+    if (m.cross.length) notes.push(`교차 간선 ${m.cross.length}개 — 여러 부모에 이어진 노드는 처음 닿은 부모 밑에만 둔다`)
+    if (notes.length) body.append(h('p', { class: 'muted tnote', text: notes.join(' · ') }))
+  }
+  render()
+  clear($('#glegend')).append(h('span', {}, '▶ 펼치기 · 회색 칩 = 모듈 · 오른쪽 = 파일:줄 (올리면 전체 경로) · 행을 누르면 옆 카드에 코드'))
+  const byId = new Map(nodes.map(n => [n.id, n]))
   const tb = $('#gtablebox'); clear(tb).append(tableOf(['from', 'to', '종류'], edges.map(e => [(byId.get(e.source) || {}).label, (byId.get(e.target) || {}).label, e.kind])))
 }
+
+// ======================================================================= 3D 트리 — 콘 트리, 트리를 따라 이동
+// 자식을 부모 아래(위쪽 갈래는 위) 원 위에 둔다 — Robertson·Mackinlay·Card, "Cone Trees: Animated 3D Visualizations of
+// Hierarchical Information", CHI '91 pp.189–194 의 배치. 후속 평가("An Evaluation of Cone Trees",
+// https://link.springer.com/chapter/10.1007/978-1-4471-0515-2_28)에서 콘 트리는 일반 트리보다 찾기가 느렸고 구조 감각은 낫다는 평이었다
+// → 찾기는 2D 트리(이름 찾기), 3D 는 구조 보기·이동용으로 나눈다.
+// 외부 라이브러리 없이 Canvas 2D 에 직접 원근 투영한다: 웹뷰는 로컬 서버가 주는 파일 하나라 CDN 이 막힌 사내망에서도 떠야 한다.
+const T3 = { NODE: 0.9, GAP: 0.8, LEVEL: 7, FOV: 50 * Math.PI / 180 }
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches
+let g3 = null
+const g3History = []
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim()
+const resolveColor = c => { const v = /^var\((--[\w-]+)\)$/.exec(c || ''); return v ? cssVar(v[1]) || '#888' : (c || '#888') }
+
+function coneLayout(m) {
+  const rings = []
+  const set = (n, x, y, z) => { n.x = x; n.y = y; n.z = z }
+  const sizeOf = ks => {   // 자식들이 놓일 원의 반지름 R 과, 그 부모가 차지하는 원판 반지름 rad
+    for (const k of ks) { const s = sizeOf(k.kids); k.R = s.R; k.rad = s.rad }
+    if (!ks.length) return { R: 0, rad: T3.NODE }
+    if (ks.length === 1) return { R: 0, rad: Math.max(T3.NODE * 1.4, ks[0].rad) }
+    const circ = ks.reduce((a, k) => a + 2 * k.rad + T3.GAP, 0), biggest = Math.max(...ks.map(k => k.rad))
+    const R = Math.max(circ / (2 * Math.PI), biggest * 1.1, T3.NODE * 2)
+    return { R, rad: R + biggest }
+  }
+  const placeKids = (owner, ks, R, x, y, z, dir, phase) => {
+    if (!ks.length) return
+    const yy = y + dir * T3.LEVEL
+    if (ks.length === 1) { const k = ks[0]; k.ang = null; set(k, x, yy, z); placeKids(k, k.kids, k.R, x, yy, z, dir, phase); return }
+    rings.push({ owner, dir, x, y: yy, z, R })
+    const circ = ks.reduce((a, k) => a + 2 * k.rad + T3.GAP, 0)
+    let a = phase
+    for (const k of ks) {
+      const span = (2 * k.rad + T3.GAP) / circ * 2 * Math.PI, ang = a + span / 2
+      const kx = x + R * Math.cos(ang), kz = z + R * Math.sin(ang)
+      k.ang = ang; set(k, kx, yy, kz); placeKids(k, k.kids, k.R, kx, yy, kz, dir, ang)
+      a += span
+    }
+  }
+  const r = m.root
+  set(r, 0, 0, 0)
+  const su = sizeOf(r.kidsUp), sd = sizeOf(r.kidsDown)
+  r.R = Math.max(su.R, sd.R)
+  placeKids(r, r.kidsUp, su.R, 0, 0, 0, 1, Math.PI / 2)
+  placeKids(r, r.kidsDown, sd.R, 0, 0, 0, -1, Math.PI / 2)
+  return rings
+}
+
+function stop3d() { if (g3) { g3.alive = false; if (g3.raf) cancelAnimationFrame(g3.raf); if (g3.ro) g3.ro.disconnect() } g3 = null }
+
+function drawTree3D(nodes, edges) {
+  stop3d()
+  const box = clear($('#g3d')), m = treeModel(nodes, edges), rings = coneLayout(m), list = [...m.all.values()], names = treeNames()
+  const canvas = h('canvas', { tabindex: 0, role: 'img', 'aria-label': `3D 트리 — 중심 ${m.root.label}, 노드 ${list.length}개. 화살표로 트리를 따라 이동한다` })
+  const crumb = h('div', { class: 'g3-crumb' }), ruler = h('div', { class: 'g3-ruler' }), btns = h('div', { class: 'g3-btns' })
+  box.append(canvas, crumb, ruler, btns, h('div', { class: 'g3-help', title: '드래그 = 회전, 휠·핀치 = 확대, 우클릭·Shift+드래그 = 이동, 클릭 = 고르기, 두 번 클릭 = 그 노드를 중심으로 다시 그리기', text: '↑↓←→ 트리 이동 · Enter 코드 · C 중심으로 · ⌫ 뒤로 · F 전체 · 드래그 회전 · 휠 확대' }))
+  const s = g3 = { m, rings, list, canvas, ctx: canvas.getContext('2d'), sel: m.root, cross: false, screen: [], anim: null, raf: 0, alive: true, W: 1, H: 1,
+    cam: { tx: 0, ty: 0, tz: 0, yaw: 0, pitch: 0.42, dist: 40 } }
+  const levels = new Map()   // 'dir|depth' → 노드들 (깊이 자)
+  for (const n of list) { const k = `${n.dir}|${n.depth}`; if (!levels.has(k)) levels.set(k, []); levels.get(k).push(n) }
+
+  const resize = () => {
+    const dpr = window.devicePixelRatio || 1, r = canvas.getBoundingClientRect()
+    s.W = Math.max(1, r.width); s.H = Math.max(1, r.height)
+    canvas.width = Math.round(s.W * dpr); canvas.height = Math.round(s.H * dpr)
+    s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    kick()
+  }
+  const kick = () => { if (s.alive && !s.raf) s.raf = requestAnimationFrame(loop) }
+  const loop = now => { s.raf = 0; if (!s.alive) return; const more = s.anim ? s.anim(now) : false; if (!more) s.anim = null; draw(); if (more) kick() }
+  const fly = (to, ms = 700) => {
+    const c = s.cam, from = { ...c }
+    if (to.yaw !== undefined) { const d = Math.atan2(Math.sin(to.yaw - c.yaw), Math.cos(to.yaw - c.yaw)); to = { ...to, yaw: c.yaw + d } }
+    if (REDUCED_MOTION || ms <= 0) { Object.assign(c, to); s.anim = null; kick(); return }
+    const t0 = performance.now()
+    s.anim = now => {
+      let u = Math.min(1, (now - t0) / ms)
+      u = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2
+      for (const k in to) c[k] = from[k] + (to[k] - from[k]) * u
+      return u < 1
+    }
+    kick()
+  }
+  const fitView = (nodesIn, ms) => {
+    const ns = nodesIn && nodesIn.length ? nodesIn : list
+    const xs = ns.map(n => n.x), ys = ns.map(n => n.y), zs = ns.map(n => n.z)
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2
+    const rad = Math.max(4, ...ns.map(n => Math.hypot(n.x - cx, n.y - cy, n.z - cz))) + T3.NODE * 2
+    fly({ tx: cx, ty: cy, tz: cz, dist: rad / Math.tan(T3.FOV / 2) * 1.08, pitch: 0.42 }, ms)
+  }
+  // 고른 노드로 날아간다: 그 노드가 부모 원의 바깥쪽에서 보이도록 돌고, 자식 쪽으로 조금 내려(올려) 자식 원이 같이 들어오게
+  const select = (n, how = 'fly') => {
+    if (!n) return
+    s.sel = n
+    if (n.parent) n.parent.lastKid = n
+    // 중심은 펼쳐진 쪽으로 대상점을 옮긴다 (아래 갈래만 있으면 아래로)
+    const rootShift = (m.root.kidsUp.length ? 1 : 0) - (m.root.kidsDown.length ? 1 : 0)
+    const to = { tx: n.x, ty: n.y + (n === m.root ? rootShift * T3.LEVEL * 0.6 : n.dir * T3.LEVEL * 0.35), tz: n.z }
+    if (n.ang !== null && n.ang !== undefined) to.yaw = Math.PI / 2 - n.ang
+    const span = Math.max(n.R || 0, n.parent ? (n.parent === m.root ? m.root.R : n.parent.R || 0) * 0.55 : 0, 5)
+    to.dist = Math.min(220, span * 2.4 + 12)
+    to.pitch = n.dir > 0 ? 0.25 : 0.5
+    if (how === 'fly') fly(to); else kick()
+    hud()
+  }
+  const above = n => n === m.root ? (n.lastKidUp || m.root.kidsUp[0]) : n.dir > 0 ? (n.lastKid && n.kids.includes(n.lastKid) ? n.lastKid : n.kids[0]) : n.parent
+  const below = n => n === m.root ? (n.lastKidDown || m.root.kidsDown[0]) : n.dir < 0 ? (n.lastKid && n.kids.includes(n.lastKid) ? n.lastKid : n.kids[0]) : n.parent
+  const siblings = n => n === m.root ? [n] : kidsOf(m, n.parent, n.dir)
+  const pathOf = n => { const p = []; for (let x = n; x; x = x.parent) p.unshift(x); return p }
+  const subtree = n => { const out = new Set(); const st = [n]; while (st.length) { const x = st.pop(); out.add(x); if (x === m.root) continue; st.push(...x.kids) } return out }
+  const recenter = n => {
+    if (!n || n === m.root) return
+    g3History.push({ focus: $('#gfocus').value, mode: $('#gmode').value })
+    $('#gfocus').value = n.label
+    drawGraph()
+  }
+  const back = () => { const h_ = g3History.pop(); if (!h_) return; $('#gmode').value = h_.mode; $('#gfocus').value = h_.focus; drawGraph() }
+
+  function hud() {
+    const n = s.sel, path = pathOf(n)
+    clear(crumb).append(
+      h('div', { class: 'path' }, path.flatMap((x, i) => [i ? h('span', { class: 'sep', text: i === 1 ? (x.dir > 0 ? '↑' : '↓') : '›' }) : null,
+        h('button', { class: x === n ? 'cur' : '', title: x.label, text: x.label.length > 30 ? x.label.slice(0, 29) + '…' : x.label, onclick: () => select(x) })])),
+      h('div', { class: 'info' },
+        h('span', { class: 'badge' }, h('i', { style: { background: kindColor(n.kind) } }), n.kind || '?'),
+        n.module ? h('span', { class: 'mod', text: n.module }) : null,
+        n.path ? h('span', { class: 'mono', title: `${n.path}:${n.line || ''}`, text: `${baseName(n.path)}${n.line ? ':' + n.line : ''}` }) : null,
+        h('span', { class: 'muted', text: n === m.root ? `중심 · 위 ${m.root.kidsUp.length} · 아래 ${m.root.kidsDown.length}` : `${n.dir > 0 ? names[0] : names[1]} ${n.depth}단계 · 하위 ${n.kids.length} · 형제 ${siblings(n).length - 1}` }),
+        h('button', { class: 'btn', text: '코드 (Enter)', onclick: () => sideCard(n) }),
+        n !== m.root ? h('button', { class: 'btn', text: '중심으로 (C)', onclick: () => recenter(n) }) : null))
+    clear(ruler)
+    const maxUp = Math.max(0, ...list.filter(x => x.dir > 0).map(x => x.depth)), maxDown = Math.max(0, ...list.filter(x => x.dir < 0).map(x => x.depth))
+    const rows = []
+    for (let d = maxUp; d >= 1; d--) rows.push([1, d])
+    rows.push([0, 0])
+    for (let d = 1; d <= maxDown; d++) rows.push([-1, d])
+    for (const [dir, d] of rows) {
+      const ns = levels.get(`${dir}|${d}`) || []
+      const on = n.dir === dir && n.depth === d
+      ruler.append(h('button', { class: on ? 'on' : '', text: dir === 0 ? '● 중심' : `${dir > 0 ? '↑' : '↓'}${d} ${dir > 0 ? names[0].split(' (')[0] : names[1].split(' (')[0]} · ${ns.length}`,
+        onclick: () => fitView(ns, 700) }))
+    }
+    clear(btns).append(...[
+      h('button', { class: 'btn', text: '전체 (F)', onclick: () => fitView(null, 700) }),
+      g3History.length ? h('button', { class: 'btn', text: `뒤로 (⌫) · ${g3History.length}`, onclick: back }) : null,
+      m.cross.length ? h('button', { class: 'btn' + (s.cross ? ' primary' : ''), text: `교차 간선 ${m.cross.length}`, onclick: () => { s.cross = !s.cross; hud(); kick() } }) : null,
+      h('button', { class: 'btn', text: '2D 트리', onclick: () => { $('#glayout').value = 'tree'; showLayout('tree'); drawTree(gData.nodes, gData.edges) } })].filter(Boolean))
+    kick()
+  }
+
+  function draw() {
+    const { ctx, W, H, cam } = s
+    const col = { ink: cssVar('--ink'), muted: cssVar('--muted'), bg: cssVar('--surface'), accent: cssVar('--accent'), axis: cssVar('--axis') }
+    ctx.clearRect(0, 0, W, H)
+    const f = H / (2 * Math.tan(T3.FOV / 2)), cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch)
+    const proj = (x, y, z) => {
+      const dx = x - cam.tx, dy = y - cam.ty, dz = z - cam.tz
+      const x1 = dx * cyw - dz * syw, z1 = dx * syw + dz * cyw
+      const y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp, d = cam.dist - z2
+      return d > 0.5 ? { x: W / 2 + x1 * f / d, y: H / 2 - y2 * f / d, d, k: f / d } : null
+    }
+    const P = new Map()
+    for (const n of list) { const p = proj(n.x, n.y, n.z); if (p) P.set(n, p) }
+    const ds = [...P.values()].map(p => p.d), dmin = Math.min(...ds), dmax = Math.max(...ds)
+    const fog = d => Math.max(0.22, Math.min(1, 1.12 - (d - dmin) / Math.max(1e-6, dmax - dmin) * 0.8))
+    const sel = s.sel, path = new Set(pathOf(sel)), sub = subtree(sel), sibs = new Set(siblings(sel))
+    const near = x => path.has(x) || sub.has(x) || sibs.has(x)
+    // 자식이 놓인 원 (콘의 바닥) — 고른 노드의 형제 원은 강조
+    for (const r of rings) {
+      const hot = r.owner === sel.parent && r.dir === sel.dir || r.owner === sel && (sel === m.root || r.dir === sel.dir)
+      ctx.beginPath()
+      let started = false
+      for (let i = 0; i <= 64; i++) {
+        const a = i / 64 * 2 * Math.PI, p = proj(r.x + r.R * Math.cos(a), r.y, r.z + r.R * Math.sin(a))
+        if (!p) { started = false; continue }
+        if (!started) { ctx.moveTo(p.x, p.y); started = true } else ctx.lineTo(p.x, p.y)
+      }
+      const po = P.get(r.owner)
+      ctx.globalAlpha = hot ? 0.75 : 0.22 * (po ? fog(po.d) : 0.5)
+      ctx.strokeStyle = hot ? col.accent : col.axis
+      ctx.lineWidth = hot ? 1.6 : 1
+      ctx.stroke()
+    }
+    // 트리 간선 (부모 → 자식 살), 고른 노드까지의 경로는 굵게
+    for (const n of list) {
+      if (!n.parent) continue
+      const a = P.get(n.parent), b = P.get(n)
+      if (!a || !b) continue
+      const onPath = path.has(n) && path.has(n.parent)
+      ctx.globalAlpha = onPath ? 1 : (near(n) ? 0.7 : 0.3) * fog((a.d + b.d) / 2)
+      ctx.strokeStyle = onPath ? col.accent : resolveColor(EDGE_COLORS[n.ekind] || 'var(--axis)')
+      ctx.lineWidth = onPath ? 3 : 1.3
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+    }
+    if (s.cross) {
+      ctx.setLineDash([4, 4])
+      for (const e of m.cross) {
+        const a = P.get(m.all.get(e.source)), b = P.get(m.all.get(e.target))
+        if (!a || !b) continue
+        ctx.globalAlpha = 0.45 * fog((a.d + b.d) / 2); ctx.strokeStyle = col.muted; ctx.lineWidth = 1
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+      }
+      ctx.setLineDash([])
+    }
+    // 노드: 먼 것부터 (화가 알고리즘)
+    const order = [...P.entries()].sort((a, b) => b[1].d - a[1].d)
+    s.screen = []
+    for (const [n, p] of order) {
+      const r = Math.max(2.5, Math.min(30, T3.NODE * 0.5 * p.k * (n === m.root ? 1.5 : 1)))
+      const base = resolveColor(kindColor(n.kind))
+      ctx.globalAlpha = fog(p.d) * (near(n) ? 1 : 0.55)
+      const g = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.35, r * 0.1, p.x, p.y, r)
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.25, base); g.addColorStop(1, base)
+      ctx.fillStyle = g
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 2 * Math.PI); ctx.fill()
+      if (n === sel || n === m.root) {
+        ctx.globalAlpha = 1; ctx.strokeStyle = n === sel ? col.accent : base; ctx.lineWidth = n === sel ? 3 : 2
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + (n === sel ? 5 : 4), 0, 2 * Math.PI); ctx.stroke()
+      }
+      s.screen.push({ n, x: p.x, y: p.y, r, d: p.d })
+    }
+    // 이름표: 중요한 것부터 놓고 겹치면 건너뛴다 (고른 노드·경로는 항상)
+    const pri = n => n === sel ? 1e9 : path.has(n) ? 1e8 : sub.has(n) && n.parent === sel ? 1e7 : sibs.has(n) ? 1e6 : n === m.root ? 1e6 : (P.get(n) || { k: 0 }).k
+    const boxes = [], cand = [...P.keys()].sort((a, b) => pri(b) - pri(a))
+    let placed = 0
+    for (const n of cand) {
+      const p = P.get(n), must = n === sel || path.has(n)
+      if (!must && (placed >= 70 || p.k * T3.NODE * 0.5 < 3.2)) continue
+      const text = n === sel ? n.label : (n.label.length > 28 ? n.label.slice(0, 27) + '…' : n.label)
+      ctx.font = `${n === sel ? 700 : 500} ${n === sel ? 14 : 12}px system-ui, sans-serif`
+      const w = ctx.measureText(text).width, r = Math.max(2.5, Math.min(30, T3.NODE * 0.5 * p.k)) + 6
+      const tries = [[p.x + r, p.y + 4], [p.x - r - w, p.y + 4], [p.x - w / 2, p.y - r - 4], [p.x - w / 2, p.y + r + 14]]
+      let spot = null
+      for (const [x, y] of tries) {
+        const b = [x - 3, y - 13, x + w + 3, y + 4]
+        if (must || !boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) { spot = [x, y, b]; break }
+      }
+      if (!spot) continue
+      boxes.push(spot[2]); placed++
+      ctx.globalAlpha = must ? 1 : fog(p.d) * (near(n) ? 1 : 0.7)
+      ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = col.bg; ctx.strokeText(text, spot[0], spot[1])
+      ctx.fillStyle = n === sel ? col.accent : col.ink; ctx.fillText(text, spot[0], spot[1])
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // 입력: 드래그 회전, 우클릭·Shift 드래그 이동, 휠·핀치 확대, 클릭 고르기, 두 번 클릭 = 그 노드를 중심으로 다시
+  const ptrs = new Map()
+  let drag = null, moved = 0
+  const pick = (x, y) => { let best = null; for (const o of s.screen) { const dd = Math.hypot(o.x - x, o.y - y); if (dd <= o.r + 5 && (!best || o.d < best.d)) best = o } return best && best.n }
+  canvas.addEventListener('contextmenu', ev => ev.preventDefault())
+  canvas.addEventListener('pointerdown', ev => {
+    canvas.setPointerCapture(ev.pointerId); ptrs.set(ev.pointerId, [ev.clientX, ev.clientY])
+    drag = { x: ev.clientX, y: ev.clientY, pan: ev.button === 2 || ev.shiftKey, pinch: ptrs.size === 2 ? null : undefined }
+    moved = 0; s.anim = null
+  })
+  canvas.addEventListener('pointermove', ev => {
+    const r = canvas.getBoundingClientRect()
+    if (!drag) {
+      const n = pick(ev.clientX - r.left, ev.clientY - r.top)
+      canvas.style.cursor = n ? 'pointer' : 'grab'
+      if (n) showTip(ev, tipLines(n.label, n === m.root ? '중심' : `${n.dir > 0 ? names[0] : names[1]} ${n.depth}단계`, [['종류', n.kind || '?'], ['모듈', n.module || '-'], ['위치', n.path ? `${baseName(n.path)}:${n.line || ''}` : '-'], ['하위', String(n === m.root ? m.root.kidsUp.length + m.root.kidsDown.length : n.kids.length)]]))
+      else hideTip()
+      return
+    }
+    ptrs.set(ev.pointerId, [ev.clientX, ev.clientY])
+    const c = s.cam
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1])
+      if (drag.pinch) c.dist = Math.max(3, Math.min(600, c.dist * drag.pinch / d))
+      drag.pinch = d; moved += 10; kick(); return
+    }
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y
+    drag.x = ev.clientX; drag.y = ev.clientY; moved += Math.abs(dx) + Math.abs(dy)
+    if (drag.pan) {
+      // 화면 오른쪽 = (cos yaw, 0, -sin yaw), 화면 위 = (-sin p·sin yaw, cos p, -sin p·cos yaw) — 장면이 손을 따라 움직이게 대상점을 반대로
+      const k = c.dist / (s.H / (2 * Math.tan(T3.FOV / 2))), sp = Math.sin(c.pitch), cpi = Math.cos(c.pitch)
+      c.tx += (-dx * Math.cos(c.yaw) - dy * sp * Math.sin(c.yaw)) * k
+      c.ty += dy * cpi * k
+      c.tz += (dx * Math.sin(c.yaw) - dy * sp * Math.cos(c.yaw)) * k
+    } else {
+      c.yaw += dx * 0.006
+      c.pitch = Math.max(-1.45, Math.min(1.45, c.pitch + dy * 0.005))
+    }
+    hideTip(); kick()
+  })
+  const end = ev => {
+    ptrs.delete(ev.pointerId)
+    if (drag && moved < 5 && ptrs.size === 0) {
+      const r = canvas.getBoundingClientRect(), n = pick(ev.clientX - r.left, ev.clientY - r.top)
+      if (n) select(n)
+    }
+    if (ptrs.size === 0) drag = null
+  }
+  canvas.addEventListener('pointerup', end)
+  canvas.addEventListener('pointercancel', end)
+  canvas.addEventListener('pointerleave', () => { if (!drag) hideTip() })
+  canvas.addEventListener('dblclick', ev => { const r = canvas.getBoundingClientRect(), n = pick(ev.clientX - r.left, ev.clientY - r.top); if (n) recenter(n) })
+  canvas.addEventListener('wheel', ev => { ev.preventDefault(); s.anim = null; s.cam.dist = Math.max(3, Math.min(600, s.cam.dist * (ev.deltaY > 0 ? 1.12 : 0.89))); kick() }, { passive: false })
+  canvas.addEventListener('keydown', ev => {
+    const n = s.sel
+    const go = {
+      ArrowUp: () => { const x = above(n); if (x && n === m.root) m.root.lastKidUp = x; return x },
+      ArrowDown: () => { const x = below(n); if (x && n === m.root) m.root.lastKidDown = x; return x },
+      ArrowLeft: () => { const sb = siblings(n); return sb[(sb.indexOf(n) - 1 + sb.length) % sb.length] },
+      ArrowRight: () => { const sb = siblings(n); return sb[(sb.indexOf(n) + 1) % sb.length] },
+      Home: () => m.root,
+    }[ev.key]
+    if (go) { ev.preventDefault(); const x = go(); if (x && x !== n) select(x); return }
+    if (ev.key === 'Enter') { ev.preventDefault(); sideCard(n) }
+    else if (ev.key === 'c' || ev.key === 'C') recenter(n)
+    else if (ev.key === 'Backspace') { ev.preventDefault(); back() }
+    else if (ev.key === 'f' || ev.key === 'F') fitView(null, 700)
+  })
+  s.ro = new ResizeObserver(resize); s.ro.observe(canvas)
+  resize()
+  // 처음: 전체를 보여 준 뒤 중심으로 날아간다 (카메라가 움직인다는 것을 보이려고)
+  fitView(null, 0)
+  hud()
+  setTimeout(() => { if (s.alive) select(m.root) }, REDUCED_MOTION ? 0 : 450)
+  canvas.focus({ preventScroll: true })
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  clear($('#glegend')).append(...[0, 1, 2, 3].filter(g => list.some(n => kindGroup(n.kind === 'module' ? '' : n.kind) === g && n.kind !== 'external')).map(g => h('span', {}, h('i', { style: { background: groupColor(g), borderRadius: '50%' } }), $('#gmode').value === 'modules' ? '모듈' : GROUP_NAMES[g])),
+    h('span', {}, h('i', { style: { background: 'var(--accent)' } }), '고른 노드까지의 경로 · 강조된 원 = 형제들'),
+    h('span', { class: 'muted', text: `노드 ${list.length}${m.rest ? ` · 트리 밖 ${m.rest}` : ''}${m.cross.length ? ` · 교차 간선 ${m.cross.length}` : ''}` }))
+  const tb = $('#gtablebox'); clear(tb).append(tableOf(['from', 'to', '종류'], edges.map(e => [(byId.get(e.source) || {}).label, (byId.get(e.target) || {}).label, e.kind])))
+}
+
+function showLayout(lay) {
+  if (lay !== 'tree3d') stop3d()
+  $('#graph').style.display = lay === 'tree' || lay === 'tree3d' ? 'none' : ''
+  $('#gtree').hidden = lay !== 'tree'
+  $('#g3d').hidden = lay !== 'tree3d'
+  document.querySelector('.graph-tools').style.display = lay === 'tree' || lay === 'tree3d' ? 'none' : ''
+}
+
 function layered(nodes, edges, W, H) {
   // 중심에서 간선 방향(source → target = 위로)으로 층을 매긴다. target 쪽(부모·불리는 쪽)은 위, source 쪽은 아래.
   const layer = new Map(), byId = new Map(nodes.map(n => [n.id, n]))

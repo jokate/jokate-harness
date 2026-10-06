@@ -147,11 +147,18 @@ def disk_sources(root, kind_root):
     return out
 
 
-def bfs_graph(focus_ids, neighbors, label_of, kind_of, depth):
+def bfs_graph(focus_ids, neighbors, label_of, kind_of, depth, info_of=None):
+    """중심에서 깊이 depth 까지 넓이 우선. info_of(id) → {"module", "path", "line"} 를 주면 노드에 붙인다 (트리·3D 뷰가 쓴다)."""
     nodes, edges, seen = {}, [], set()
     q = deque((f, 0) for f in focus_ids)
+
+    def node(i, **kw):
+        d = {"id": i, "label": label_of(i), "kind": kind_of(i), **kw}
+        if info_of:
+            d.update({k: v for k, v in (info_of(i) or {}).items() if v not in (None, "")})
+        return d
     for f in focus_ids:
-        nodes[f] = {"id": f, "label": label_of(f), "kind": kind_of(f), "focus": True}
+        nodes[f] = node(f, focus=True)
     while q and len(nodes) < MAX_NODES:
         cur, d = q.popleft()
         if d >= depth:
@@ -164,7 +171,7 @@ def bfs_graph(focus_ids, neighbors, label_of, kind_of, depth):
             if other not in nodes:
                 if len(nodes) >= MAX_NODES:
                     break
-                nodes[other] = {"id": other, "label": label_of(other), "kind": kind_of(other)}
+                nodes[other] = node(other)
                 q.append((other, d + 1))
     edges = [e for e in edges if e["source"] in nodes and e["target"] in nodes]
     return {"nodes": list(nodes.values()), "edges": edges, "truncated": len(nodes) >= MAX_NODES}
@@ -257,7 +264,8 @@ class EngineSource:
             out = [(p["id"], "base", True) for p in self.by_name(s["parent"])[:1]] if s.get("parent") else []
             kids = self.q(self.ROW + "WHERE s.parent = ? COLLATE NOCASE AND s.kind != 'delegate' LIMIT 30", (s["name"],))
             return out + [(str(k[0]), "base", False) for k in kids]
-        return bfs_graph(starts, nb, lambda i: sym(i)["name"], lambda i: sym(i)["kind"], depth)
+        return bfs_graph(starts, nb, lambda i: sym(i)["name"], lambda i: sym(i)["kind"], depth,
+                         lambda i: {"module": sym(i).get("module"), "path": sym(i).get("path"), "line": sym(i).get("line")})
 
     def overview(self):
         meta = dict(self.q("SELECT key, value FROM meta"))
@@ -390,7 +398,8 @@ class ProjectSource:
             out = [(p["id"], "base", True) for p in self.by_name(s["parent"])[:1]] if s["parent"] else []
             return out + [(str(j), "base", False) for j, x in enumerate(self.syms)
                           if (x[4] or "").lower() == s["name"].lower()][:30]
-        return bfs_graph(starts, nb, lambda i: self.syms[int(i)][0], lambda i: self.syms[int(i)][1], depth)
+        return bfs_graph(starts, nb, lambda i: self.syms[int(i)][0], lambda i: self.syms[int(i)][1], depth,
+                         lambda i: {k: self._row(int(i))[k] for k in ("module", "path", "line")})
 
     def overview(self):
         kinds = {}
