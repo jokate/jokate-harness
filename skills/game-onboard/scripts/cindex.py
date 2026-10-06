@@ -480,8 +480,30 @@ def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False):
     cur.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", list(meta.items()))
     con.commit()
     con.close()
-    os.replace(tmp, db_path)
+    swap_in(tmp, db_path)
     return counts
+
+
+def swap_in(tmp, db_path):
+    """새로 만든 인덱스를 제자리에 넣는다. 보통은 파일 바꿔치기(os.replace).
+    Windows 에서는 다른 프로세스(떠 있는 웹뷰, 조회 중인 세션)가 그 DB 를 열고 있으면 바꿔치기가 거부된다 —
+    SQLite 가 파일을 FILE_SHARE_DELETE 없이 연다. 그때는 SQLite backup API 로 내용을 기존 파일에 통째로 써 넣는다
+    (SQLite 잠금을 지키므로 읽는 쪽이 열려 있어도 된다. 바꿔치기보다 느리다 — DB 크기만큼 복사)."""
+    try:
+        os.replace(tmp, db_path)
+        return
+    except OSError:
+        if not Path(db_path).exists():
+            raise
+    print(f"  {Path(db_path).name} 를 다른 프로세스가 열고 있어 바꿔치기 대신 내용을 덮어쓴다", flush=True)
+    src = sqlite3.connect(str(tmp))
+    dst = sqlite3.connect(str(db_path), timeout=60)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    Path(tmp).unlink()
 
 
 def _history(db_path, info, counts, took_ingest, out_path, keep=30):
