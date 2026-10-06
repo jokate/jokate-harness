@@ -141,6 +141,8 @@ def main():
         set_engine(root, eng)
         how = "--engine-root"
     eng_ok = bool(eng and (eng / "Source").is_dir())
+    if kind == "ue" and not eng_ok:
+        print("엔진 폴더를 못 찾았다. 찾아본 곳:\n  " + "\n  ".join(ue_q.engine_report(root)), flush=True)
     if kind == "ue" and not eng_ok and sys.stdin.isatty():
         try:
             given = ask_engine()

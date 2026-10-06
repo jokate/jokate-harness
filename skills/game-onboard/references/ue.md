@@ -44,10 +44,10 @@
 3. `ue_q.py module <모듈>` — Build.cs 에 넣을 의존 이름
 4. 동작이 궁금할 때만 `ue_q.py rg "<함수명>" --module <모듈> --type cpp` → `get <경로>:<줄범위>`
 
-엔진 인덱스가 없으면 `ue_q.py index` (UE 5.x 전체 헤더 기준 수 분, 이후 증분). 엔진 경로는 `UE_ROOT` 환경변수 → 이 프로젝트용으로 저장한 경로(`index_build.bat --engine-root`, 못 찾으면 bat 이 묻는다) → `.uproject` EngineAssociation + 레지스트리 → `C:/Unreal/UE_5.7/Engine` 순으로 찾는다.
+엔진 인덱스가 없으면 `ue_q.py index` (UE 5.x 전체 헤더 기준 수 분, 이후 증분). 엔진 경로는 `UE_ROOT` 환경변수 → 이 프로젝트용으로 저장한 경로(`index_build.bat --engine-root`, 못 찾으면 bat 이 묻는다) → `.uproject` EngineAssociation(소스 빌드·런처 레지스트리, 런처 설치 목록, 엔진 폴더 안 프로젝트) → `C:/Unreal/UE_5.7/Engine` 순으로 찾는다.
 
 ## 5. 버전 함정
 
-- `EngineAssociation` 이 GUID 면 소스 빌드 엔진이다. 레지스트리 조회가 실패하면 `index_build.bat --engine-root <엔진 폴더>` 로 저장하거나 `UE_ROOT` 로 지정.
+- `EngineAssociation` 이 GUID 면 소스 빌드 엔진이다 (`HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds` 에서 찾는다). 그래도 못 찾으면 `index_build.bat --engine-root <엔진 폴더>` 로 저장하거나 `UE_ROOT` 로 지정.
 - 5.x 사이에도 API 가 바뀐다. 예: 자동화 테스트 컨텍스트 마스크는 5.7 헤더 기준 `EAutomationTestFlags_ApplicationContextMask` (전역 constexpr). 이전 버전 예제와 다를 수 있으니 `ue_q.py rg` 로 확인.
 - UE 5.8 에 Epic 공식 "Unreal MCP" 플러그인이 실험 기능으로 들어갔다(커뮤니티 경유 정보, 검증 안 됨). 자체·커뮤니티 MCP 와 역할이 겹치는지 따로 판단.

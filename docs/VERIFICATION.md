@@ -326,6 +326,27 @@ clangd 23.1.0 릴리스에서 받는다. 버전은 고정한다 (RIFF 리더·�
 
 검증 안 됨: 실제 Windows 에서의 재현·확인. `index_build.bat` 결과 표에서 2·4·5 가 실패였다면 원인이 따로 있다 — 그 표의 이유 칸이 필요하다.
 
+## 2026-10-06 (7) — 엔진 경로를 못 찾는 경우 보강 · 찾아본 곳 출력
+
+보고: 웹뷰를 새로 고쳐도 엔진(ue_q)·clangd 프로젝트·clangd 엔진이 계속 안 뜬다, 프로젝트 정규식(gq)만 잡힌다.
+셋 다 엔진 경로가 전제다 — ue_q 와 clangd 엔진은 엔진 폴더를, clangd 프로젝트는 엔진의 UBT 로 만드는 compile_commands.json 을 쓴다.
+gq 만 엔진이 필요 없다. 사용자 출력은 보지 못했다.
+
+엔진 찾기가 UE 의 등록 방식 일부만 보고 있었다 (HKLM `<버전>` 키 하나). UE 가 엔진을 찾는 곳을 같은 순서로 보게 했다:
+`EngineAssociation` 빈 값 → 프로젝트 위 폴더의 `Engine/`, 그 밖 → HKCU `Builds`(소스 빌드 GUID·사용자 지정 이름) · HKLM `<버전>`(64비트 보기 먼저 —
+32비트 Python 은 WOW6432Node 로 돌려져 못 봤다) · `LauncherInstalled.dat`. 못 찾으면 본 곳과 결과를 줄마다 출력한다 (`engine_report`).
+
+시험 (리눅스, 가짜 `winreg` 모듈과 가짜 `LauncherInstalled.dat` — 키 배치는 UE 소스 기준이고 실제 Windows 레지스트리로 확인하지 않았다):
+
+| 경우 | 결과 |
+|---|---|
+| 등록 정보 없음 | 기본 경로, 본 곳 6줄 + "못 찾음" |
+| `LauncherInstalled.dat` 에 UE_5.7 | 런처 설치 목록으로 찾음 |
+| HKLM 키가 64비트 보기에서만 보임 | 레지스트리(런처)로 찾음 |
+| GUID + HKCU `Builds` | 레지스트리(소스 빌드)로 찾음 → `index_all` 1~5 완료 → 웹뷰 네 소스 모두 O |
+| `EngineAssociation` 빈 값, 엔진 폴더 안 프로젝트 | 프로젝트 위 폴더로 찾음 |
+| GUID 인데 등록 안 됨 | `index_all` 이 본 곳을 출력, 2 실패·5 건너뜀 |
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -339,6 +360,7 @@ clangd 23.1.0 릴리스에서 받는다. 버전은 고정한다 (RIFF 리더·�
 - 엔진 폴더 지정: `index_all.py --engine-root`, 못 찾으면 묻기, 프로젝트별 저장을 `ue_q.engine_root()` 가 읽음 (2026-10-06)
 - setup 이 clangd 도구 설치: `clangd_tools.py` (23.1.0 고정, SHA-256 대조, 못 찾는 것만, 실패해도 계속) (2026-10-06)
 - 웹뷰: 인덱스 파일이 바뀌면 화면을 열 때 다시 읽음 · cindex: Windows 에서 열린 DB 는 backup API 로 덮어쓰기 (2026-10-06)
+- 엔진 찾기: HKCU Builds(소스 빌드) · HKLM 64비트 보기 · LauncherInstalled.dat · 엔진 폴더 안 프로젝트, 못 찾으면 본 곳 출력 (2026-10-06)
 
 ## 검증 안 된 것
 
