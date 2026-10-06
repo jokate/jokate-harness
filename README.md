@@ -46,13 +46,13 @@ PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하�
 인덱스를 지금 만들려면 프로젝트 폴더를 `index_build.bat` 위에 끌어다 놓는다 (더블클릭이면 하네스가 최근에 돈 프로젝트).
 프로젝트 좌표 → 엔진 좌표 → clangd 의미 인덱스 순으로 돌고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다.
 엔진 폴더를 못 찾으면 창에서 경로를 묻고 프로젝트별로 저장한다 (명령 창에서는 `--engine-root <엔진 폴더>`).
-clangd 도구가 없으면 clangd 단계는 건너뛴다 — 준비는 [docs/GUIDE.md](docs/GUIDE.md) 3절.
+clangd 도구는 setup 이 설치한다 — 받지 못했으면 clangd 단계만 건너뛰고, setup.bat 을 다시 돌리면 된다.
 
 ## 제거
 
 `uninstall.bat` 더블클릭 — 또는 세팅했던 프로젝트 폴더를 그 위에 끌어다 놓는다. 미리보기는 `--dry-run`.
 
-- 머신: `~/.claude/skills/game-*`·`~/.claude/mods/game-harness-monitor`(링크만 끊는다), 설치한 훅 파일, `settings.json` 의 해당 훅 항목과 mod 경로(원본은 `.bak`, 다른 훅·env 는 그대로), 하네스 이벤트 로그
+- 머신: `~/.claude/skills/game-*`·`~/.claude/mods/game-harness-monitor`(링크만 끊는다), 설치한 훅 파일, `settings.json` 의 해당 훅 항목과 mod 경로(원본은 `.bak`, 다른 훅·env 는 그대로), 하네스 이벤트 로그. `--purge` 면 엔진 인덱스와 setup 이 받은 clangd 도구도
 - 프로젝트: `CLAUDE.local.md` 는 `CLAUDE.local.md.removed` 로 이름만 바꾼다. 인덱스 선언·HandOff·프로젝트 인덱스는 지운다. `CLAUDE.md` 는 건드리지 않는다
 - 한 프로젝트에서만 빼려면 `uninstall.bat "<폴더>" --project-only`
 - 이 저장소 폴더는 남는다. 다시 쓰려면 `setup.bat`
@@ -60,7 +60,7 @@ clangd 도구가 없으면 clangd 단계는 건너뛴다 — 준비는 [docs/GUI
 ## 요구
 
 Python 3.10+, git (svn 은 선택 — 이력 신호용, 검증 안 됨), Claude Code 2.1.x.
-선택: clangd-indexer (clangd 릴리스의 indexing tools, 의미 인덱스용). 모니터 mod 는 Claude Code 의 함수 훅 플러그인(early access, 2.1.290 에서 확인)이 필요하다.
+clangd·clangd-indexer(의미 인덱스용)는 setup 이 없을 때만 내려받는다 (clangd 23.1.0 고정, SHA-256 대조, Windows 약 63MB — 실패해도 나머지는 동작). 모니터 mod 는 Claude Code 의 함수 훅 플러그인(early access, 2.1.290 에서 확인)이 필요하다.
 
 ## 하네스가 동작하는지 보기
 

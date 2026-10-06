@@ -184,7 +184,7 @@ def main():
                 skip(t, "UE 프로젝트가 아니다")
         elif not (clangd or indexer):
             for t in titles:
-                skip(t, "clangd·clangd-indexer 를 못 찾았다 — ~/.claude/tools/clangd/bin 에 둔다 (references/cindex.md 2절)")
+                skip(t, "clangd·clangd-indexer 를 못 찾았다 — setup.bat 을 다시 돌리면 설치한다 (clangd_tools.py install)")
         else:
             cdb = cindex.resolve_cdb(None, root, eng)
             if cdb and not a.cdb:

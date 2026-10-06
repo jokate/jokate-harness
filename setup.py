@@ -4,7 +4,8 @@
 
   python setup.py [프로젝트 폴더]
 
-1) 스킬·훅 설치 + settings.json 훅 등록 (install.py --link --force --apply-settings)
+1) 스킬·훅 설치 + settings.json 훅 등록 + clangd 도구 (install.py --link --force --apply-settings)
+   clangd·clangd-indexer 는 못 찾을 때만 ~/.claude/tools/clangd 에 내려받는다 (Windows 약 63MB). 실패해도 계속한다.
 2) 프로젝트 세팅 (bootstrap.py --auto). 폴더를 안 주면 물어본다.
 3) 사용법 출력
 다시 돌려도 된다. 이미 된 부분은 건너뛴다.
@@ -43,7 +44,7 @@ def ask_project():
 
 
 def main():
-    print("[1/2] 설치 — 스킬, 훅, 설정")
+    print("[1/2] 설치 — 스킬, 훅, 설정, clangd 도구")
     rc = subprocess.run([sys.executable, str(REPO / "install.py"), "--link", "--force", "--apply-settings"]).returncode
     if rc != 0:
         print("\n[오류] 설치에 실패했다. 위 메시지를 확인한다.")
@@ -60,7 +61,7 @@ def main():
     if rc != 0:
         print("\n[오류] 프로젝트 세팅에 실패했다. 폴더 경로가 맞는지 확인한다.")
     else:
-        print("\n인덱스 지금 만들기: 이 폴더의 index_build.bat 에 프로젝트 폴더를 끌어다 놓는다 (clangd 는 docs/GUIDE.md 3절).")
+        print("\n인덱스 지금 만들기: 이 폴더의 index_build.bat 에 프로젝트 폴더를 끌어다 놓는다.")
         print("인덱스 웹뷰: 이 폴더의 index_view.bat 을 더블클릭한다 (프로젝트 폴더를 끌어다 놓으면 그 프로젝트로 연다).")
     wait()
     return rc

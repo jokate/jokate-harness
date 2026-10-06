@@ -281,6 +281,32 @@ gq → ue_q → compile_commands.json(없을 때만) → clangd 프로젝트(`--
 시험 중 종료 1 이 한 번 났는데, 픽스처를 복사하면서 compile_commands.json 이 원본 프로젝트 경로를 가리켜 프로젝트 TU 가 0 이 된 탓이었다
 (경로를 고친 복사본으로 다시 해 종료 0). 검증 안 됨: Windows 콘솔에서 한글 경로 입력·끌어다 놓기, 소스 빌드 엔진.
 
+## 2026-10-06 (5) — setup 이 clangd 도구를 설치한다 (`clangd_tools.py`)
+
+`install.py`(setup 의 1단계)가 `clangd_tools.py install` 을 부른다. clangd·clangd-indexer 를 cindex 와 같은 순서로 찾아 **못 찾는 것만**
+clangd 23.1.0 릴리스에서 받는다. 버전은 고정한다 (RIFF 리더·시험이 이 버전 출력으로 검증됐다). zip 은 받으면서 SHA-256 을 계산해
+고정값과 대조하고, 맞을 때만 `bin/<도구>` 와 `lib/clang/23/{include,share}` 를 `~/.claude/tools/clangd` 에 푼다.
+`lib/clang/23/lib`(링크용 컴파일러 런타임)는 뺀다. 실패해도 setup 은 경고만 남기고 계속한다. 설치한 파일 목록은 `game-harness-tools.json` 에 남겨
+`uninstall --purge` 가 그 파일만 지운다.
+
+시험 (리눅스, 매번 빈 HOME):
+
+| 경우 | 결과 |
+|---|---|
+| 빈 HOME 에서 install (실제 다운로드) | 6초, 해시 일치, `clangd version 23.1.0` · `LLVM version 23.1.0` 실행 확인, 디스크 279MB(리눅스), 임시 폴더 남지 않음 |
+| 설치한 도구로 STL 을 쓰는 픽스처(`--heavy`) 전체 인덱싱 | 1~5 완료, 실패 TU 0 · 오류 줄 0 |
+| 같은 것에서 `lib/clang/23/include` 를 치움 (대조) | 33/33 TU 실패 (`'stddef.h' file not found`) — 내장 헤더는 꼭 필요하고, 배치가 맞다 |
+| 다시 install | 받지 않음 (`= 있음`) |
+| 해시를 일부러 틀림 | `[실패]`, 아무것도 설치 안 됨 |
+| 네트워크 실패 (닫힌 프록시) | `[실패] URLError`, 종료 1 |
+| clangd 는 `CLANGD` 로 이미 있음 | clangd-indexer 와 헤더만 받음 |
+| Windows zip 두 개 (로컬 사본으로 다운로드만 바꿔 끼움) | 해시 일치, `bin/clangd.exe` · `bin/clangd-indexer.exe` + 헤더 332개, 110.5MB. **실행은 못 해 봤다** |
+| `setup.py <프로젝트>` (온라인) | 1단계에서 도구 설치 → 바로 `index_all.py` 1~5 완료 |
+| `setup.py <프로젝트>` (오프라인) | 도구 단계만 `[실패]`+경고, 프로젝트 세팅까지 계속, 종료 0 |
+| `uninstall` / `--purge` | 기본은 남김(안내), `--purge` 는 설치한 340개 파일만 지우고 사용자가 둔 파일은 남김 |
+
+검증 안 됨: Windows·맥에서 받은 실행 파일 실행, 사내 프록시(PAC 스크립트는 urllib 이 못 읽는다)·TLS 가로채기 환경, ARM CPU (릴리스는 x86-64).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -292,6 +318,7 @@ gq → ue_q → compile_commands.json(없을 때만) → clangd 프로젝트(`--
 - `cindex.py` 속도: RIFF 기본, `--unity N`, `--mode bg` 증분(`cindex_speed.py`) · 웹뷰 계층/트리 그래프·증분 칸·인덱스 해부 (2026-10-06)
 - `index_build.bat` / `index_all.py`: 인덱스 한 번에 만들기 (gq → ue_q → clangd, 단계별 결과) (2026-10-06)
 - 엔진 폴더 지정: `index_all.py --engine-root`, 못 찾으면 묻기, 프로젝트별 저장을 `ue_q.engine_root()` 가 읽음 (2026-10-06)
+- setup 이 clangd 도구 설치: `clangd_tools.py` (23.1.0 고정, SHA-256 대조, 못 찾는 것만, 실패해도 계속) (2026-10-06)
 
 ## 검증 안 된 것
 
