@@ -10,7 +10,7 @@
   ~/.claude/mods/<mod>         하네스 모니터 mod (링크는 링크만 끊는다)
   ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
   ~/.claude/cache/stuck        매몰 카운터 상태
-  ~/.claude/cache/game-harness 하네스 이벤트 로그
+  ~/.claude/cache/game-harness 하네스 이벤트 로그, 프로젝트별로 저장한 엔진 경로(engine_roots.json)
   --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 도 지운다
 
 프로젝트 폴더를 주면:
@@ -238,7 +238,7 @@ def main():
         clean_settings(a.dry_run)
         remove_rules(a.dry_run)
         remove_tree(CLAUDE / "cache" / "stuck", a.dry_run)
-        remove_tree(CLAUDE / "cache" / "game-harness", a.dry_run, " (하네스 이벤트 로그)")
+        remove_tree(CLAUDE / "cache" / "game-harness", a.dry_run, " (하네스 이벤트 로그·저장한 엔진 경로)")
         ue = CLAUDE / "cache" / "ue_index"
         if a.purge:
             remove_tree(ue, a.dry_run)

@@ -20,7 +20,8 @@
   python ue_q.py rg "OnAnimNotify" --module Engine --type h
   python ue_q.py find MetaSound
 
-엔진 루트: env UE_ROOT > <프로젝트>.uproject EngineAssociation + 레지스트리 > C:/Unreal/UE_5.7/Engine
+엔진 루트: env UE_ROOT > 이 프로젝트용으로 저장한 경로 > <프로젝트>.uproject EngineAssociation + 레지스트리 > C:/Unreal/UE_5.7/Engine
+  저장: index_all.py --engine-root <엔진 폴더> (index_build.bat 은 못 찾으면 묻는다) → ~/.claude/cache/game-harness/engine_roots.json
 """
 
 import argparse
@@ -75,14 +76,61 @@ def find_project(start):
     return None
 
 
-@lru_cache(maxsize=None)
+def engine_roots_path():
+    """프로젝트별로 저장한 엔진 경로. 머신마다 다른 값이라 프로젝트 폴더(VCS)가 아니라 홈에 둔다."""
+    return Path.home() / ".claude" / "cache" / "game-harness" / "engine_roots.json"
+
+
+def _project_key(project):
+    return os.path.normcase(str(Path(project).resolve()))
+
+
+def as_engine_dir(text):
+    """사용자가 준 경로 → 엔진 폴더(…/Engine). UE_5.7 과 UE_5.7/Engine 둘 다 받는다. 엔진이 아니면 None.
+    Source 만 보면 프로젝트 폴더도 통과하므로 Source/Runtime 을 본다."""
+    text = (text or "").strip().strip('"').strip()
+    if not text:
+        return None
+    p = Path(text).expanduser()
+    for c in (p, p / "Engine"):
+        if (c / "Source" / "Runtime").is_dir():
+            return c.resolve()
+    return None
+
+
+def _saved_roots():
+    try:
+        data = json.loads(engine_roots_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_engine_root(project, eng):
+    data = _saved_roots()
+    data[_project_key(project)] = str(eng)
+    path = engine_roots_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    engine_source.cache_clear()
+
+
 def engine_root(project):
+    return engine_source(project)[0]
+
+
+@lru_cache(maxsize=None)
+def engine_source(project):
+    """(엔진 폴더, 어디서 찾았나) — 어디서: UE_ROOT · 저장 · 레지스트리 · 기본값."""
     env = os.environ.get("UE_ROOT")
     if env:
         p = Path(env)
         for c in (p, p / "Engine"):
             if (c / "Source").is_dir():
-                return c
+                return c, "UE_ROOT"
+    saved = _saved_roots().get(_project_key(project)) if project else None
+    if saved and (Path(saved) / "Source").is_dir():
+        return Path(saved), "저장"
     try:
         ver = json.loads(uproject(project).read_text(encoding="utf-8"))["EngineAssociation"]
         import winreg
@@ -90,10 +138,10 @@ def engine_root(project):
                             r"SOFTWARE\EpicGames\Unreal Engine\%s" % ver) as k:
             p = Path(winreg.QueryValueEx(k, "InstalledDirectory")[0]) / "Engine"
             if (p / "Source").is_dir():
-                return p
+                return p, "레지스트리"
     except Exception:
         pass
-    return Path(DEFAULT_ENGINE)
+    return Path(DEFAULT_ENGINE), "기본값"
 
 
 # ---------------------------------------------------------------- parsing
@@ -296,7 +344,7 @@ def meta_get(con, key, default=None):
 def cmd_index(project, eng, force, quiet):
     t0 = time.time()
     if not (eng / "Source").is_dir():
-        print("엔진 루트가 아니다: %s (UE_ROOT 로 지정)" % eng, file=sys.stderr)
+        print("엔진 루트가 아니다: %s (index_build.bat --engine-root <엔진 폴더> 로 저장하거나 UE_ROOT 로 지정)" % eng, file=sys.stderr)
         return 1
     con = open_db(project, create=True)
     if force or meta_get(con, "engine_root") not in (None, str(eng)):
@@ -907,9 +955,9 @@ def main():
         assoc = json.loads(uproject(project).read_text(encoding="utf-8")).get("EngineAssociation", "")
     except (OSError, ValueError):
         assoc = ""
-    if re.fullmatch(r"\d+\.\d+", assoc) and ("_%s" % assoc) not in str(eng) and not os.environ.get("UE_ROOT"):
+    if re.fullmatch(r"\d+\.\d+", assoc) and ("_%s" % assoc) not in str(eng) and engine_source(project)[1] not in ("UE_ROOT", "저장"):
         print("[경고] 프로젝트는 UE %s 인데 %s 로 조회한다 (해당 버전 미설치?). "
-              "버전별로 다른 API 는 '확인 필요'로 쓰고, 설치돼 있으면 UE_ROOT 로 지정." % (assoc, eng))
+              "버전별로 다른 API 는 '확인 필요'로 쓰고, 설치돼 있으면 index_build.bat --engine-root 또는 UE_ROOT 로 지정." % (assoc, eng))
         harness_emit("index.engine.warn", "프로젝트 UE %s ≠ 조회 엔진 %s" % (assoc, eng), ok=False, project=project)
 
     if args.command == "index":
