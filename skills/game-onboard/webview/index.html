@@ -542,8 +542,8 @@ async function renderOverview() {
     : [['파일', c.files || c.docs, c.headers ? `헤더 ${fmt(c.headers)}` : (c.docs !== undefined ? '문서' : '')], ['모듈', c.modules, 'Build.cs 기준'], c.assets !== undefined ? ['애셋', c.assets, `태그 ${fmt(c.tags)}`] : ['헤더', c.headers, '선언을 뽑은 헤더']]
   for (const [label, value, note] of kpis) { const v = h('div', { class: 'value' }); box.append(h('div', { class: 'card span-2 kpi' }, h('div', { class: 'label', text: label }), v, h('div', { class: 'note', text: note || '' }))); countUp(v, value || 0) }
   if (clangd) {
-    const st = ov.failed_tu ? h('span', { class: 'status bad' }, h('i', { text: '✕' }), `실패 TU ${ov.failed_tu}`) : h('span', { class: 'status good' }, h('i', { text: '✓' }), '실패 TU 0')
-    box.append(h('div', { class: 'card span-2 kpi' }, h('div', { class: 'label', text: '색인 상태' }), h('div', { style: { marginTop: '8px' } }, st), ov.generated_h ? h('div', { class: 'note', text: `.generated.h 관련 ${ov.generated_h} — UCLASS 누락 가능` }) : h('div', { class: 'note', text: '종료 코드가 아니라 stderr 로 센다' })))
+    const st = ov.failed_tu ? h('span', { class: 'status bad' }, h('i', { text: '✕' }), `오류 있던 TU ${ov.failed_tu}`) : h('span', { class: 'status good' }, h('i', { text: '✓' }), '오류 있던 TU 0')
+    box.append(h('div', { class: 'card span-2 kpi' }, h('div', { class: 'label', text: '색인 상태' }), h('div', { style: { marginTop: '8px' } }, st), ov.generated_h ? h('div', { class: 'note', text: `.generated.h 관련 ${ov.generated_h} — UCLASS 누락 가능` }) : h('div', { class: 'note', text: '오류가 있어도 심볼은 대부분 들어간다' })))
   }
   // 종류
   const kinds = (ov.kinds || []).slice(0, 10).map(([k, n]) => ({ label: k, value: n, color: groupColor(kindGroup(k)) }))
@@ -1369,7 +1369,7 @@ async function renderPipeline() {
   if (isClangd()) box.append(anatomyCard())
   const er = p.errors || {}
   setTimeout(() => layoutCharts(box), 0)
-  if (er.failed_tu || er.count) box.append(card('span-12', `실패 TU ${er.failed_tu || 0} · 오류 줄 ${er.count || 0}`, 'clangd-indexer 는 실패해도 종료 코드 0 — stderr 에서 센 것. 실패한 TU 의 심볼·참조는 빠진다.', h('div', {}, (er.failed_sample || []).map(x => h('div', { class: 'mono' }, h('span', { class: 'status bad' }, h('i', { text: '✕' })), ' ', x)), (er.sample || []).slice(0, 12).map(x => h('div', { class: 'mono muted', text: x })))))
+  if (er.failed_tu || er.count) box.append(card('span-12', `오류 있던 TU ${er.failed_tu || 0} · 오류 줄 ${er.count || 0}`, 'clangd 가 오류를 낸 TU — clangd-indexer 는 종료 코드가 0 이라 stderr 에서, 배경 색인은 샤드의 오류 표시로 센다. 오류가 있어도 심볼은 대부분 들어간다. .generated.h 를 못 찾은 UCLASS 는 클래스 선언·멤버가 빠진다 (.cpp 의 메서드 정의만 남는다).', h('div', {}, (er.failed_sample || []).map(x => h('div', { class: 'mono' }, h('span', { class: 'status bad' }, h('i', { text: '✕' })), ' ', x)), (er.sample || []).slice(0, 12).map(x => h('div', { class: 'mono muted', text: x })))))
 }
 
 // 증분 빌드: 번역 단위 한 칸 = TU(또는 유니티 묶음) 하나. 주황 = 이번에 다시 색인, 파랑 = 샤드 재사용

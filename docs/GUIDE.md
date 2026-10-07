@@ -245,7 +245,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 모듈 지도: 모듈 × 모듈 실제 참조 행렬. Build.cs 에 선언만 하고 안 쓰는 의존, 선언 없이 쓰는 의존을 표시.
 - 파이프라인: 단계별 시간(compile_commands → 무효화 계획 → clangd → sqlite), 증분이면 이번에 다시 색인한 TU 칸과 이유,
   빌드 이력, **인덱스 해부**(clangd 가 심볼 하나에 남기는 Symbol · Refs(종류 비트·Container) · Relations 원본).
-- 검증: 소스별 자체 검사(좌표 정확도·신선도·실패 TU), 정규식 ↔ clangd 대조(타입 재현율·파일/줄/부모 일치), 질의 세트(Acc@1·Acc@5·MRR).
+- 검증: 소스별 자체 검사(좌표 정확도·신선도·오류 있던 TU), 정규식 ↔ clangd 대조(타입 재현율·파일/줄/부모 일치), 질의 세트(Acc@1·Acc@5·MRR).
   기준과 근거: `skills/game-onboard/references/indexing-research.md`.
 - 하네스: 이벤트 로그를 기능별로 모아 보기, 세션 id 필터, 5초 자동 갱신.
 

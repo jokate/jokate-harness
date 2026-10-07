@@ -689,7 +689,7 @@ def _run_indexer(indexer, cdb_file, out_dir, fmt, jobs, extra, flt, tag=""):
         r = subprocess.run(cmd, stdout=o, stderr=e)
     took = time.time() - t0
     errors = summarize_errors(err_path)
-    print(f"clangd-indexer 종료 {r.returncode} [{took:.0f}s] · TU {errors['tus']} · 실패 TU {errors['failed_tu']} · "
+    print(f"clangd-indexer 종료 {r.returncode} [{took:.0f}s] · TU {errors['tus']} · 오류 있던 TU {errors['failed_tu']} · "
           f"오류 줄 {errors['count']}" + (f" · .generated.h 관련 {errors['generated_h']}" if errors["generated_h"] else "")
           + f" (전체: {err_path})")
     return out, took, errors, r.returncode
@@ -894,7 +894,7 @@ def cmd_build(root, kind, a):
     detail = f"{scope} · {info.get('mode', '')} · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']}"
     if info.get("rebuilt") is not None:
         detail += f" · 재색인 {info['rebuilt']}/{info.get('batches') or info.get('tus')}"
-    harness_emit("index.clangd", detail + (f" · 실패 TU {failed}" if failed else ""), ok=not failed, project=root)
+    harness_emit("index.clangd", detail + (f" · 오류 있던 TU {failed}" if failed else ""), ok=not failed, project=root)
     return 0
 
 
@@ -904,7 +904,7 @@ PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\] Processing file")
 
 def summarize_errors(err_path, keep=30):
     """clangd-indexer 는 번역 단위(TU)가 실패해도 종료 코드 0 이다 → stderr 로 판정한다.
-    'Error while processing <파일>' = 실패한 TU. UE 에서 가장 흔한 원인은 .generated.h 누락·낡음(UHT 미실행)이고,
+    'Error while processing <파일>' = 오류가 있던 TU (심볼은 대부분 남는다). UE 에서 가장 흔한 원인은 .generated.h 누락·낡음(UHT 미실행)이고,
     그러면 UCLASS 타입과 그 멤버가 인덱스에서 조용히 빠진다."""
     count, generated, failed, sample, failed_all, tus = 0, 0, 0, [], [], 0
     try:
@@ -1252,7 +1252,7 @@ def cmd_status(ix):
     print(f"인덱스 {ix.path} · {ix.meta.get('generated_at')} · 심볼 {counts.get('symbols')} · 참조 {counts.get('refs')} · "
           f"관계 {counts.get('relations')} · 파일 {counts.get('files')}")
     print(f"출처 {ix.meta.get('source')} · cdb {ix.meta.get('cdb', '-')} · 필터 {ix.meta.get('filter', '-') or '-'} · "
-          f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
+          f"오류 있던 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
           + (f" (.generated.h 관련 {errors.get('generated_h')})" if errors.get("generated_h") else ""))
     stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
              if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
@@ -1469,12 +1469,13 @@ class CindexSource:
         errors = json.loads(ix.meta["errors"]) if ix.meta.get("errors") else None
         if errors is not None:
             bg = errors.get("count") is None
-            out.append({"name": "clangd 실패 TU" if not bg else "clangd 오류 있던 TU (배경 색인)",
-                        "metric": f"실패 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if bg else errors['count']} · "
+            out.append({"name": "clangd 오류 있던 TU" + (" (배경 색인)" if bg else ""),
+                        "metric": f"오류 있던 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if bg else errors['count']} · "
                                   f".generated.h 관련 {'-' if bg else errors.get('generated_h', 0)}",
                         "pass": not errors.get("failed_tu") and errors.get("count") in (0, None),
-                        "why": "clangd-indexer 는 TU 가 실패해도 종료 코드 0 이라 stderr 로 센다. 실패한 TU 의 심볼·참조는 빠진다. "
-                               "UE 에서 .generated.h 누락·낡음(UHT 미실행)이면 UCLASS 타입과 멤버가 통째로 사라진다 — 에디터 빌드 뒤 다시 build.",
+                        "why": "clangd-indexer 는 TU 에 오류가 있어도 종료 코드 0 이라 stderr 로 센다 (배경 색인은 샤드의 오류 표시). "
+                               "오류가 있어도 심볼은 대부분 들어간다. UE 에서 .generated.h 누락·낡음(UHT 미실행)이면 UCLASS 클래스 선언과 멤버가 "
+                               "빠진다 (.cpp 의 메서드 정의만 남는다) — 에디터 빌드 뒤 다시 build.",
                         "samples": errors.get("failed_sample", []) + errors.get("sample", [])})
         n_sym = ix.q("SELECT COUNT(*) FROM symbols")[0][0]
         n_def = ix.q("SELECT COUNT(*) FROM symbols WHERE kind IN ('Class','Struct') AND def_file IS NOT NULL")[0][0]
@@ -1546,7 +1547,7 @@ class CindexSource:
                       ["강제 재색인", f"{incr['invalidated']}" + (" (" + ", ".join(f"{k} {v}" for k, v in incr["reasons"].items()) + ")"
                                                                 if incr["reasons"] else "")],
                       ["바뀐 파일", incr["changed_files"]], ["샤드", incr["shards"]]]
-        facts += [["실패 TU" if not bg else "오류 있던 TU", errors.get("failed_tu", "-")],
+        facts += [["오류 있던 TU", errors.get("failed_tu", "-")],
                   ["출력" if not bg else "샤드 합계", _fmt_bytes(last.get("out_bytes"))],
                   ["형식", m.get("format", "-")], ["필터", m.get("filter") or "-"], ["compile_commands", m.get("cdb", "-")]]
         return {"mode": m.get("mode", m.get("source")), "at": m.get("generated_at"), "stages": stages, "facts": facts,
