@@ -405,13 +405,14 @@ async function boot() {
   $('#sub').textContent = `${INFO.root} · ${INFO.kind || '엔진 미감지'}`
   loadProjects()
   const pills = clear($('#pills'))
-  for (const s of INFO.sources) pills.append(h('span', { class: 'pill' + (s.available ? '' : ' off'), title: s.available ? '' : (s.info.missing || '') }, h('i', { class: 'dot' }), s.label))
+  // aux = 합친 clangd 소스에 들어간 범위별 clangd (정규식↔clangd 대조·질의 세트용) — 목록·표시에는 합친 것 하나만
+  for (const s of INFO.sources.filter(s => !s.aux)) pills.append(h('span', { class: 'pill' + (s.available ? '' : ' off'), title: s.available ? (s.info.note || '') : (s.info.missing || '') }, h('i', { class: 'dot' }), s.label))
   pills.append(h('span', { class: 'pill' + (INFO.harness.available ? '' : ' off') }, h('i', { class: 'dot' }), '하네스 로그'))
-  const avail = INFO.sources.filter(s => s.available)
+  const avail = INFO.sources.filter(s => s.available && !s.aux)
   const sel = clear($('#src'))
   for (const s of avail) sel.append(h('option', { value: s.name, text: s.label }))
   if (!avail.length) sel.append(h('option', { value: '', text: '(인덱스 없음)' }))
-  SRC = (avail.find(s => s.name === 'clangd-project') || avail.find(s => s.engine === 'clangd') || avail[0] || {}).name
+  SRC = (avail.find(s => s.name === 'clangd') || avail.find(s => s.engine === 'clangd') || avail[0] || {}).name
   sel.value = SRC || ''
   sel.onchange = () => { SRC = sel.value; refresh() }
   const pair = clear($('#vpair'))
@@ -533,7 +534,8 @@ async function renderOverview() {
   const fig = h('div', { class: 'card span-4 hero-fig' },
     h('div', { class: 'ink2', text: srcInfo().label }),
     h('div', {}, h('div', { class: 'big', id: 'bigfig' }), h('div', { class: 'ink2', text: '심볼' })),
-    h('div', { class: 'muted', text: `빌드 ${ov.build && ov.build.at || '–'}` }))
+    h('div', { class: 'muted', text: `빌드 ${ov.build && ov.build.at || '–'}` + (ov.build && ov.build.engine_at ? ` · 엔진 ${ov.build.engine_at}` : '') }),
+    ov.note ? h('div', { class: 'note', text: ov.note }) : null)
   box.append(fig); countUp(fig.querySelector('#bigfig'), c.symbols || 0)
   const kpis = clangd
     ? [['참조', c.refs, '어디서 쓰나 · 누가 부르나'], ['관계', c.relations, `상속 ${fmt(ov.relations.BaseOf)} · 재정의 ${fmt(ov.relations.OverriddenBy)}`], ['파일', c.files, `모듈 ${fmt((ov.modules || []).length)}`]]
@@ -1462,7 +1464,7 @@ function checksCard(span, title, desc, checks) {
 }
 $('#vself').onclick = async () => {
   const box = clear($('#vout'))
-  for (const s of INFO.sources.filter(s => s.available)) {
+  for (const s of INFO.sources.filter(s => s.available && !s.aux)) {
     const holder = h('div', { class: 'card span-6 empty', text: s.label + ' 검사 중…' }); box.append(holder)
     api('checks', { src: s.name }).then(r => holder.replaceWith(checksCard('span-6', s.label, '자체 검사', r.checks))).catch(e => { holder.className = 'card span-6 err'; holder.textContent = e.message })
   }
