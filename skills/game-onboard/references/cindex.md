@@ -149,7 +149,7 @@ clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트�
 | 멤버와 선언 줄 원문 | `cindex.py members <클래스>` |
 | 바꾸면 같이 볼 곳 (파생·재정의 전 단계, 참조 함수, 파일·모듈 — 타입이면 멤버 호출·사용 포함) | `cindex.py impact <이름>` |
 | 파일에 선언된 심볼 | `cindex.py file <경로 조각>` |
-| 상태·신선도·실패 TU | `cindex.py status` |
+| 상태·신선도·오류 있던 TU | `cindex.py status` |
 
 - `[E]` 가 붙은 경로는 엔진 루트 기준, 없는 것은 프로젝트 루트 기준.
 - 같은 이름이 여럿이면 첫 후보를 쓰고 `# 같은 이름 후보 N개 더` 를 붙인다 → `A::B` 로 좁힌다.
@@ -161,15 +161,17 @@ clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트�
 
 `cindex.py eval` (또는 웹뷰 검증 탭). 기준은 [indexing-research.md](indexing-research.md) 4절.
 
-- **자체 검사**: 좌표가 열까지 맞는가(표본 300), 파일 신선도, 실패 TU, Container 가 기록됐는가.
+- **자체 검사**: 좌표가 열까지 맞는가(표본 300), 파일 신선도, 오류 있던 TU, Container 가 기록됐는가.
 - **정규식 ↔ clangd 대조**: clangd(컴파일러)를 정답으로 정규식 인덱스의 타입 재현율, 파일·줄 일치, 부모 클래스 일치, 오탐 후보.
 - **질의 세트**: `<루트>/.claude/index_eval.json` 의 `{"queries": [{"q", "expect", "root"}]}` 로 Acc@1·Acc@5·MRR.
   파일이 없으면 clangd 정의 위치로 자동 생성하고, 정답을 낸 소스는 채점에서 뺀다.
 
 ## 6. 함정
 
-1. **종료 코드 0 이어도 실패할 수 있다.** TU 가 실패해도 0 이다 → `build` 가 stderr 의 `Error while processing` 을 세어 "실패 TU" 로 낸다.
-2. **`.generated.h` 누락·낡음이면 UCLASS 타입과 멤버가 조용히 빠진다** (`FID_…_PROLOG` 미정의). 에디터 빌드(UHT) 한 번 뒤 다시 build. `build` 가 경고한다.
+1. **종료 코드 0 이어도 오류가 있을 수 있다.** TU 에 오류가 있어도 0 이다 → `build` 가 stderr 의 `Error while processing` 을 세어
+   "오류 있던 TU" 로 낸다 (배경 색인은 샤드의 오류 표시로 센다). 오류가 있어도 심볼은 대부분 들어간다 — include 를 못 찾아도 그 뒤 선언까지
+   색인된다. 예외는 2번: UE 매크로 구조에서 `.generated.h` 가 없으면 UCLASS 클래스 선언과 멤버가 빠진다 (시험, 2026-10-07).
+2. **`.generated.h` 누락·낡음이면 UCLASS 타입과 멤버가 조용히 빠진다** (`FID_…_PROLOG` 미정의 — .cpp 의 메서드 정의만 남는다). 에디터 빌드(UHT) 한 번 뒤 다시 build. `build` 가 경고한다.
 3. **멤버 시그니처는 기록되지 않는다** — clangd 는 클래스 멤버에 Signature·ReturnType 을 저장하지 않는다. `members` 는 선언 줄 원문을, 시그니처는 `ue_q.py api` 를 쓴다.
 4. **Call 비트는 "호출"이 아니다** — 함수류 심볼에 대한 모든 참조(선언, `&Fn` 포함)에 붙는다. callers/callees 는 Reference 비트 + 참조의 Container 로 계산한 **근사 호출 그래프**다. 호출 관계(relation)는 clangd 에 없다.
 5. 기록되지 않는 것: 지역 변수, 매크로 심볼 자체. cpp 안의 `static`·익명 namespace 함수에 대한 참조는 indexer 모드에서 빠지고 bg 모드에는 있다 (배경 색인은 CollectMainFileRefs 를 켠다).
@@ -187,7 +189,7 @@ clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트�
 |---|---|
 | clangd-indexer 23.1.0(리눅스)로 가짜 UE 구조(엔진·프로젝트·UCLASS 매크로) 색인 → 적재 → 모든 조회 명령 | 검증됨 (이 저장소 작성 환경) |
 | 표준 라이브러리 YAML 파서 = PyYAML (실험 YAML 5종, 문서 5,013개, concept 버그 줄 제외 불일치 0) | 검증됨 |
-| 실패 TU·`.generated.h` 누락 감지 | 검증됨 (가짜 프로젝트) |
+| 오류 있던 TU·`.generated.h` 누락 감지 | 검증됨 (가짜 프로젝트) |
 | 실제 UE 5.x 엔진·프로젝트, Windows, `cindex.py cdb`(UBT) | **검증 안 됨** |
 | 실제 UE 규모의 색인 시간·메모리 | **검증 안 됨** (실험 기준 무거운 TU 약 1.2초/코어) |
 | RIFF 리더 = YAML 적재 (concept 버그 외 심볼·참조·관계 일치), 옛 YAML 적재 코드와 새 코드 결과 동일 | 검증됨 (합성 175 TU) |

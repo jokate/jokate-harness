@@ -409,6 +409,20 @@ include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리
 | 엔진 인덱스 없음 (런처 설치 흉내) | "clangd · 프로젝트", 안내 문구, 개요 = 프로젝트 인덱스 |
 | 헤드리스 Chromium | 선택 목록 3개(정규식 둘 + clangd), 기본 clangd, 개요에 합침 안내, BeginPlay 25행, JS 오류 없음 (파비콘 404 만) |
 
+## 2026-10-07 (2) — "실패 TU" → "오류 있던 TU"
+
+요청에 따라 표시를 바꿨다 (웹뷰 개요·파이프라인·자체 검사, `cindex.py build`·`status` 출력, 하네스 이벤트). 내부 키 `failed_tu` 는 기존 인덱스와 맞추려고 그대로.
+근거 시험 (리눅스, clangd-indexer·배경 색인 둘 다):
+
+| TU 안의 오류 | 오류 뒤 선언 |
+|---|---|
+| 모르는 타입 (`UnknownTypeX ZzBroken;`) | 색인됨 (`ZzAfterError`) |
+| include 못 찾음 (`#include "NoSuchHeader.generated.h"`) | 색인됨 (`ZzAfterFatal`) — "fatal error" 여도 파싱을 이어 간다 |
+| UE 매크로 구조(`UCLASS()`·`GENERATED_BODY()` → `CURRENT_FILE_ID_줄_PROLOG`)에서 `.generated.h` 없음 | 클래스 선언·필드 빠짐, .cpp 의 메서드 정의만 남음 (생성 헤더가 있으면 셋 다 색인) |
+
+그래서 "실패"가 아니라 "오류가 있던" TU 다 — 심볼은 대부분 들어가고, 빠지는 것은 생성 헤더가 없는 UCLASS 다.
+이전 대화에서 "include 를 못 찾으면 그 지점에서 파싱이 멈춘다"고 설명한 것은 틀렸다 (결과로 UCLASS 가 빠지는 것은 맞다).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -426,6 +440,7 @@ include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리
 - `cindex.py cdb`: Win64 에서 `-Compiler=Default` — UBT 가 Clang 구성 요소를 요구하지 않게 (2026-10-06)
 - `cindex.py cdb`: UBT 가 실패하면 UHT 를 건너뛰고(`-NoExecCodeGenActions`) 다시 (2026-10-06)
 - 웹뷰: clangd 프로젝트+엔진을 한 소스로 (MultiIndex, 개요는 겹친 심볼 한 번만) (2026-10-07)
+- "실패 TU" 표시를 "오류 있던 TU" 로 (오류가 있어도 심볼은 대부분 남는다 — 시험) (2026-10-07)
 
 ## 검증 안 된 것
 
