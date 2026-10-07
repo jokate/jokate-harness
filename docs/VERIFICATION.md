@@ -423,6 +423,33 @@ include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리
 그래서 "실패"가 아니라 "오류가 있던" TU 다 — 심볼은 대부분 들어가고, 빠지는 것은 생성 헤더가 없는 UCLASS 다.
 이전 대화에서 "include 를 못 찾으면 그 지점에서 파싱이 멈춘다"고 설명한 것은 틀렸다 (결과로 UCLASS 가 빠지는 것은 맞다).
 
+## 2026-10-07 (3) — 그림이 `flowchart LR`·`subgraph …` 글자로 보임
+
+보고: 하네스 답변의 그림이 그려지지 않고 mermaid 원문으로 보인다. 원문이 보이는 곳은 둘이다.
+1. **Claude Code 대화창** — mermaid 를 그리지 않는다. game-architecture 는 "저장 → render.py --open" 을 규칙으로 두었지만 모델이 지켜야 동작하고, 그 스킬 밖 답변에는 없다.
+2. **render.py 가 만든 HTML** — marked·mermaid 를 CDN(jsdelivr)에서만 불렀다. CDN 이 막히면 원문 Markdown 을 그대로 보인다.
+   헤드리스 Chromium 에서 외부 요청을 막고 이전 render.py 출력을 열어 보니 `flowchart LR` · `subgraph trig["트리거"]` 가 글자로 나왔다 (재현).
+
+고친 것:
+- `scripts/vendor/` 에 mermaid 11.17.2 · marked 12.0.2 동봉 (npm 레지스트리 tarball, integrity 대조, SHA-256 은 vendor/README.md). HTML 은 동봉 파일 → 못 읽으면 CDN.
+- Stop 훅 `diagram_view.py`: 답변(`last_assistant_message`, 없으면 트랜스크립트)에 mermaid 블록이 있으면 `.md`·`.html` 로 저장하고 연다.
+  게임 프로젝트면 `Saved/ClaudeArch`(Unity `Library/ClaudeArch`), 아니면 `~/.claude/cache/game-harness/diagrams`. 같은 내용은 다시 열지 않는다. 이벤트 `diagram.render`.
+- `run_evals.py` 는 `GAME_HARNESS_NO_OPEN=1` 로 돌려 케이스마다 브라우저가 뜨지 않게.
+
+시험 (리눅스, 헤드리스 Chromium, file:// 외 요청 전부 차단):
+
+| 확인 | 결과 |
+|---|---|
+| 새 render: `flowchart LR`+subgraph · `graph TD`+subgraph+classDef · `sequenceDiagram` | SVG 3/3, 구문 오류 0, 외부 요청 0, JS 오류 0 |
+| 이전 render (CDN 만) | SVG 0, 원문 표시 — 보고된 화면과 같다 |
+| 동봉 파일 없음 | CDN 두 개를 시도함(차단돼 원문 표시). CDN 이 열린 망에서 그려지는지는 이 환경에서 못 봄 |
+| 훅: UE 프로젝트 하위 cwd / 그 밖 / 그림 없음 / 같은 답 두 번 | `Saved/ClaudeArch` / 캐시 폴더 / 아무것도 안 함 / 두 번째는 건너뜀 |
+| 훅: `last_assistant_message` 없음 → 트랜스크립트 | 마지막 사용자 입력 뒤 assistant 텍스트만 (tool_result 는 건너뜀), 이전 턴 그림은 안 잡음 |
+| 훅: 빈 입력 · 깨진 JSON · 브라우저 없음 | 종료 0 · 종료 0 · "열지 못했다 … 직접 연다" 메시지 |
+| 훅: 프로젝트 폴더에 못 씀 (`Saved` 가 파일) | 캐시 폴더에 저장, 같은 답 두 번째는 건너뜀 |
+| install `--apply-settings` / uninstall | Stop 에 등록(사용자 Stop 훅 유지) / 우리 것만 해제 |
+| 모니터 mod | `claude plugin validate` 통과, 테스트 5/5 (라벨 `그림 렌더 (브라우저)`) |
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -441,6 +468,7 @@ include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리
 - `cindex.py cdb`: UBT 가 실패하면 UHT 를 건너뛰고(`-NoExecCodeGenActions`) 다시 (2026-10-06)
 - 웹뷰: clangd 프로젝트+엔진을 한 소스로 (MultiIndex, 개요는 겹친 심볼 한 번만) (2026-10-07)
 - "실패 TU" 표시를 "오류 있던 TU" 로 (오류가 있어도 심볼은 대부분 남는다 — 시험) (2026-10-07)
+- 그림: mermaid·marked 동봉(설치 불필요) + Stop 훅 `diagram_view.py` 가 답변 속 mermaid 를 HTML 로 열기 (2026-10-07)
 
 ## 검증 안 된 것
 
@@ -448,4 +476,5 @@ include 경로는 마지막 에디터 빌드가 만든 `.generated.h` 를 가리
 - 실제 Unity 프로젝트 (가짜 프로젝트로만)
 - 대화형 세션 — 평가는 전부 헤드리스(`claude -p`)였다. 대화형에서는 권한 프롬프트가 뜨는 점이 다르다
 - 대화형 세션에서 PowerShell 도구로 한글 인자 명령이 파싱 실패하는지 (헤드리스에서만 관찰)
+- `diagram_view.py` 를 실제 Claude Code 세션의 Stop 에서 — 문서의 입력 형식대로 만든 stdin 으로만 시험했다. Windows 의 `os.startfile` 열기도 미확인
 - 평가 케이스가 MNYS 1인 개발자 문맥에 치우쳐 있다 — 팀 프로젝트의 커밋 습관에서 변경 이력 신호가 어떻게 나오는지 모름

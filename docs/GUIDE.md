@@ -208,6 +208,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
 | 매몰을 놓쳤다 / 경고가 너무 잦다 | `stuck_watch.py` 의 `SIGNALS` 에 신호 한 줄, 임계값은 프로젝트 `.claude/stuck_watch.json` |
 | HandOff 가 틀리거나 빠뜨림 | `handoff.py` 의 `INSTRUCTION` (형식), `extract` (무엇을 넘기나) |
+| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — Stop 훅 `diagram_view.py` 가 HTML 로 열어 준다 (setup.bat 다시). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
 | 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `run_evals.py` |
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.
