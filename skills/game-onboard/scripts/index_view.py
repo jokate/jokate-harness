@@ -508,7 +508,8 @@ class App:
     def info(self):
         return {"root": str(self.root), "kind": self.kind,
                 "sources": [{"name": s.name, "label": s.label, "engine": s.engine, "available": s.available,
-                             "modes": getattr(s, "modes", []), "info": s.info()} for s in self.sources.values()],
+                             "aux": getattr(s, "aux", False), "modes": getattr(s, "modes", []), "info": s.info()}
+                            for s in self.sources.values()],
                 "harness": {"available": self.events is not None,
                             "log": str(self.events.log_path()) if self.events else None},
                 "compare": cindex.compare_pairs(self.sources) if cindex is not None else []}

@@ -987,6 +987,9 @@ class Index:
             out[sid] = s
         return out
 
+    def ref_count(self, sid):
+        return self.q("SELECT COUNT(*) FROM refs WHERE sym=?", (sid,))[0][0]
+
     def refs(self, sid, mask=None, limit=500):
         rows = self.q("SELECT r.kind, f.rel, f.root, r.line, r.col, r.container, f.path, f.module FROM refs r "
                       "LEFT JOIN files f ON f.id=r.file WHERE r.sym=? AND (? = 0 OR (r.kind & ?) != 0) "
@@ -1092,6 +1095,9 @@ class MultiIndex:
                     out.append(r)
         out.sort(key=lambda r: (r["path"], r["line"] or 0))
         return out[:limit]
+
+    def ref_count(self, sid):
+        return len(self.refs(sid, None, 10_000_000))
 
     def callers(self, sid):
         n = {}
@@ -1374,7 +1380,7 @@ class CindexSource:
             rel["호출하는 쪽 (참조 Container)"] = [self._out(x) for x, _ in self.ix.callers(sid) if x][:60]
             rel["부르는 함수"] = [self._out(x) for x, _ in self.ix.callees(sid) if x][:60]
         refs = self.ix.refs(sid, None, 60)
-        s["ref_rows"] = self.ix.q("SELECT COUNT(*) FROM refs WHERE sym=?", (sid,))[0][0]
+        s["ref_rows"] = self.ix.ref_count(sid)
         rel["참조 위치"] = [{"id": sid, "src": self.name, "name": f"{'정의' if r['kind'] & DEF else '선언' if r['kind'] & DECL else '참조'}",
                           "path": r["path"], "line": r["line"]} for r in refs]
         s["relations"] = rel
@@ -1405,12 +1411,19 @@ class CindexSource:
         return bfs_graph(starts, nb, lambda i: sym(i)["scope"] + sym(i)["name"], lambda i: sym(i)["kind"], depth,
                          lambda i: {"module": sym(i).get("module"), "path": sym(i).get("path"), "line": sym(i).get("line")})
 
-    def _module_graph(self, focus, depth):
-        """실제 참조로 본 모듈 의존: 모듈 A 파일의 참조가 모듈 B 에 선언된 심볼을 가리키면 A → B."""
-        rows = self.ix.q("SELECT rf.module, df.module, COUNT(*) FROM refs r JOIN files rf ON rf.id=r.file "
+    def _module_edges(self):
+        """[(참조한 모듈, 선언된 모듈, 참조 수)] — 실제 참조로 본 모듈 의존."""
+        return self.ix.q("SELECT rf.module, df.module, COUNT(*) FROM refs r JOIN files rf ON rf.id=r.file "
                          "JOIN symbols s ON s.id=r.sym JOIN files df ON df.id=s.decl_file "
                          "WHERE rf.module != '' AND df.module != '' AND rf.module != df.module "
                          "AND (r.kind & ?) != 0 GROUP BY rf.module, df.module", (REF,))
+
+    def _module_roots(self):
+        return dict(self.ix.q("SELECT module, root FROM files WHERE module != '' GROUP BY module"))
+
+    def _module_graph(self, focus, depth):
+        """실제 참조로 본 모듈 의존: 모듈 A 파일의 참조가 모듈 B 에 선언된 심볼을 가리키면 A → B."""
+        rows = self._module_edges()
         edges = {}
         for a, b, n in rows:
             edges.setdefault(a, []).append((b, n))
@@ -1588,10 +1601,7 @@ class CindexSource:
         return {}
 
     def matrix(self, focus, limit, declared=None):
-        rows = self.ix.q("SELECT rf.module, df.module, COUNT(*) FROM refs r JOIN files rf ON rf.id=r.file "
-                         "JOIN symbols s ON s.id=r.sym JOIN files df ON df.id=s.decl_file "
-                         "WHERE rf.module != '' AND df.module != '' AND rf.module != df.module "
-                         "AND (r.kind & ?) != 0 GROUP BY rf.module, df.module", (REF,))
+        rows = self._module_edges()
         weight = {}
         for a, b, n in rows:
             weight[a] = weight.get(a, 0) + n
@@ -1613,7 +1623,7 @@ class CindexSource:
             for b, kind in deps.items():
                 if a in idx and b in idx and (idx[a], idx[b]) not in cells:
                     cells[(idx[a], idx[b])] = [idx[a], idx[b], 0, kind]
-        roots = dict(self.ix.q("SELECT module, root FROM files WHERE module != '' GROUP BY module"))
+        roots = self._module_roots()
         return {"modules": [{"name": n, "size": weight.get(n, 0), "group": roots.get(n, "")} for n in chosen],
                 "cells": list(cells.values()), "measure": "refs", "has_declared": bool(declared)}
 
@@ -1651,6 +1661,132 @@ class CindexSource:
                 "modules": [{"name": k, "disk": v[0], "indexed": v[1], "missing_sample": v[2]} for k, v in mods[:200]]}
 
 
+
+class MergedCindexSource(CindexSource):
+    """웹뷰에서 clangd 를 하나로 본다 — 프로젝트 + 엔진 인덱스 (명령줄 기본과 같은 MultiIndex: 심볼 ID 로 합치고 참조는 위치로 중복 제거).
+    검색·상세·참조·그래프·모듈 행렬은 합친 인덱스로, 개요는 겹치는 심볼을 ID 로 한 번만 센다.
+    파이프라인·해부·커버리지·자체 검사는 인덱스마다 다른 것이라 각 인덱스 결과를 묶어 보인다 (개별 소스는 aux 로 남아 대조에 쓰인다)."""
+
+    def __init__(self, parts):
+        self.parts = [p for p in parts if p.available]
+        self.name = "clangd"
+        self.scope = "all"
+        self.covers = {"engine", "project"}
+        self.db = None
+        self.available = bool(self.parts)
+        names = {"project": "프로젝트", "engine": "엔진"}
+        self.label = "clangd · " + ("+".join(names[p.scope] for p in self.parts) if self.parts else "프로젝트+엔진") + " (cindex)"
+        self.ix = (MultiIndex([p.ix for p in self.parts]) if len(self.parts) > 1 else self.parts[0].ix) if self.parts else None
+        self._ov = None
+
+    def _part(self, scope):
+        return next((p for p in self.parts if p.scope == scope), None)
+
+    def info(self):
+        if not self.available:
+            return {"missing": "clangd 인덱스 없음 — `cindex.py build` (index_build.bat)"}
+        out = {"parts": {p.scope: p.info() for p in self.parts}, "db": " + ".join(str(p.db) for p in self.parts)}
+        if not self._part("engine"):
+            out["note"] = "엔진 clangd 인덱스 없음 — 프로젝트 인덱스에 든 엔진 헤더 심볼만 보인다 (런처 설치 엔진은 엔진 TU 가 없다)"
+        return out
+
+    def _module_edges(self):
+        if len(self.parts) == 1:
+            return self.parts[0]._module_edges()
+        n = {}
+        for p in self.parts:
+            for a, b, c in p._module_edges():
+                n[(a, b)] = n.get((a, b), 0) + c
+        return [(a, b, c) for (a, b), c in n.items()]
+
+    def _module_roots(self):
+        out = {}
+        for p in self.parts:
+            for m, r in p._module_roots().items():
+                out.setdefault(m, r)
+        return out
+
+    def overview(self):
+        if len(self.parts) == 1:
+            return self.parts[0].overview()
+        if self._ov is None:
+            self._ov = self._merged_overview()
+        return self._ov
+
+    def _merged_overview(self):
+        """두 인덱스를 합친 개요. 심볼·관계·파일은 ID·경로로 겹친 것을 한 번만 센다 (엔진 헤더 심볼은 양쪽에 있다).
+        참조는 두 인덱스의 합이다 — 엔진 헤더 안의 참조는 겹쳐 셀 수 있다 (위치로 빼려면 참조 전체를 읽어야 해서 개요에서는 하지 않는다)."""
+        proj, eng = self._part("project"), self._part("engine")
+        ovs = {p.scope: p.overview() for p in self.parts}
+        con = sqlite3.connect(f"file:{Path(proj.db).as_posix()}?mode=ro", uri=True)
+        try:
+            con.execute("ATTACH DATABASE ? AS e", (f"file:{Path(eng.db).as_posix()}?mode=ro",))
+            kinds = con.execute("SELECT kind, COUNT(*) FROM (SELECT id, kind FROM main.symbols UNION SELECT id, kind FROM e.symbols) "
+                                "GROUP BY kind ORDER BY 2 DESC").fetchall()
+            rel = dict(con.execute("SELECT predicate, COUNT(*) FROM (SELECT subject, predicate, object FROM main.relations "
+                                   "UNION SELECT subject, predicate, object FROM e.relations) GROUP BY predicate").fetchall())
+            n_files = con.execute("SELECT COUNT(*) FROM (SELECT path FROM main.files UNION SELECT path FROM e.files)").fetchone()[0]
+        finally:
+            con.close()
+        refs = sum((o["counts"] or {}).get("refs", 0) or 0 for o in ovs.values())
+        mods = {}
+        for o in ovs.values():
+            for m in o["modules"]:
+                k = (m["name"], m["group"])
+                cur = mods.get(k)
+                if cur is None:
+                    mods[k] = dict(m)
+                else:  # 엔진 모듈은 엔진 인덱스가 더 많이 본다 — 큰 쪽을 쓰고 참조는 더한다
+                    cur["symbols"], cur["files"] = max(cur["symbols"], m["symbols"]), max(cur["files"], m["files"])
+                    cur["refs"] = cur.get("refs", 0) + m.get("refs", 0)
+        rk = {}
+        for o in ovs.values():
+            for k, v in (o.get("ref_kinds") or {}).items():
+                rk[k] = rk.get(k, 0) + (v or 0)
+        pb, eb = ovs["project"]["build"], ovs["engine"]["build"]
+        return {"counts": {"symbols": sum(n for _, n in kinds), "refs": refs, "relations": sum(rel.values()), "files": n_files},
+                "kinds": kinds, "modules": sorted(mods.values(), key=lambda m: -m["symbols"])[:400],
+                "relations": {"BaseOf": rel.get(BASE_OF, 0), "OverriddenBy": rel.get(OVERRIDDEN_BY, 0)},
+                "ref_kinds": rk, "failed_tu": sum(o.get("failed_tu") or 0 for o in ovs.values()),
+                "generated_h": sum(o.get("generated_h") or 0 for o in ovs.values()),
+                "build": {"at": pb.get("at"), "mode": f"프로젝트 {pb.get('mode') or '-'} · 엔진 {eb.get('mode') or '-'}",
+                          "tus": (pb.get("tus") or 0) + (eb.get("tus") or 0) if (pb.get("tus") or eb.get("tus")) else None,
+                          "engine_at": eb.get("at")},
+                "note": "프로젝트+엔진 합침 — 심볼·관계·파일은 겹친 것을 한 번만, 참조는 두 인덱스의 합 (엔진 헤더 안 참조는 겹쳐 셀 수 있다)"}
+
+    def pipeline(self):
+        """파이프라인은 인덱스마다 다르다 — 자주 바뀌는 프로젝트 인덱스를 보이고 엔진 인덱스는 사실 줄로 붙인다."""
+        main = self._part("project") or self.parts[0]
+        out = main.pipeline()
+        for p in self.parts:
+            if p is not main:
+                m = p.ix.meta
+                out["facts"] = out["facts"] + [[f"{'엔진' if p.scope == 'engine' else '프로젝트'} 인덱스",
+                                                 f"{m.get('generated_at', '-')} · {m.get('mode', m.get('source', '-'))} · TU {m.get('tus', '-')}"]]
+        out["mode"] = f"{'프로젝트' if main.scope == 'project' else '엔진'} 인덱스 기준 — " + str(out.get("mode") or "")
+        return out
+
+    def anatomy(self, name=None):
+        """심볼이 있는 인덱스의 원본 레코드 (이름이 없으면 프로젝트 인덱스에서 고른다)."""
+        for p in sorted(self.parts, key=lambda p: p.scope != "project"):
+            a = p.anatomy(name)
+            if a:
+                a["index"] = "프로젝트" if p.scope == "project" else "엔진"
+                return a
+        return None
+
+    def coverage(self):
+        outs = [p.coverage() for p in self.parts]
+        return {"root": " + ".join(o.get("root", "") for o in outs if o.get("root")),
+                "total": sum(o.get("total", 0) for o in outs), "indexed": sum(o.get("indexed", 0) for o in outs),
+                "modules": sorted((m for o in outs for m in o.get("modules", [])), key=lambda m: -m["disk"])[:200]}
+
+    def checks(self):
+        out = []
+        for p in self.parts:
+            out += [dict(c, name=f"[{'프로젝트' if p.scope == 'project' else '엔진'}] {c['name']}") for c in p.checks()]
+        return out
+
 def _fmt_bytes(n):
     if not n:
         return "-"
@@ -1661,10 +1797,13 @@ def _fmt_bytes(n):
 
 
 def view_sources(root, kind):
-    out = [CindexSource("project", db_for("project", root, kind))]
+    """웹뷰 소스: 합친 clangd 하나 + 범위별 clangd (aux — 선택 목록에는 안 보이고 정규식↔clangd 대조·질의 세트에 쓰인다)."""
+    parts = [CindexSource("project", db_for("project", root, kind))]
     if kind == "ue":
-        out.append(CindexSource("engine", db_for("engine", root, kind)))
-    return out
+        parts.append(CindexSource("engine", db_for("engine", root, kind)))
+    for p in parts:
+        p.aux = True
+    return [MergedCindexSource(parts)] + parts
 
 
 # ---------------------------------------------------------------- 검증: 정규식 ↔ clangd, 질의 세트
@@ -1763,7 +1902,7 @@ def run_queryset(sources, root, n_auto=200):
         note = f"질의 세트: {spec_path} ({len(queries)}개)"
     else:
         oracle = next((s for s in sources.values() if s.engine == "clangd" and s.available and s.scope == "project"), None) \
-            or next((s for s in sources.values() if s.engine == "clangd" and s.available), None)
+            or next((s for s in sources.values() if s.engine == "clangd" and s.available and not hasattr(s, "parts")), None)
         if oracle is None:
             return {"note": f"{spec_path} 도 clangd 인덱스도 없어 질의 세트를 만들 수 없다.", "summary": [], "results": []}
         rows = oracle.ix.q("SELECT s.name, df.rel, df.root FROM symbols s JOIN files df ON df.id=s.def_file WHERE s.kind IN "
@@ -1773,7 +1912,9 @@ def run_queryset(sources, root, n_auto=200):
         note = (f"{spec_path} 가 없어 {oracle.label} 의 정의 위치로 질의 {len(queries)}개를 자동 생성했다 (이름 → 정의 파일). "
                 f"정답을 낸 소스는 채점에서 뺐다. 요청→수정 파일 같은 실제 과제 세트는 이 파일에 적는다: "
                 f'{{"queries": [{{"q": "…", "expect": "경로 조각", "root": "engine|project(생략 가능)"}}]}}')
-    names = [s.name for s in sources.values() if s.available and hasattr(s, "search") and s is not oracle]
+    # 정답을 낸 인덱스를 품은 합친 소스도 빼야 자기 채점이 아니다
+    names = [s.name for s in sources.values() if s.available and hasattr(s, "search") and s is not oracle
+             and oracle not in getattr(s, "parts", ())]
     results, stats = [], {n: [] for n in names}
     for q, expect, qroot in queries:
         ranks = {}
