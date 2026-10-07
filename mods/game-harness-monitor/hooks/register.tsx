@@ -24,6 +24,7 @@ const LABELS: Record<string, string> = {
   'stuck.warn': '매몰 경고',
   'mcp.guard': 'MCP 가드 경고',
   'mcp.call': 'MCP 호출 기록',
+  'diagram.render': '그림 렌더 (브라우저)',
 }
 
 const PREFIXES: [string, string][] = [

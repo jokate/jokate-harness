@@ -32,7 +32,7 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "handoff.py", "stuck_watch.py",
-         "harness_trace.py"]
+         "harness_trace.py", "diagram_view.py"]
 LIBS = ["harness_events.py"]  # 훅이 import 하는 모듈. settings 에는 등록하지 않는다
 PLUGIN_DIRS_ENV = "CLAUDE_CODE_PLUGIN_DIRS"
 
@@ -176,6 +176,7 @@ def settings_snippet():
         "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
                                {"matcher": "Bash|PowerShell", "hooks": [stuck]},
                                {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
+        "Stop": [{"hooks": [cmd("diagram_view.py", 30)]}],
     }}
 
 

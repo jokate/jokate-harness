@@ -44,6 +44,7 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 | PreToolUse `mcp__.*` | `mcp_guard.py` | `.claude/mcp_guards.json` (없으면 아무것도 안 함) |
 | PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl` |
 | PostToolUse(+Failure) `Skill\|Bash\|PowerShell` | `harness_trace.py` | 없음 — game-* 스킬·하네스 조회 스크립트 호출을 `~/.claude/cache/game-harness/events.jsonl` 에 기록 |
+| Stop | `diagram_view.py` | 없음 — 답변에 mermaid 블록이 있으면 HTML 로 렌더해 브라우저로 연다 (대화창은 mermaid 를 그리지 않는다) |
 
 훅들은 `harness_events.py`(같은 폴더)로 "어떤 기능이 동작했는가"를 남긴다. 그 로그를 모니터 mod(`mods/game-harness-monitor`)와 인덱스 웹뷰 하네스 탭이 읽는다.
 

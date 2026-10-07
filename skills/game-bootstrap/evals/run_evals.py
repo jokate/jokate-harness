@@ -56,7 +56,8 @@ def run_case(case, args_base, out):
     cmd = (["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose"] + args_base
            + [os.path.expanduser(x) for x in case.get("extra_args", [])])
     with open(log, "w", encoding="utf-8") as f:
-        subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"))
+        subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"),
+                       env={**os.environ, "GAME_HARNESS_NO_OPEN": "1"})  # 그림 훅이 케이스마다 브라우저를 열지 않게
     return log
 
 

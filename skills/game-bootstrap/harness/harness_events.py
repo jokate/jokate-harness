@@ -5,7 +5,7 @@
         "feature": "skill.game-onboard" 같은 기능 id, "ok": true/false, "detail": 짧은 설명, "source": 남긴 파일}
 읽는 쪽: game-harness-monitor mod(상태줄·토스트·패널), 인덱스 웹뷰의 하네스 탭.
 
-기능 id 는 "<층>.<이름>" 이다. 층: context · session_start · index · handoff · stuck · mcp · skill · script.
+기능 id 는 "<층>.<이름>" 이다. 층: context · session_start · index · handoff · stuck · mcp · skill · script · diagram.
 기록 실패는 삼킨다 — 로그 때문에 훅이나 스크립트가 멈추면 안 된다.
 파일이 MAX_BYTES 를 넘으면 마지막 KEEP_LINES 줄만 남긴다 (mod 가 한 번에 읽을 수 있는 크기로).
 """

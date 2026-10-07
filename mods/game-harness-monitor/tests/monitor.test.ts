@@ -12,6 +12,7 @@ test('기능 id 를 사람이 읽는 이름으로 바꾼다', () => {
   expect(label('skill.game-architecture')).toBe('스킬 game-architecture')
   expect(label('script.ue_q.sym')).toBe('조회 ue_q.sym')
   expect(label('context.routing')).toBe('세션 라우팅 주입')
+  expect(label('diagram.render')).toBe('그림 렌더 (브라우저)')
   expect(label('weird')).toBe('weird')
 })
 

@@ -50,7 +50,8 @@
 }
 ```
 
-위는 최소 조각이다. `install.py` 가 출력하는 조각에는 handoff·stuck_watch·harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)도 들어 있다.
+위는 최소 조각이다. `install.py` 가 출력하는 조각에는 handoff·stuck_watch·harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)와
+Stop 의 diagram_view(답변 속 mermaid → HTML 렌더·열기, `GAME_HARNESS_NO_OPEN=1` 이면 열지 않음)도 들어 있다.
 `harness_events.py` 는 훅이 import 하는 모듈이라 `~/.claude/hooks/` 에 같이 두기만 하고 settings 에는 등록하지 않는다.
 
 `command` + `args` 형식과 `async` 는 이 설정을 만든 머신(2026-10 Claude Code)에서 동작 중인 형식이다. 다른 버전에서 안 되면
