@@ -25,7 +25,7 @@ uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더�
 rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
-index_build.bat       인덱스 지금 만들기: 프로젝트 좌표 → 엔진 좌표 → clangd (프로젝트 증분, 엔진은 없을 때만)
+index_build.bat       인덱스 지금 만들기: 프로젝트 좌표 → 엔진 좌표 → clangd (프로젝트 증분, 엔진은 없을 때만) → 조회용 정리
 index_view.bat        인덱스 웹뷰
 ```
 

@@ -82,7 +82,8 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
    (두 번째부터 바뀐 파일과 그것을 포함한 TU 만 다시). 합성 프로젝트 측정은 cindex.md 3절 — 실제 UE 수치는 아직 없다.
 4. **한 번에**: 저장소의 `index_build.bat` 에 프로젝트 폴더를 끌어다 놓는다 (더블클릭이면 하네스가 최근에 돈 프로젝트).
    순서는 프로젝트 좌표(`gq.py index`) → 엔진 좌표(`ue_q.py index`) → compile_commands.json(없을 때만 `cindex.py cdb`)
-   → clangd 프로젝트(`build --mode bg`, clangd 가 없으면 clangd-indexer 전체) → clangd 엔진(`build --scope engine --unity 8`, 엔진 인덱스가 없을 때만).
+   → clangd 프로젝트(`build --mode bg`, clangd 가 없으면 clangd-indexer 전체) → clangd 엔진(`build --scope engine --unity 8`, 엔진 인덱스가 없을 때만)
+   → clangd 조회 정리(`optimize` — 옛 모양 인덱스를 조회용으로 다시 쓰고 엔진·프로젝트 인덱스의 파일 소유권을 맞춘다. 색인은 다시 안 한다).
    한 단계가 실패해도 다음 단계로 가고, 끝에 단계별 완료·건너뜀·실패와 이유를 보여 준다. 명령 창에서는 옵션을 붙인다:
    `index_build.bat <폴더> --no-clangd`(정규식 인덱스만) · `--cdb`(compile_commands.json 다시) · `--engine`(엔진 clangd 인덱스 다시).
    엔진 폴더를 못 찾으면(소스 빌드 엔진 등) 창에서 경로를 묻는다 — 탐색기에서 엔진 폴더를 창에 끌어다 놓고 Enter. 명령 창에서는
