@@ -12,6 +12,7 @@
   3. compile_commands  cindex.py cdb                                없을 때만, --cdb 면 다시 (UE, 에디터 빌드를 한 번 한 뒤)
   4. clangd 프로젝트   cindex.py build --mode bg                    두 번째부터 바뀐 것만 (clangd 가 없고 clangd-indexer 만 있으면 전체 색인)
   5. clangd 엔진       cindex.py build --scope engine --unity 8     엔진 clangd 인덱스가 없을 때만, --engine 이면 다시. 엔진 버전당 한 번, 오래 걸린다
+  6. clangd 조회 정리  cindex.py optimize                           옛 모양 인덱스를 조회용으로 다시 쓰고(색인은 그대로) 소유권 표시를 맞춘다
   --no-clangd 면 1·2 만.
 
 각 단계는 따로 돈다 — 하나가 실패해도 다음 단계로 간다. 앞 단계의 결과가 필요한 단계는 이유를 적고 건너뛴다.
@@ -176,7 +177,7 @@ def main():
         else:
             skip("2 엔진 좌표 (ue_q)", "UE 프로젝트가 아니다")
 
-        titles = ("3 compile_commands.json", "4 clangd 프로젝트", "5 clangd 엔진")
+        titles = ("3 compile_commands.json", "4 clangd 프로젝트", "5 clangd 엔진", "6 clangd 조회 정리")
         clangd, indexer = cindex.find_clangd(None), cindex.find_indexer(None)
         if a.no_clangd:
             for t in titles:
@@ -197,6 +198,7 @@ def main():
             if not cdb:
                 skip(titles[1], "compile_commands.json 이 없다 (3단계 출력을 본다)")
                 skip(titles[2], "compile_commands.json 이 없다 (3단계 출력을 본다)")
+                skip(titles[3], "compile_commands.json 이 없다 (3단계 출력을 본다)")
             else:
                 if clangd:
                     step(titles[1], "cindex.py", ["build", "--root", r, "--mode", "bg"])
@@ -215,6 +217,10 @@ def main():
                     print("\n엔진 clangd 색인은 엔진 버전당 한 번이고 오래 걸린다." +
                           (" clangd-indexer 는 중간에 멈추면 처음부터 다시 한다." if indexer else ""), flush=True)
                     step(titles[2], "cindex.py", ["build", "--root", r, "--scope", "engine", "--unity", "8", *mode])
+                if any(d and d.exists() for d in (cindex.db_for("project", root, kind), edb)):
+                    step(titles[3], "cindex.py", ["optimize", "--root", r])
+                else:
+                    skip(titles[3], "clangd 인덱스가 없다")
     except KeyboardInterrupt:
         steps.append((current[0] or "(중단)", FAIL, 0.0, "Ctrl+C 로 중단 — 다시 돌린다"))
 

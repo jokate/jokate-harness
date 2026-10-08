@@ -17,9 +17,10 @@
       --mode bg      clangd 배경 색인 샤드로 증분: 두 번째부터 바뀐 파일·그 헤더를 포함한 TU·플래그가 바뀐 TU 만 다시 색인
       --unity N      같은 플래그·같은 모듈의 .cpp 를 N 개씩 한 TU 로 묶어 공용 헤더 파싱을 줄인다 (실패한 묶음은 원래대로 다시)
   python cindex.py ingest <clangd-indexer 출력(YAML|RIFF)> [--scope ...]   # 이미 만든 출력을 적재만
+  python cindex.py optimize [--force]        # 옛 모양 인덱스를 조회용(스키마 2)으로 다시 쓰고 소유권 표시를 맞춘다 (색인은 그대로)
   python cindex.py status
   python cindex.py sym <이름|A::B>          # 심볼 좌표 (선언·정의·시그니처)
-  python cindex.py refs <이름> [--kind decl|def|ref]
+  python cindex.py refs <이름> [--kind decl|def|ref] [--module M] [--path 조각] [--cursor C]   # 총계·모듈 묶음·표본·다음 커서
   python cindex.py callers <이름>           # 이 심볼을 참조하는 함수 (참조의 Container 기준)
   python cindex.py callees <이름>           # 이 함수 안에서 참조하는 함수·메서드
   python cindex.py bases <이름> · derived <이름> · overrides <이름>   # 전 단계 트리 (--depth N 으로 제한)
@@ -31,6 +32,7 @@
 인덱스 위치: --scope project → UE Saved/ClaudeIndex/clangd.sqlite (그 외 .claude/index/clangd.sqlite)
             --scope engine  → ~/.claude/cache/ue_index/<엔진경로>/clangd.sqlite (ue.sqlite 옆)
 조회는 기본으로 있는 인덱스를 모두 같이 본다 (프로젝트 + 엔진, 심볼 ID 로 합침). --db engine|project|<경로> 면 그 하나만.
+참조는 파일마다 주인이 하나다 — 엔진 인덱스가 참조를 가진 파일은 엔진 쪽만 센다 (clangd MergedIndex 규칙, 프로젝트 몫을 먼저 보인다).
 이름이 정확히 맞지 않으면 추측하지 않고 비슷한 이름 후보를 보여 준다. bases·derived·overrides 는 끝까지 따라간다 (--depth N).
 clangd-indexer 위치: --indexer > 환경 변수 CLANGD_INDEXER > PATH > ~/.claude/tools/clangd/bin
 clangd(--mode bg) 위치: --clangd > 환경 변수 CLANGD > PATH > ~/.claude/tools/clangd/bin > clangd-indexer 옆
@@ -87,15 +89,21 @@ def harness_emit(feature, detail="", ok=True, project=""):
         pass
 
 
-def emit(lines, full=False):
-    out, size = [], 0
+def fits(lines, budget=CAP):
+    """앞에서부터 budget 바이트 안에 드는 줄 수."""
+    size = 0
     for i, ln in enumerate(lines):
         size += len(ln.encode("utf-8")) + 1
-        if size > CAP and not full:
-            out.append(f"… (+{len(lines) - i} more · --full 또는 질의를 좁혀라)")
-            break
-        out.append(ln)
-    print("\n".join(out))
+        if size > budget:
+            return i
+    return len(lines)
+
+
+def emit(lines, full=False, tail=None):
+    """출력은 기본 4KB 에서 끊는다. tail(잘림 안내·다음 커서)은 끊겨도 남긴다."""
+    n = len(lines) if full else fits(lines)
+    out = lines[:n] + ([f"… (+{len(lines) - n} more · --full 또는 질의를 좁혀라)"] if n < len(lines) else [])
+    print("\n".join(out + list(tail or [])))
 
 
 # ---------------------------------------------------------------- 위치
@@ -271,15 +279,33 @@ CREATE TABLE refs(sym TEXT, kind INTEGER, file INTEGER, line INTEGER, col INTEGE
 CREATE TABLE relations(subject TEXT, predicate INTEGER, object TEXT);
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
 """
+# 스키마 2 (2026-10-08, reports/엔진 규모 clangd 인덱스 조회 속도.md P0~P1):
+#  - files.id 는 (rel, root, path) 순서 → ORDER BY r.file 이 경로 순이고 refs(sym, file, line, col) 인덱스가 그 순서를 그대로 준다
+#  - refs 표는 (sym, file, line, col) 순서로 다시 쓴다 → 한 심볼의 행이 연속이라 표 접근이 순차다
+#  - refs(sym) 인덱스는 refs(sym, file, line, col) 의 접두로 대신한다. sym 으로 시작하는 인덱스를 둘 두지 않는다 —
+#    refs(sym, container, kind) 를 더했더니 플래너가 그쪽을 골라 정렬 질의가 3.9s → 11.6s 로 느려졌다 (합성 측정)
+#  - 심볼별 개수·호출자·모듈은 적재 끝에 요약 표로 계산해 둔다 (Kythe PageIndex.count/Caller, Glean 파생 술어와 같은 생각)
 INDEXES = """
 CREATE INDEX symbols_name ON symbols(name COLLATE NOCASE);
 CREATE INDEX symbols_qname ON symbols(qname COLLATE NOCASE);
 CREATE INDEX symbols_decl ON symbols(decl_file);
-CREATE INDEX refs_sym ON refs(sym);
+CREATE INDEX symbols_scope ON symbols(scope);
+CREATE INDEX refs_sym_file ON refs(sym, file, line, col);
 CREATE INDEX refs_container ON refs(container);
 CREATE INDEX rel_subject ON relations(subject, predicate);
 CREATE INDEX rel_object ON relations(object, predicate);
 """
+STATS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS ref_files(file INTEGER PRIMARY KEY, n INTEGER);
+CREATE TABLE IF NOT EXISTS owned_out(file INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS sym_stats(sym TEXT PRIMARY KEY, n_refs INTEGER, n_use INTEGER, n_files INTEGER,
+  n_callers INTEGER, n_modules INTEGER) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sym_callers(sym TEXT, container TEXT, n INTEGER, file INTEGER, line INTEGER);
+CREATE TABLE IF NOT EXISTS sym_modules(sym TEXT, module TEXT, n INTEGER);
+"""
+SCHEMA_VERSION = 2
+TOP_CALLERS = 500   # 심볼마다 남기는 호출자 행 (나머지는 sym_stats 의 총계로만). clangd 원격 서버의 요청 상한이 1만이다
+TOP_MODULES = 40
 
 
 class FileTable:
@@ -426,16 +452,18 @@ def records_for(source, dedupe_refs=False):
     return (riff_records([source]), "RIFF") if magic == b"RIFF" else (yaml_records(source), "YAML")
 
 
-def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False):
+def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False, engine_db=None):
     """source: YAML 파일 · RIFF 파일 · RIFF 파일 목록(배경 색인 샤드, 또는 유니티 + 재색인 출력 → dedupe_refs).
-    임시 파일에 다 쓰고 바꿔치기한다."""
+    원본 표를 임시 파일(.stage)에 다 쓰고, finalize 로 조회용 모양(스키마 2)으로 다시 써서 바꿔치기한다.
+    engine_db: 프로젝트 인덱스를 만들 때 엔진 인덱스가 있으면 준다 — 엔진이 주인인 파일을 표시한다 (apply_owner)."""
     t0 = time.time()
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = db_path.with_suffix(".building")
-    if tmp.exists():
-        tmp.unlink()
-    con = sqlite3.connect(str(tmp))
+    stage, tmp = db_path.with_suffix(".stage"), db_path.with_suffix(".building")
+    for f in (stage, tmp):
+        if f.exists():
+            f.unlink()
+    con = sqlite3.connect(str(stage))
     con.executescript("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;" + SCHEMA)
     cur = con.cursor()
     files = FileTable(cur, roots)
@@ -470,7 +498,6 @@ def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False):
         if len(syms) + len(refs) + len(rels) > 50000:
             flush()
     flush()
-    con.executescript(INDEXES)
     counts["files"] = cur.execute("SELECT COUNT(*) FROM files").fetchone()[0]
     took = time.time() - t0
     meta = {"tool_version": TOOL_VERSION, "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -482,8 +509,210 @@ def ingest(source, db_path, roots, info=None, keep_doc=300, dedupe_refs=False):
     cur.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", list(meta.items()))
     con.commit()
     con.close()
+    try:
+        finalize(stage, tmp, engine_db)
+    finally:
+        stage.unlink(missing_ok=True)
     swap_in(tmp, db_path)
     return counts
+
+
+# ---------------------------------------------------------------- 조회용 모양 (스키마 2)
+
+def db_identity(meta):
+    """인덱스 한 벌의 식별값. 프로젝트 인덱스의 소유권 표시가 어느 엔진 인덱스를 보고 만든 것인지 대조한다."""
+    return meta.get("build_id") or ("gen:" + (meta.get("generated_at") or ""))
+
+
+def _table_names(con):
+    return {n for (n,) in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def _window_ok():
+    return sqlite3.sqlite_version_info >= (3, 25, 0)
+
+
+def finalize(src, dst, engine_db=None, log=None):
+    """원본 표(src: 적재 직후 또는 옛 스키마 인덱스)를 조회용 DB(dst)로 새로 쓴다. 표를 새 파일에 순서대로 다시 쓰므로 빈 페이지도 없다.
+      1. 파일 id 를 (rel, root, path) 순서로 다시 매긴다
+      2. refs 를 (sym, file, line, col) 순서로 다시 쓴다
+      3. 인덱스 · (프로젝트면) 엔진이 주인인 파일 표시 · 요약 표 · ANALYZE"""
+    t0 = time.time()
+    dst = Path(dst)
+    if dst.exists():
+        dst.unlink()
+    con = sqlite3.connect(str(dst))
+    try:
+        con.executescript("PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-262144; PRAGMA threads=4;"
+                          + SCHEMA + STATS_SCHEMA)
+        con.execute("ATTACH DATABASE ? AS src", (str(src),))
+        old = [r[0] for r in con.execute("SELECT id FROM src.files ORDER BY rel, root, path")]
+        con.execute("CREATE TEMP TABLE fmap(old INTEGER PRIMARY KEY, new INTEGER)")
+        con.executemany("INSERT INTO fmap VALUES(?,?)", ((o, i) for i, o in enumerate(old, 1)))
+        con.execute("INSERT INTO files SELECT m.new, f.path, f.module, f.root, f.rel, f.mtime "
+                    "FROM src.files f JOIN fmap m ON m.old = f.id ORDER BY m.new")
+        con.execute("INSERT INTO symbols SELECT x.id, x.name, x.scope, x.qname, x.kind, x.lang, d.new, x.decl_line, x.decl_col, "
+                    "f.new, x.def_line, x.def_col, x.signature, x.return_type, x.type, x.tpl_args, x.flags, x.nrefs, x.doc "
+                    "FROM src.symbols x LEFT JOIN fmap d ON d.old = x.decl_file LEFT JOIN fmap f ON f.old = x.def_file")
+        con.execute("INSERT INTO refs SELECT r.sym, r.kind, m.new, r.line, r.col, r.container "
+                    "FROM src.refs r JOIN fmap m ON m.old = r.file ORDER BY r.sym, m.new, r.line, r.col")
+        con.execute("INSERT INTO relations SELECT subject, predicate, object FROM src.relations")
+        con.execute("INSERT INTO meta SELECT key, value FROM src.meta")
+        con.commit()
+        con.execute("DETACH DATABASE src")
+        t_copy = time.time() - t0
+        con.executescript(INDEXES)
+        owner = apply_owner(con, engine_db) if engine_db and Path(engine_db).exists() else None
+        build_stats(con, excl=owner is not None)
+        meta = {"schema": str(SCHEMA_VERSION), "file_order": "path", "build_id": f"{random.getrandbits(48):012x}",
+                "owner_build": owner[1] if owner else "", "owned_files": str(owner[0]) if owner else "0",
+                "stats_scope": "own" if owner else "all", "elapsed_finalize": f"{time.time() - t0:.2f}"}
+        con.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", list(meta.items()))
+        con.commit()
+        con.execute("ANALYZE")
+        con.commit()
+    finally:
+        con.close()
+    (log or (lambda m: None))(f"조회용으로 다시 씀 [{time.time() - t0:.1f}s · 표 복사 {t_copy:.1f}s]"
+                              + (f" · 엔진이 주인인 파일 {owner[0]}개" if owner else ""))
+
+
+def engine_ref_paths(con):
+    """엔진 인덱스가 참조를 가진 파일의 정규화 경로. 옛 인덱스(ref_files 없음)는 files 전체 — 심볼이 선언된 파일에는 선언 참조도 있다."""
+    q = ("SELECT f.path FROM files f JOIN ref_files rf ON rf.file = f.id" if "ref_files" in _table_names(con)
+         else "SELECT path FROM files")
+    return {norm(p) for (p,) in con.execute(q)}
+
+
+def apply_owner(con, engine_db):
+    """clangd MergedIndex 규칙: 파일마다 참조의 주인은 인덱스 하나다. 엔진 인덱스가 참조를 가진 파일은 엔진이 주인이고,
+    프로젝트 인덱스의 그 파일 참조는 병합 조회에서 뺀다 (owned_out). 경로 접두("엔진 폴더 아래")가 아니라 엔진 인덱스가 실제로
+    색인한 파일로 정한다 — 엔진 TU 가 아무도 열지 않은 엔진 헤더(프로젝트 TU 만 연 것)의 참조는 프로젝트 쪽에 남는다.
+    반환 (표시한 파일 수, 엔진 인덱스 식별값)."""
+    e = sqlite3.connect(f"file:{Path(engine_db).as_posix()}?mode=ro", uri=True)
+    try:
+        owned = engine_ref_paths(e)
+        ident = db_identity(dict(e.execute("SELECT key, value FROM meta").fetchall()))
+    finally:
+        e.close()
+    ids = [(i,) for i, p in con.execute("SELECT id, path FROM files") if norm(p) in owned]
+    con.execute("DELETE FROM owned_out")
+    con.executemany("INSERT INTO owned_out VALUES(?)", ids)
+    return len(ids), ident
+
+
+def build_stats(con, excl=False):
+    """심볼별 요약 표. excl 이면 owned_out 파일의 참조를 뺀다 (프로젝트 인덱스를 엔진 인덱스와 합쳐 볼 때의 몫).
+    - ref_files: 파일별 참조 수 (다른 인덱스가 이 인덱스를 주인으로 볼 때 쓴다 — 항상 전체)
+    - sym_stats: 참조 수 · 사용(Reference 비트) 수 · 사용이 있는 파일 수 · 호출자(Container) 수 · 모듈 수
+    - sym_callers: 심볼마다 사용 수 상위 TOP_CALLERS 개 호출자와 첫 위치 · sym_modules: 상위 TOP_MODULES 개 모듈"""
+    w = " AND r.file NOT IN (SELECT file FROM owned_out)" if excl else ""
+    for t in ("ref_files", "sym_stats", "sym_callers", "sym_modules"):
+        con.execute(f"DELETE FROM {t}")
+    for t in ("sc", "sm", "sf"):
+        con.execute(f"DROP TABLE IF EXISTS temp.{t}")
+    con.execute("DROP INDEX IF EXISTS sym_callers_sym")
+    con.execute("DROP INDEX IF EXISTS sym_modules_sym")
+    con.execute("INSERT INTO ref_files SELECT file, COUNT(*) FROM refs GROUP BY file")
+    con.execute(f"CREATE TEMP TABLE sc AS SELECT r.sym AS sym, r.container AS container, COUNT(*) AS n, MIN(r.rowid) AS rid "
+                f"FROM refs r WHERE (r.kind & {REF}) != 0{w} GROUP BY r.sym, r.container")
+    con.execute(f"CREATE TEMP TABLE sm AS SELECT r.sym AS sym, f.module AS module, COUNT(*) AS n FROM refs r "
+                f"JOIN files f ON f.id = r.file WHERE (r.kind & {REF}) != 0{w} GROUP BY r.sym, f.module")
+    con.execute(f"CREATE TEMP TABLE sf AS SELECT sym, COUNT(*) AS c FROM (SELECT r.sym AS sym FROM refs r "
+                f"WHERE (r.kind & {REF}) != 0{w} GROUP BY r.sym, r.file) GROUP BY sym")
+    if _window_ok():
+        con.execute("INSERT INTO sym_callers SELECT x.sym, x.container, x.n, r.file, r.line FROM "
+                    "(SELECT sym, container, n, rid, ROW_NUMBER() OVER (PARTITION BY sym ORDER BY n DESC, rid) AS k FROM temp.sc) x "
+                    f"JOIN refs r ON r.rowid = x.rid WHERE x.k <= {TOP_CALLERS}")
+        con.execute("INSERT INTO sym_modules SELECT sym, module, n FROM (SELECT sym, module, n, "
+                    f"ROW_NUMBER() OVER (PARTITION BY sym ORDER BY n DESC, module) AS k FROM temp.sm) WHERE k <= {TOP_MODULES}")
+    else:  # 윈도 함수가 없는 SQLite(3.25 미만): 자르지 않는다
+        con.execute("INSERT INTO sym_callers SELECT x.sym, x.container, x.n, r.file, r.line FROM temp.sc x JOIN refs r ON r.rowid = x.rid")
+        con.execute("INSERT INTO sym_modules SELECT sym, module, n FROM temp.sm")
+    con.execute("CREATE INDEX sym_callers_sym ON sym_callers(sym, n DESC)")
+    con.execute("CREATE INDEX sym_modules_sym ON sym_modules(sym, n DESC)")
+    con.execute(f"INSERT INTO sym_stats SELECT a.sym, a.n_refs, a.n_use, IFNULL(f.c, 0), IFNULL(c.c, 0), IFNULL(m.c, 0) FROM "
+                f"(SELECT r.sym AS sym, COUNT(*) AS n_refs, SUM((r.kind & {REF}) != 0) AS n_use FROM refs r WHERE 1{w} GROUP BY r.sym) a "
+                "LEFT JOIN temp.sf f ON f.sym = a.sym "
+                "LEFT JOIN (SELECT sym, COUNT(*) AS c FROM temp.sc GROUP BY sym) c ON c.sym = a.sym "
+                "LEFT JOIN (SELECT sym, COUNT(*) AS c FROM temp.sm GROUP BY sym) m ON m.sym = a.sym")
+    for t in ("sc", "sm", "sf"):
+        con.execute(f"DROP TABLE temp.{t}")
+    con.commit()
+
+
+def refresh_owner(project_db, engine_db, log=print):
+    """엔진 인덱스를 다시 만든 뒤 프로젝트 인덱스의 소유권 표시와 요약 표만 다시 계산한다 (프로젝트 색인은 다시 하지 않는다)."""
+    con = sqlite3.connect(str(project_db), timeout=60)
+    try:
+        meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
+        if int(meta.get("schema") or 1) < SCHEMA_VERSION:
+            con.close()
+            con = None
+            return upgrade_db(project_db, engine_db, log)
+        t0 = time.time()
+        if engine_db and Path(engine_db).exists():
+            n, ident = apply_owner(con, engine_db)
+        else:
+            con.execute("DELETE FROM owned_out")
+            n, ident = 0, ""
+        build_stats(con, excl=bool(ident))
+        con.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)",
+                        [("owner_build", ident), ("owned_files", str(n)), ("stats_scope", "own" if ident else "all")])
+        con.commit()
+        con.execute("ANALYZE")
+        con.commit()
+        log(f"  프로젝트 인덱스 소유권 다시 계산: 엔진이 주인인 파일 {n}개 [{time.time() - t0:.1f}s] → {project_db}")
+        return True
+    finally:
+        if con is not None:
+            con.close()
+
+
+def upgrade_db(db_path, engine_db=None, log=print):
+    """옛 스키마 인덱스를 조회용 모양으로 바꾼다 (색인은 다시 하지 않는다). 새 파일에 쓰고 바꿔치기한다."""
+    db_path = Path(db_path)
+    tmp = db_path.with_suffix(".building")
+    log(f"  {db_path.name} 를 스키마 {SCHEMA_VERSION} 로 다시 쓴다 (색인은 그대로): {db_path}")
+    finalize(db_path, tmp, engine_db, log=lambda m: log("  " + m))
+    swap_in(tmp, db_path)
+    return True
+
+
+def db_state(db_path):
+    """(스키마, meta) — 없거나 못 열면 (0, {})."""
+    try:
+        con = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+        try:
+            meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return 0, {}
+    return int(meta.get("schema") or 1), meta
+
+
+def optimize(root, kind, force=False, log=print):
+    """있는 인덱스를 조회용 모양으로 맞춘다: 옛 스키마면 다시 쓰고, 프로젝트 인덱스의 소유권 표시가 지금 엔진 인덱스와 다르면 다시 계산.
+    반환: 한 일 목록 (아무것도 안 했으면 빈 목록)."""
+    pdb, edb = db_for("project", root, kind), db_for("engine", root, kind)
+    done = []
+    if edb and edb.exists():
+        sv, _ = db_state(edb)
+        if force or sv < SCHEMA_VERSION:
+            upgrade_db(edb, None, log)
+            done.append("엔진 인덱스 다시 씀")
+    if pdb and pdb.exists():
+        sv, meta = db_state(pdb)
+        eng = edb if edb and edb.exists() else None
+        want = db_identity(db_state(eng)[1]) if eng else ""
+        if force or sv < SCHEMA_VERSION:
+            upgrade_db(pdb, eng, log)
+            done.append("프로젝트 인덱스 다시 씀")
+        elif meta.get("owner_build", "") != want:
+            refresh_owner(pdb, eng, log)
+            done.append("프로젝트 인덱스 소유권 다시 계산")
+    return done
 
 
 def swap_in(tmp, db_path):
@@ -885,8 +1114,13 @@ def cmd_build(root, kind, a):
     errors = info.get("errors") if isinstance(info.get("errors"), dict) else {}
     if errors.get("generated_h"):
         print("  [경고] .generated.h 누락·낡음 — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
-    counts = ingest(src, db, roots, info, dedupe_refs=a.mode != "bg" and isinstance(src, list))
+    edb = db_for("engine", root, kind) if scope == "project" else None
+    counts = ingest(src, db, roots, info, dedupe_refs=a.mode != "bg" and isinstance(src, list),
+                    engine_db=edb if edb and edb.exists() and edb != db else None)
     print(f"적재 완료 · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']} · 파일 {counts['files']} → {db}")
+    pdb = db_for("project", root, kind) if scope == "engine" else None
+    if pdb and pdb.exists() and pdb != db:
+        refresh_owner(pdb, db)
     if not a.keep_yaml and not a.yaml and a.mode != "bg":
         for s in (src if isinstance(src, list) else [src]):
             Path(s).unlink(missing_ok=True)
@@ -929,17 +1163,41 @@ def summarize_errors(err_path, keep=30):
 
 # ---------------------------------------------------------------- 조회
 
+def like_escape(s):
+    """LIKE 패턴용 — C++ 이름의 '_' 가 한 글자 와일드카드로 읽히지 않게 (ESCAPE '\\' 와 같이 쓴다)."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class Index:
-    def __init__(self, db_path):
+    """인덱스 파일 하나 (프로젝트 또는 엔진). 조회는 MultiIndex 를 거친다 — 파일 하나여도 MultiIndex([Index]) 로 연다.
+    여기 메서드는 그 인덱스 몫만 답한다. excl 은 병합 조회에서 다른 인덱스가 주인인 파일 목록 표 (owned_out 또는 temp 표)."""
+
+    def __init__(self, db_path, role=None):
         self.path = Path(db_path)
-        self.con = sqlite3.connect(f"file:{self.path.as_posix()}?mode=ro", uri=True, check_same_thread=False)
+        # autocommit: temp 표에 써도 트랜잭션이 열린 채 남지 않게 — 남으면 공유 잠금을 쥐고 있어 다른 프로세스가 인덱스를 못 고친다
+        self.con = sqlite3.connect(f"file:{self.path.as_posix()}?mode=ro", uri=True, check_same_thread=False,
+                                   isolation_level=None)
         self.lock = threading.Lock()
         self.meta = dict(self.q("SELECT key, value FROM meta"))
         self.roots = {n: p for n, p in json.loads(self.meta.get("roots", "[]"))}
+        self.schema = int(self.meta.get("schema") or 1)
+        self.path_order = self.meta.get("file_order") == "path"
+        scope = self.meta.get("scope")
+        self.role = role or (scope if scope in ("project", "engine") else
+                             ("engine" if "ue_index" in str(self.path) else "project"))
+        self.tables = {n for (n,) in self.q("SELECT name FROM sqlite_master WHERE type='table'")}
+        self.has_stats = {"sym_stats", "sym_callers", "sym_modules"} <= self.tables
 
     def q(self, sql, args=()):
         with self.lock:
             return self.con.execute(sql, args).fetchall()
+
+    def write_temp(self, sql, rows=None):
+        with self.lock:
+            if rows is None:
+                self.con.execute(sql)
+            else:
+                self.con.executemany(sql, rows)
 
     SYM = ("SELECT s.id, s.name, s.scope, s.kind, df.rel, df.root, s.decl_line, s.decl_col, ff.rel, ff.root, s.def_line, "
            "s.signature, s.return_type, s.type, s.flags, s.nrefs, df.module, df.path, ff.path, s.tpl_args, s.doc "
@@ -955,6 +1213,8 @@ class Index:
                 "deprecated": bool((r[14] or 0) & FLAG_DEPRECATED), "refs": r[15], "module": r[16] or "",
                 "abs_path": r[17], "abs_def_path": r[18], "tpl_args": r[19], "doc": r[20]}
 
+    # ---- 심볼 (작은 결과 — 인덱스끼리는 ID 로 합친다)
+
     def find_exact(self, name, kinds=None):
         name = name.strip()
         rows = self.q(self.SYM + "WHERE s.qname = ? OR (s.name = ? AND ? NOT LIKE '%::%')", (name, name, name))
@@ -962,82 +1222,168 @@ class Index:
         return [s for s in out if s["kind"] in kinds] if kinds else out
 
     def find_fuzzy(self, name, limit=200, kinds=None):
+        """접두 일치(이름·한정 이름 인덱스 범위 읽기)부터. 그것으로 다 차지 않을 때만 부분 일치로 표 전체를 훑는다."""
         name = name.strip()
-        rows = self.q(self.SYM + "WHERE s.name LIKE ? OR s.qname LIKE ? LIMIT ?", (f"%{name}%", f"%{name}%", limit * 4))
+        pat, cap = like_escape(name), limit * 4
+        rows = self.q(self.SYM + "WHERE s.name LIKE ? ESCAPE '\\' OR s.qname LIKE ? ESCAPE '\\' LIMIT ?",
+                      (pat + "%", pat + "%", cap))
+        if len(rows) < cap:
+            seen = {r[0] for r in rows}
+            more = self.q(self.SYM + "WHERE s.name LIKE ? ESCAPE '\\' OR s.qname LIKE ? ESCAPE '\\' LIMIT ?",
+                          (f"%{pat}%", f"%{pat}%", cap))
+            rows += [r for r in more if r[0] not in seen][:cap - len(rows)]
         out = [self.row(r) for r in rows]
         return [s for s in out if s["kind"] in kinds] if kinds else out
 
-    def find(self, name, limit=200, kinds=None):
-        """정확히 맞는 것(한정 이름 또는 이름)이 있으면 그것만, 없으면 부분 일치. 웹뷰 검색이 쓴다."""
-        out = self.find_exact(name, kinds) or self.find_fuzzy(name, limit, kinds)
-        return rank(out, name)[:limit]
+    # 파일을 먼저 거른다. LEFT JOIN 쪽 조건(df.rel LIKE)은 조인 순서를 바꾸지 못해 심볼 표 전체를 훑었다 (928 ms, 합성 측정).
+    # CROSS JOIN 은 SQLite 에서 왼쪽 표를 바깥 반복으로 고정한다 (optoverview "Manual Control Of Query Plans Using CROSS JOIN")
+    FILE_SYM = ("SELECT s.id, s.name, s.scope, s.kind, df.rel, df.root, s.decl_line, s.decl_col, ff.rel, ff.root, s.def_line, "
+                "s.signature, s.return_type, s.type, s.flags, s.nrefs, df.module, df.path, ff.path, s.tpl_args, s.doc "
+                "FROM files df CROSS JOIN symbols s ON s.decl_file=df.id LEFT JOIN files ff ON ff.id=s.def_file "
+                "WHERE df.rel LIKE ? ESCAPE '\\' ORDER BY df.rel, s.decl_line LIMIT ?")
 
     def file_syms(self, pattern, limit):
-        return [self.row(r) for r in self.q(self.SYM + "WHERE df.rel LIKE ? ORDER BY df.rel, s.decl_line LIMIT ?",
-                                            (f"%{pattern}%", limit))]
+        return [self.row(r) for r in self.q(self.FILE_SYM, (f"%{like_escape(pattern)}%", limit))]
 
     def by_id(self, sid):
         r = self.q(self.SYM + "WHERE s.id = ?", (sid,))
         return self.row(r[0]) if r else None
 
-    def names(self, ids):
+    def by_ids(self, ids):
+        ids = [i for i in dict.fromkeys(ids) if i and i != NULL_ID]
         out = {}
-        for sid in ids:
-            s = self.by_id(sid) if sid and sid != NULL_ID else None
-            out[sid] = s
-        return out
-
-    def ref_count(self, sid):
-        return self.q("SELECT COUNT(*) FROM refs WHERE sym=?", (sid,))[0][0]
-
-    def refs(self, sid, mask=None, limit=500):
-        rows = self.q("SELECT r.kind, f.rel, f.root, r.line, r.col, r.container, f.path, f.module FROM refs r "
-                      "LEFT JOIN files f ON f.id=r.file WHERE r.sym=? AND (? = 0 OR (r.kind & ?) != 0) "
-                      "ORDER BY f.rel, r.line LIMIT ?", (sid, mask or 0, mask or 0, limit))
-        return [{"kind": k, "path": ("[E] " if root == "engine" else "") + (rel or ""), "line": ln, "col": c,
-                 "container": cont, "abs_path": ap, "module": mod or ""} for k, rel, root, ln, c, cont, ap, mod in rows]
-
-    def callers(self, sid):
-        rows = self.q("SELECT container, COUNT(*) FROM refs WHERE sym=? AND (kind & ?) != 0 GROUP BY container "
-                      "ORDER BY COUNT(*) DESC", (sid, REF))
-        return [(self.by_id(c) if c != NULL_ID else None, n) for c, n in rows]
-
-    def caller_sites(self, sid, limit):
-        """호출자마다 첫 참조 위치 하나 (줄 원문을 같이 보이려고)."""
-        rows = self.q("SELECT r.container, COUNT(*), MIN(r.rowid) FROM refs r WHERE r.sym=? AND (r.kind & ?) != 0 "
-                      "GROUP BY r.container ORDER BY COUNT(*) DESC LIMIT ?", (sid, REF, limit))
-        out = []
-        for cont, n, rid in rows:
-            site = self.q("SELECT f.rel, f.root, r.line, f.path FROM refs r JOIN files f ON f.id=r.file WHERE r.rowid=?", (rid,))
-            rel, root, line, ap = site[0] if site else ("", "", 0, None)
-            out.append((self.by_id(cont) if cont != NULL_ID else None, n,
-                        {"path": ("[E] " if root == "engine" else "") + (rel or ""), "line": line, "abs_path": ap}))
+        for k in range(0, len(ids), 500):
+            chunk = ids[k:k + 500]
+            for r in self.q(self.SYM + f"WHERE s.id IN ({','.join('?' * len(chunk))})", chunk):
+                out[r[0]] = self.row(r)
         return out
 
     def members(self, s):
         prefix = s["scope"] + s["name"] + "::"
-        rows = self.q(self.SYM + "WHERE s.scope = ? ORDER BY s.decl_file, s.decl_line", (prefix,))
-        return [self.row(r) for r in rows]
-
-    def callees(self, sid):
-        # Call 비트는 함수류 심볼에 대한 모든 참조에 붙는다(선언·&Fn 포함) — Reference 비트와 같이 본다
-        rows = self.q("SELECT r.sym, COUNT(*) FROM refs r JOIN symbols s ON s.id=r.sym WHERE r.container=? "
-                      "AND (r.kind & ?) = ? AND s.kind IN (%s) GROUP BY r.sym ORDER BY COUNT(*) DESC"
-                      % ",".join("?" * len(FUNC_KINDS)), (sid, REF | CALL, REF | CALL) + FUNC_KINDS)
-        return [(self.by_id(x), n) for x, n in rows]
+        return [self.row(r) for r in self.q(self.SYM + "WHERE s.scope = ? ORDER BY s.decl_file, s.decl_line", (prefix,))]
 
     def related(self, sid, predicate, forward):
         if forward:
             rows = self.q("SELECT object FROM relations WHERE subject=? AND predicate=?", (sid, predicate))
         else:
             rows = self.q("SELECT subject FROM relations WHERE object=? AND predicate=?", (sid, predicate))
-        return [s for s in (self.by_id(r[0]) for r in rows) if s]
+        found = self.by_ids([r[0] for r in rows])
+        return [found[r[0]] for r in rows if r[0] in found]
 
-    def bases(self, sid):
-        return self.related(sid, BASE_OF, False)
+    def files_by_ids(self, ids):
+        ids = list(dict.fromkeys(i for i in ids if i is not None))
+        out = {}
+        for k in range(0, len(ids), 500):
+            chunk = ids[k:k + 500]
+            for fid, rel, root, path, mod in self.q(f"SELECT id, rel, root, path, module FROM files WHERE id IN "
+                                                    f"({','.join('?' * len(chunk))})", chunk):
+                out[fid] = {"path": ("[E] " if root == "engine" else "") + (rel or ""), "abs_path": path, "module": mod or ""}
+        return out
 
-    def derived(self, sid):
-        return self.related(sid, BASE_OF, True)
+    # ---- 참조 (이 인덱스 몫. excl: 병합 조회에서 뺄 파일 표)
+
+    @staticmethod
+    def _x(excl, alias="r"):
+        return f" AND {alias}.file NOT IN (SELECT file FROM {excl})" if excl else ""
+
+    def refs_part(self, sid, mask=None, limit=500, after=None, path=None, module=None, excl=None):
+        """경로 순 참조 limit 개와 더 있는지. after: 앞 페이지 마지막 (file, line, col) — 스키마 2 는 keyset, 옛 인덱스는 OFFSET 정수."""
+        where, args = ["r.sym=?"], [sid]
+        if mask:
+            where.append("(r.kind & ?) != 0")
+            args.append(mask)
+        if path:
+            where.append("f.rel LIKE ? ESCAPE '\\'")
+            args.append(f"%{like_escape(path)}%")
+        if module:
+            where.append("f.module = ?")
+            args.append(module)
+        offset = 0
+        if after is not None:
+            if self.path_order and isinstance(after, tuple):
+                where.append("(r.file, r.line, r.col) > (?, ?, ?)")
+                args += list(after)
+            elif isinstance(after, int):
+                offset = after
+        order = "r.file, r.line, r.col" if self.path_order else "f.rel, r.line, r.col"
+        rows = self.q("SELECT r.kind, f.rel, f.root, r.line, r.col, r.container, f.path, f.module, r.file FROM refs r "
+                      f"LEFT JOIN files f ON f.id=r.file WHERE {' AND '.join(where)}{self._x(excl)} ORDER BY {order} "
+                      "LIMIT ? OFFSET ?", (*args, limit + 1, offset))
+        out = [{"kind": k, "path": ("[E] " if root == "engine" else "") + (rel or ""), "line": ln, "col": c, "container": cont,
+                "abs_path": ap, "module": mod or "", "file": fid, "role": self.role, "pos": offset + n}
+               for n, (k, rel, root, ln, c, cont, ap, mod, fid) in enumerate(rows[:limit])]
+        return out, len(rows) > limit, offset
+
+    def stat(self, sid, stats_ok):
+        if not stats_ok:
+            return None
+        r = self.q("SELECT n_refs, n_use, n_files, n_callers, n_modules FROM sym_stats WHERE sym=?", (sid,))
+        return r[0] if r else (0, 0, 0, 0, 0)
+
+    def ref_total(self, sid, mask=None, path=None, module=None, excl=None, stats_ok=False):
+        st = self.stat(sid, stats_ok) if not (path or module) and mask in (None, REF) else None
+        if st is not None:
+            return st[1] if mask == REF else st[0]
+        where, args, join = ["r.sym=?"], [sid], ""
+        if mask:
+            where.append("(r.kind & ?) != 0")
+            args.append(mask)
+        if path or module:
+            join = " JOIN files f ON f.id=r.file"
+            if path:
+                where.append("f.rel LIKE ? ESCAPE '\\'")
+                args.append(f"%{like_escape(path)}%")
+            if module:
+                where.append("f.module = ?")
+                args.append(module)
+        return self.q(f"SELECT COUNT(*) FROM refs r{join} WHERE {' AND '.join(where)}{self._x(excl)}", args)[0][0]
+
+    def callers_part(self, sid, limit, excl=None, stats_ok=False):
+        """사용(Reference 비트) 참조를 Container 로 묶은 상위 limit 개: [(container, 수, 첫 파일 id, 첫 줄)].
+        요약 표가 맞으면 그것을, 아니면 SQL 로 묶는다 — 파이썬으로 전부 가져와 세지 않는다."""
+        if stats_ok:
+            return self.q("SELECT container, n, file, line FROM sym_callers WHERE sym=? ORDER BY n DESC LIMIT ?", (sid, limit))
+        # MIN(rowid) 와 같이 쓴 맨 열(file, line)은 그 행의 값이다 (SQLite 맨 열 규칙) — 스키마 2 는 rowid 가 경로 순이다
+        return [(c, n, f, ln) for c, n, _, f, ln in self.q(
+            f"SELECT container, COUNT(*) AS n, MIN(r.rowid), r.file, r.line FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0"
+            f"{self._x(excl)} GROUP BY container ORDER BY n DESC LIMIT ?", (sid, limit))]
+
+    def callers_total(self, sid, excl=None, stats_ok=False):
+        st = self.stat(sid, stats_ok)
+        if st is not None:
+            return st[3]
+        return self.q(f"SELECT COUNT(DISTINCT container) FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0{self._x(excl)}",
+                      (sid,))[0][0]
+
+    def modules_part(self, sid, limit, excl=None, stats_ok=False):
+        """[(모듈, 사용 수)] 상위 limit 개와 이 인덱스의 모듈 수."""
+        if stats_ok:
+            rows = self.q("SELECT module, n FROM sym_modules WHERE sym=? ORDER BY n DESC LIMIT ?", (sid, limit))
+            return rows, self.stat(sid, True)[4]
+        rows = self.q(f"SELECT f.module, COUNT(*) AS n FROM refs r JOIN files f ON f.id=r.file WHERE r.sym=? "
+                      f"AND (r.kind & {REF}) != 0{self._x(excl)} GROUP BY f.module ORDER BY n DESC", (sid,))
+        return rows[:limit], len(rows)
+
+    def files_part(self, sid, limit, excl=None, stats_ok=False):
+        """[(파일 표시 경로, 사용 수)] 상위 limit 개와 이 인덱스의 파일 수."""
+        rows = self.q(f"SELECT r.file, COUNT(*) AS n FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0{self._x(excl)} "
+                      "GROUP BY r.file ORDER BY n DESC LIMIT ?", (sid, limit))
+        st = self.stat(sid, stats_ok)
+        total = st[2] if st is not None else self.q(
+            f"SELECT COUNT(DISTINCT r.file) FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0{self._x(excl)}", (sid,))[0][0]
+        names = self.files_by_ids([f for f, _ in rows])
+        return [(names.get(f, {}).get("path", "?"), n) for f, n in rows], total
+
+    def callees_part(self, sid, excl=None):
+        # Call 비트는 함수류 심볼에 대한 모든 참조에 붙는다(선언·&Fn 포함) — Reference 비트와 같이 본다
+        return self.q("SELECT r.sym, COUNT(*) FROM refs r JOIN symbols s ON s.id=r.sym WHERE r.container=? "
+                      "AND (r.kind & ?) = ? AND s.kind IN (%s)%s GROUP BY r.sym ORDER BY COUNT(*) DESC"
+                      % (",".join("?" * len(FUNC_KINDS)), self._x(excl)), (sid, REF | CALL, REF | CALL) + FUNC_KINDS)
+
+    def has_refs(self, sid, mask=None, path=None, module=None, excl=None):
+        return self.ref_total(sid, mask, path, module, excl) > 0 if (path or module) else bool(self.q(
+            f"SELECT 1 FROM refs r WHERE r.sym=?{' AND (r.kind & ?) != 0' if mask else ''}{self._x(excl)} LIMIT 1",
+            (sid, mask) if mask else (sid,)))
 
 
 def rank(syms, name):
@@ -1047,15 +1393,47 @@ def rank(syms, name):
                                        len(s["scope"]), s["path"]))
 
 
+def link_owners(ixs):
+    """병합 조회의 소유권: 엔진 인덱스가 참조를 가진 파일은 엔진만 답한다 (clangd MergedIndex). 그래서 질의할 때 위치로 중복을 빼지 않는다.
+    반환: 인덱스마다 (뺄 파일 표 또는 None, 요약 표를 써도 되는가), 그리고 상태 설명."""
+    out = [[None, ix.has_stats and ix.meta.get("stats_scope", "all") == "all"] for ix in ixs]
+    proj = [i for i, ix in enumerate(ixs) if ix.role == "project"]
+    eng = [i for i, ix in enumerate(ixs) if ix.role == "engine"]
+    if not proj or not eng:
+        return out, ""
+    p, e = ixs[proj[0]], ixs[eng[0]]
+    if "owned_out" in p.tables and p.meta.get("owner_build") and p.meta.get("owner_build") == db_identity(e.meta):
+        out[proj[0]] = ["owned_out", p.has_stats and p.meta.get("stats_scope") == "own"]
+        return out, f"엔진이 주인인 파일 {p.meta.get('owned_files', '?')}개 (빌드 때 표시)"
+    # 표시가 없거나 다른 엔진 인덱스를 보고 만든 것 → 이 연결에서만 계산한다 (요약 표는 못 쓴다: SQL 로 센다)
+    owned = engine_ref_paths(e.con)
+    ids = [(i,) for i, path in p.q("SELECT id, path FROM files") if norm(path) in owned]
+    p.write_temp("CREATE TEMP TABLE IF NOT EXISTS owned_tmp(file INTEGER PRIMARY KEY)")
+    p.write_temp("DELETE FROM temp.owned_tmp")
+    p.write_temp("INSERT INTO temp.owned_tmp VALUES(?)", ids)
+    out[proj[0]] = ["temp.owned_tmp", False]
+    return out, f"엔진이 주인인 파일 {len(ids)}개 (조회 때 계산 — `cindex.py optimize` 로 표시하면 빨라진다)"
+
+
 class MultiIndex:
-    """프로젝트 범위 + 엔진 범위 인덱스를 한 번에 본다 (기본). 심볼 ID 는 clangd USR 해시라 두 인덱스에서 같다 → ID 로 합치고,
-    참조는 위치로 중복을 뺀다. 엔진 TU 의 참조는 엔진 인덱스에만, 프로젝트 TU 의 참조는 프로젝트 인덱스에만 있어서
-    한쪽만 보면 호출자·참조가 빠지고, 없는 이름을 비슷한 이름으로 잘못 고른다 (2026-10-06 탐색 비용 A/B 에서 드러남)."""
+    """프로젝트 범위 + 엔진 범위 인덱스를 한 번에 본다 (기본). 인덱스 하나여도 이것으로 연다.
+    - 심볼은 clangd USR 해시 ID 라 두 인덱스에서 같다 → ID 로 합친다 (작은 결과).
+    - 참조는 파일마다 주인이 하나다 (link_owners) → 각 인덱스에 LIMIT·COUNT·GROUP BY 를 내려보내고 작은 결과만 합친다.
+      프로젝트 인덱스가 먼저다 (clangd 가 작고 새로운 dynamic 인덱스를 먼저 묻는 것과 같고, 자기 게임 코드의 사용처를 먼저 본다).
+    예전에는 두 인덱스에서 참조를 최대 100만 행씩 가져와 파이썬에서 위치로 중복을 뺐다 — 참조 340만 심볼에서 45초 (합성 측정)."""
 
     def __init__(self, ixs):
-        self.ixs = ixs
-        self.path = " + ".join(str(i.path) for i in ixs)
-        self.meta = ixs[0].meta
+        self.ixs = sorted(ixs, key=lambda i: i.role != "project")
+        self.path = " + ".join(str(i.path) for i in self.ixs)
+        self.meta = self.ixs[0].meta
+        self.roots = self.ixs[0].roots
+        links, self.owner_note = link_owners(self.ixs)
+        self.parts = [(ix, x, ok) for ix, (x, ok) in zip(self.ixs, links)]
+
+    def q(self, sql, args=()):
+        if len(self.ixs) != 1:
+            raise RuntimeError("q() 는 인덱스 하나일 때만 쓴다")
+        return self.ixs[0].q(sql, args)
 
     @staticmethod
     def _merge(lists):
@@ -1073,6 +1451,7 @@ class MultiIndex:
         return self._merge(ix.find_fuzzy(name, limit, kinds) for ix in self.ixs)
 
     def find(self, name, limit=200, kinds=None):
+        """정확히 맞는 것(한정 이름 또는 이름)이 있으면 그것만, 없으면 접두·부분 일치. 웹뷰 검색이 쓴다."""
         return rank(self.find_exact(name, kinds) or self.find_fuzzy(name, limit, kinds), name)[:limit]
 
     def file_syms(self, pattern, limit):
@@ -1082,47 +1461,16 @@ class MultiIndex:
         found = [s for s in (ix.by_id(sid) for ix in self.ixs) if s]
         return self._merge([found])[0] if found else None
 
+    def by_ids(self, ids):
+        ids = list(ids)
+        return {s["id"]: s for s in self._merge(list(ix.by_ids(ids).values()) for ix in self.ixs)}
+
     def names(self, ids):
-        return {sid: (self.by_id(sid) if sid and sid != NULL_ID else None) for sid in ids}
-
-    def refs(self, sid, mask=None, limit=500):
-        seen, out = set(), []
-        for ix in self.ixs:
-            for r in ix.refs(sid, mask, 1_000_000):
-                k = (r["path"], r["line"], r["col"], r["kind"])
-                if k not in seen:
-                    seen.add(k)
-                    out.append(r)
-        out.sort(key=lambda r: (r["path"], r["line"] or 0))
-        return out[:limit]
-
-    def ref_count(self, sid):
-        return len(self.refs(sid, None, 10_000_000))
-
-    def callers(self, sid):
-        n = {}
-        for r in self.refs(sid, REF, 1_000_000):
-            n[r["container"]] = n.get(r["container"], 0) + 1
-        return [(self.by_id(c) if c != NULL_ID else None, k) for c, k in sorted(n.items(), key=lambda x: -x[1])]
-
-    def caller_sites(self, sid, limit):
-        first, n = {}, {}
-        for r in self.refs(sid, REF, 1_000_000):
-            n[r["container"]] = n.get(r["container"], 0) + 1
-            first.setdefault(r["container"], r)
-        top = sorted(n.items(), key=lambda x: -x[1])[:limit]
-        return [(self.by_id(c) if c != NULL_ID else None, k, first[c]) for c, k in top]
+        found = self.by_ids(ids)
+        return {sid: found.get(sid) for sid in ids}
 
     def members(self, s):
         return sorted(self._merge(ix.members(s) for ix in self.ixs), key=lambda m: (m["path"], m["line"] or 0))
-
-    def callees(self, sid):
-        best = {}
-        for ix in self.ixs:
-            for x, k in ix.callees(sid):
-                if x and k > best.get(x["id"], (None, 0))[1]:
-                    best[x["id"]] = (x, k)
-        return sorted(best.values(), key=lambda p: -p[1])
 
     def related(self, sid, predicate, forward):
         return self._merge(ix.related(sid, predicate, forward) for ix in self.ixs)
@@ -1132,6 +1480,122 @@ class MultiIndex:
 
     def derived(self, sid):
         return self.related(sid, BASE_OF, True)
+
+    # ---- 참조
+
+    @staticmethod
+    def _cursor(c):
+        """'<인덱스 순번>:<file>:<line>:<col>' (keyset) 또는 '<순번>:o<오프셋>' (옛 인덱스)."""
+        if not c:
+            return 0, None
+        try:
+            head, rest = c.split(":", 1)
+            if rest.startswith("o"):
+                return int(head), int(rest[1:])
+            f, ln, col = rest.split(":")
+            return int(head), (int(f), int(ln), int(col))
+        except ValueError:
+            raise SystemExit(f"--cursor 형식이 아니다: {c!r}")
+
+    def refs_page(self, sid, mask=None, limit=500, cursor=None, path=None, module=None):
+        """(참조 limit 개, 더 있는가, 다음 커서). 프로젝트 인덱스 몫을 경로 순으로 다 낸 뒤 엔진 몫."""
+        start, after = self._cursor(cursor)
+        out, more, nxt = [], False, None
+        for pi, (ix, x, _) in enumerate(self.parts):
+            if pi < start:
+                continue
+            rows, part_more, _ = ix.refs_part(sid, mask, limit - len(out), after if pi == start else None, path, module, x)
+            for r in rows:
+                r["part"] = pi
+            out += rows
+            if len(out) >= limit:
+                more = part_more or any(ix2.has_refs(sid, mask, path, module, x2) for ix2, x2, _ in self.parts[pi + 1:])
+                if more and out:
+                    nxt = self.cursor_after(out[-1])
+                break
+        return out, more, nxt
+
+    def cursor_after(self, r):
+        """이 참조 다음부터 이어 보는 커서."""
+        ix = self.parts[r["part"]][0]
+        return f"{r['part']}:{r['file']}:{r['line']}:{r['col']}" if ix.path_order else f"{r['part']}:o{r['pos'] + 1}"
+
+    def refs(self, sid, mask=None, limit=500):
+        return self.refs_page(sid, mask, limit)[0]
+
+    def ref_parts(self, sid, mask=None, path=None, module=None):
+        """[(역할, 참조 수)] — 파일마다 주인이 하나라 더하면 총계다."""
+        return [(ix.role, ix.ref_total(sid, mask, path, module, x, ok)) for ix, x, ok in self.parts]
+
+    def ref_count(self, sid):
+        return sum(n for _, n in self.ref_parts(sid))
+
+    def _callers(self, sid, limit):
+        """[(container, 수, 인덱스 순번, 첫 파일 id, 첫 줄)] 상위 limit. 인덱스마다 상위 limit 을 받아 합친다 —
+        함수 본문은 한 파일에 있고 파일마다 주인이 하나라 호출자가 인덱스끼리 겹치지 않는다 (파일 범위 NULL 만 더해진다)."""
+        merged = {}
+        for pi, (ix, x, ok) in enumerate(self.parts):
+            for cont, n, f, ln in ix.callers_part(sid, limit, x, ok):
+                cur = merged.get(cont)
+                if cur:
+                    cur[0] += n
+                else:
+                    merged[cont] = [n, pi, f, ln]
+        top = sorted(merged.items(), key=lambda kv: -kv[1][0])[:limit]
+        return [(c, v[0], v[1], v[2], v[3]) for c, v in top]
+
+    def callers_total(self, sid):
+        return sum(ix.callers_total(sid, x, ok) for ix, x, ok in self.parts)
+
+    def callers(self, sid, limit=200):
+        top = self._callers(sid, limit)
+        syms = self.by_ids(c for c, *_ in top)
+        return [(syms.get(c) if c != NULL_ID else None, n) for c, n, *_ in top]
+
+    def caller_sites(self, sid, limit):
+        """호출자마다 첫 참조 위치 하나 (줄 원문을 같이 보이려고)."""
+        top = self._callers(sid, limit)
+        syms = self.by_ids(c for c, *_ in top)
+        files = {}
+        for pi, (ix, _, _) in enumerate(self.parts):
+            files[pi] = ix.files_by_ids([f for _, _, p, f, _ in top if p == pi])
+        out = []
+        for c, n, pi, f, ln in top:
+            fi = files[pi].get(f, {})
+            out.append((syms.get(c) if c != NULL_ID else None, n,
+                        {"path": fi.get("path", ""), "line": ln, "abs_path": fi.get("abs_path")}))
+        return out
+
+    def modules(self, sid, limit):
+        """([(모듈, 사용 수)] 상위 limit, 모듈 수, 모듈 수가 하한인가). 인덱스마다 TOP_MODULES 개까지 받아 합친다 —
+        어느 인덱스도 잘리지 않았으면 모듈 수가 정확하고, 잘렸으면 하한이다 (사용 수 상위는 그래도 맞다)."""
+        merged, totals, cut = {}, [], False
+        for ix, x, ok in self.parts:
+            rows, total = ix.modules_part(sid, max(limit, TOP_MODULES), x, ok)
+            totals.append(total)
+            cut = cut or total > len(rows)
+            for m, n in rows:
+                merged[m] = merged.get(m, 0) + n
+        top = sorted(merged.items(), key=lambda kv: -kv[1])
+        n_mod = max(len(merged), max(totals or [0]))
+        return top[:limit], n_mod, cut
+
+    def files(self, sid, limit):
+        """([(파일, 사용 수)] 상위 limit, 사용이 있는 파일 수). 파일은 인덱스끼리 겹치지 않는다."""
+        rows, total = [], 0
+        for ix, x, ok in self.parts:
+            r, t = ix.files_part(sid, limit, x, ok)
+            rows += r
+            total += t
+        return sorted(rows, key=lambda kv: -kv[1])[:limit], total
+
+    def callees(self, sid):
+        n = {}
+        for ix, x, _ in self.parts:
+            for cid, k in ix.callees_part(sid, x):
+                n[cid] = n.get(cid, 0) + k
+        syms = self.by_ids(n)
+        return [(syms.get(c), k) for c, k in sorted(n.items(), key=lambda kv: -kv[1]) if syms.get(c)]
 
 
 def tree(ix, sid, predicate, forward, max_depth=0):
@@ -1192,29 +1656,46 @@ def fmt(s):
     return f"{s['kind']:<15} {s['scope']}{s['name']}{s['tpl_args']}{sig}  {loc}{dep}"
 
 
+IMPACT_MEMBERS = 200
+
+
 def impact_lines(ix, s, limit):
-    """이 심볼을 바꾸면 같이 봐야 할 곳: 파생 타입(3단계), 재정의, 참조하는 함수, 참조가 있는 파일·모듈."""
+    """이 심볼을 바꾸면 같이 봐야 할 곳: 파생 타입·재정의(전 단계), 참조하는 함수, 참조가 있는 파일·모듈.
+    타입이면 멤버(메서드·필드) 사용도 센다 — Peer->Tick() 처럼 멤버만 부르는 곳도 그 타입을 바꾸면 영향받는다.
+    심볼마다 상위 몫만 받아(요약 표·SQL 집계) 합친다 — 참조를 전부 가져오지 않는다. 상위에서 잘린 몫이 있으면 수에 + 를 붙인다."""
     out = []
     if s["kind"] in TYPE_KINDS:
         out += tree_lines("파생 타입 (전 단계)", tree(ix, s["id"], BASE_OF, True)[:limit * 2])
     if s["kind"] in FUNC_KINDS:
         out += tree_lines("재정의한 쪽 (전 단계)", tree(ix, s["id"], OVERRIDDEN_BY, True)[:limit * 2])
-    # 타입이면 멤버(메서드·필드) 사용도 센다 — Peer->Tick() 처럼 멤버만 부르는 곳도 그 타입을 바꾸면 영향받는다
-    ids = [s["id"]] + ([m["id"] for m in ix.members(s)] if s["kind"] in TYPE_KINDS else [])
-    refs = [r for i in ids for r in ix.refs(i, REF, 1_000_000)]
-    by_fn = {}
-    for r in refs:
-        by_fn[r["container"]] = by_fn.get(r["container"], 0) + 1
-    callers = [(ix.by_id(c) if c != NULL_ID else None, n) for c, n in sorted(by_fn.items(), key=lambda x: -x[1])]
-    member_note = " (타입 이름 + 멤버 사용)" if len(ids) > 1 else ""
-    out.append(f"## 참조하는 함수·범위 {len(callers)}{member_note}")
-    out += [f"  {n:>4}× {fmt(x)}" for x, n in callers[:limit]]
-    files, mods = {}, {}
-    for r in refs:
-        files[r["path"]] = files.get(r["path"], 0) + 1
-        m = r.get("module") or "(모듈 없음)"
-        mods[m] = mods.get(m, 0) + 1
-    out.append(f"## 참조가 있는 파일 {len(files)}{member_note} · 모듈 {len(mods)}: " + ", ".join(f"{m} {n}" for m, n in sorted(mods.items(), key=lambda x: -x[1])))
+    members = [m["id"] for m in ix.members(s)] if s["kind"] in TYPE_KINDS else []
+    ids = [s["id"]] + members[:IMPACT_MEMBERS]
+    per = max(limit * 4, 50)
+    by_fn, files, mods = {}, {}, {}
+    n_use, fn_cut, file_cut, mod_cut = 0, False, False, False
+    for i in ids:
+        n_use += sum(n for _, n in ix.ref_parts(i, REF))
+        top = ix._callers(i, per)
+        fn_cut = fn_cut or len(top) >= per
+        for c, n, *_ in top:
+            by_fn[c] = by_fn.get(c, 0) + n
+        frows, ftotal = ix.files(i, per)
+        file_cut = file_cut or ftotal > len(frows)
+        for f, n in frows:
+            files[f] = files.get(f, 0) + n
+        mrows, _, approx = ix.modules(i, TOP_MODULES)
+        mod_cut = mod_cut or approx or len(mrows) >= TOP_MODULES
+        for m, n in mrows:
+            mods[m] = mods.get(m, 0) + n
+    note = " (타입 이름 + 멤버 사용)" if len(ids) > 1 else ""
+    if len(members) > IMPACT_MEMBERS:
+        note += f" — 멤버 {len(members)}개 중 {IMPACT_MEMBERS}개만"
+    top = sorted(by_fn.items(), key=lambda kv: -kv[1])[:limit]
+    syms = ix.by_ids(c for c, _ in top)
+    out.append(f"## 참조하는 함수·범위 {len(by_fn)}{'+' if fn_cut else ''}{note} · 사용 참조 {n_use}")
+    out += [f"  {n:>4}× {fmt(syms.get(c) if c != NULL_ID else None)}" for c, n in top]
+    out.append(f"## 참조가 있는 파일 {len(files)}{'+' if file_cut else ''}{note} · 모듈 {len(mods)}{'+' if mod_cut else ''}: "
+               + ", ".join(f"{m or '(모듈 없음)'} {n}" for m, n in sorted(mods.items(), key=lambda x: -x[1])[:12]))
     out += [f"  {n:>4}× {rel}" for rel, n in sorted(files.items(), key=lambda x: -x[1])[:limit]]
     return out
 
@@ -1222,16 +1703,15 @@ def impact_lines(ix, s, limit):
 def open_index(a, root, kind):
     """--db 가 없으면 있는 인덱스를 다 같이 본다 (프로젝트 + 엔진). --db project|engine|경로 면 그 하나만."""
     if not a.db:
-        dbs = [p for p in (db_for("project", root, kind), db_for("engine", root, kind)) if p and p.exists()]
-        if len(dbs) > 1:
-            return MultiIndex([Index(p) for p in dbs])
+        dbs = [(p, r) for p, r in ((db_for("project", root, kind), "project"), (db_for("engine", root, kind), "engine"))
+               if p and p.exists()]
         if dbs:
-            return Index(dbs[0])
+            return MultiIndex([Index(p, r) for p, r in dbs])
     db = pick_db(a.db, root, kind)
     if not db or not db.exists():
         print(f"clangd 인덱스 없음: {db}. `cindex.py build` 를 먼저 돌린다.")
         return None
-    return Index(db)
+    return MultiIndex([Index(db, a.db if a.db in ("engine", "project") else None)])
 
 
 def pick_one(ix, name, kinds=None):
@@ -1254,9 +1734,51 @@ def cmd_status(ix):
     print(f"출처 {ix.meta.get('source')} · cdb {ix.meta.get('cdb', '-')} · 필터 {ix.meta.get('filter', '-') or '-'} · "
           f"오류 있던 TU {errors.get('failed_tu', '?')} · 오류 줄 {'-' if errors.get('count') is None else errors.get('count')}"
           + (f" (.generated.h 관련 {errors.get('generated_h')})" if errors.get("generated_h") else ""))
+    print(f"스키마 {ix.schema}" + (f" · 요약 표 {'있음' if ix.has_stats else '없음'} · 요약 범위 {ix.meta.get('stats_scope', '-')}"
+                                   if ix.schema >= SCHEMA_VERSION else
+                                   " — 옛 모양: `cindex.py optimize` 로 바꾸면 참조·호출자 조회가 빨라진다 (색인은 다시 안 한다)"))
     stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
              if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
     print(f"[낡음] 표본 파일 {len(stale)}개가 인덱스 뒤 바뀌었다 → build" if stale else "신선도: 표본 300 파일 OK")
+    return 0
+
+
+ROLE_NAMES = {"project": "프로젝트", "engine": "엔진"}
+
+
+def part_text(parts):
+    """[(역할, 수)] → ' (프로젝트 n · 엔진 m)'. 인덱스가 하나면 빈 문자열."""
+    return " (" + " · ".join(f"{ROLE_NAMES.get(r, r)} {n}" for r, n in parts) + ")" if len(parts) > 1 else ""
+
+
+def refs_report(ix, s, head, a, lc):
+    """에이전트용 참조 보고: 총계(인덱스별) · 사용 모듈 상위 · 프로젝트 먼저 경로 순 표본(줄 원문) · 잘림 표시와 다음 커서.
+    결과가 많으면 전부 내지 않고 좁히는 법을 알려 준다 (SWE-agent: 결과 50개 이하로 요약한 검색이 하나씩 보여 주는 검색보다 해결률이 높았다)."""
+    mask = {"decl": DECL, "def": DEF, "ref": REF}.get(a.kind)
+    rows, more, _ = ix.refs_page(s["id"], mask, a.limit, a.cursor, a.path, a.module)
+    parts = ix.ref_parts(s["id"], mask, a.path, a.module)
+    total = sum(n for _, n in parts)
+    names = ix.names({r["container"] for r in rows})
+    filt = " ".join(x for x in (f"--kind {a.kind}" if a.kind else "", f"--path {a.path}" if a.path else "",
+                                f"--module {a.module}" if a.module else "") if x)
+    summary = [f"참조 {total}{part_text(parts)}" + (f" · 필터 {filt}" if filt else "")]
+    if not (a.path or a.module) and total:
+        mods, n_mod, approx = ix.modules(s["id"], 6)
+        if mods:
+            summary.append(f"사용 모듈 {n_mod}{'+' if approx else ''}: " + " · ".join(f"{m or '(모듈 없음)'} {n}" for m, n in mods)
+                           + (" …" if n_mod > len(mods) else ""))
+    lines = [f"{'D' if r['kind'] & DEF else 'd' if r['kind'] & DECL else 'r'} {r['path']}:{r['line']}:{r['col']}"
+             f"  in {(names.get(r['container']) or {}).get('name', '(파일 범위)')}  │ {lc.text(r['abs_path'], r['line'])}"
+             for r in rows]
+    top = head + summary
+    shown = len(lines) if a.full else min(len(lines), fits(lines, max(CAP - len("\n".join(top).encode("utf-8")) - 400, 600)))
+    rest = shown < len(lines) or more
+    tail = []
+    if rest and shown:
+        tail.append(f"[잘림] {shown}/{total} · 다음: --cursor {ix.cursor_after(rows[shown - 1])} · "
+                    "좁히기: --module <모듈> | --path <경로 조각> | --kind ref|decl|def")
+    order = "프로젝트 먼저 · 경로 순" if len(ix.parts) > 1 else "경로 순"
+    print("\n".join(top + [f"── {order} · {shown}개 ──" if rows else "참조 없음"] + lines[:shown] + tail))
     return 0
 
 
@@ -1265,13 +1787,14 @@ def cmd_query(a, root, kind):
     if ix is None:
         return 1
     c, arg = a.command, " ".join(a.arg).strip()
-    if c == "status" and isinstance(ix, MultiIndex):
-        for sub in ix.ixs:
-            print(f"--- {'엔진' if 'ue_index' in str(sub.path) else '프로젝트'} 범위")
-            cmd_status(sub)
-        return 0
     if c == "status":
-        return cmd_status(ix)
+        for sub in ix.ixs:
+            if len(ix.ixs) > 1:
+                print(f"--- {'엔진' if sub.role == 'engine' else '프로젝트'} 범위")
+            cmd_status(sub)
+        if ix.owner_note:
+            print(f"--- 합쳐 보기: {ix.owner_note}")
+        return 0
     if not arg:
         raise SystemExit(f"{c} 는 인자가 필요하다.")
     if c == "sym":
@@ -1291,16 +1814,17 @@ def cmd_query(a, root, kind):
     head = [f"# {fmt(s)}"] + ([f"# 같은 이름 후보 {len(others)}개 더 — A::B 로 좁힌다"] if others else [])
     lc = LineCache()
     if c == "refs":
-        mask = {"decl": DECL, "def": DEF, "ref": REF}.get(a.kind)
-        rows = ix.refs(s["id"], mask, a.limit)
-        names = ix.names({r["container"] for r in rows})
-        lines = [f"{'D' if r['kind'] & DEF else 'd' if r['kind'] & DECL else 'r'} {r['path']}:{r['line']}:{r['col']}"
-                 f"  in {(names.get(r['container']) or {}).get('name', '(파일 범위)')}  │ {lc.text(r['abs_path'], r['line'])}"
-                 for r in rows]
-        emit(head + (lines or ["참조 없음"]), a.full)
+        return refs_report(ix, s, head, a, lc)
     elif c == "callers":
-        emit(head + [f"{n:>4}× {fmt(x)}\n       {site['path']}:{site['line']}  │ {lc.text(site['abs_path'], site['line'])}"
-                     for x, n, site in ix.caller_sites(s["id"], a.limit)] or ["없음"], a.full)
+        sites = ix.caller_sites(s["id"], a.limit)
+        n_call = ix.callers_total(s["id"])
+        uses = ix.ref_parts(s["id"], REF)
+        lines = [f"{n:>4}× {fmt(x)}\n       {site['path']}:{site['line']}  │ {lc.text(site['abs_path'], site['line'])}"
+                 for x, n, site in sites]
+        summary = f"호출자 {n_call} · 사용 참조 {sum(n for _, n in uses)}{part_text(uses)} — 사용 수 순"
+        tail = ([f"[잘림] 호출자 상위 {len(sites)}/{n_call} · 더 보려면 --limit N · 좁히기: refs {arg} --module <모듈> | --path <경로 조각>"]
+                if n_call > len(sites) else [])
+        emit(head + [summary] + (lines or ["없음"]), a.full, tail)
     elif c == "members":
         rows = ix.members(s)
         emit(head + [f"{m['kind']:<15} {m['name']:<32} :{m['line']}  │ {lc.text(m['abs_path'], m['line'])}" for m in rows[:a.limit * 3]]
@@ -1339,7 +1863,7 @@ class CindexSource:
         self.scope, self.db = scope, db
         self.covers = {"engine", "project"} if scope == "project" else {"engine"}
         self.available = bool(db and db.exists())
-        self.ix = Index(db) if self.available else None
+        self.ix = MultiIndex([Index(db, scope)]) if self.available else None
 
     def info(self):
         if not self.available:
@@ -1377,7 +1901,7 @@ class CindexSource:
         if s["kind"] in FUNC_KINDS:
             rel["재정의 대상"] = [self._out(x) for x in self.ix.related(sid, OVERRIDDEN_BY, False)]
             rel["재정의한 쪽"] = [self._out(x) for x in self.ix.related(sid, OVERRIDDEN_BY, True)]
-            rel["호출하는 쪽 (참조 Container)"] = [self._out(x) for x, _ in self.ix.callers(sid) if x][:60]
+            rel["호출하는 쪽 (참조 Container)"] = [self._out(x) for x, _ in self.ix.callers(sid, 60) if x]
             rel["부르는 함수"] = [self._out(x) for x, _ in self.ix.callees(sid) if x][:60]
         refs = self.ix.refs(sid, None, 60)
         s["ref_rows"] = self.ix.ref_count(sid)
@@ -1407,7 +1931,7 @@ class CindexSource:
                 return ([(x["id"], "overrides", True) for x in ix.related(i, OVERRIDDEN_BY, False)] +
                         [(x["id"], "overrides", False) for x in ix.related(i, OVERRIDDEN_BY, True)])
             out = [(x["id"], "calls", True) for x, _ in ix.callees(i) if x][:25]
-            return out + [(x["id"], "calls", False) for x, _ in ix.callers(i) if x and x["kind"] in FUNC_KINDS][:25]
+            return out + [(x["id"], "calls", False) for x, _ in ix.callers(i, 60) if x and x["kind"] in FUNC_KINDS][:25]
         return bfs_graph(starts, nb, lambda i: sym(i)["scope"] + sym(i)["name"], lambda i: sym(i)["kind"], depth,
                          lambda i: {"module": sym(i).get("module"), "path": sym(i).get("path"), "line": sym(i).get("line")})
 
@@ -1567,7 +2091,8 @@ class CindexSource:
                        "GROUP BY s.id ORDER BY COUNT(*) DESC, (SELECT COUNT(*) FROM refs x WHERE x.sym=s.id) DESC LIMIT 1",
                        (OVERRIDDEN_BY,))
             if not row:
-                row = ix.q("SELECT sym FROM refs GROUP BY sym ORDER BY COUNT(*) DESC LIMIT 1")
+                row = (ix.q("SELECT sym FROM sym_stats ORDER BY n_refs DESC LIMIT 1") if ix.ixs[0].has_stats else
+                       ix.q("SELECT sym FROM refs GROUP BY sym ORDER BY COUNT(*) DESC LIMIT 1"))
             sid = row[0][0] if row else None
         if not sid:
             return None
@@ -1677,7 +2202,8 @@ class MergedCindexSource(CindexSource):
         self.available = bool(self.parts)
         names = {"project": "프로젝트", "engine": "엔진"}
         self.label = "clangd · " + ("+".join(names[p.scope] for p in self.parts) if self.parts else "프로젝트+엔진") + " (cindex)"
-        self.ix = (MultiIndex([p.ix for p in self.parts]) if len(self.parts) > 1 else self.parts[0].ix) if self.parts else None
+        # 범위별 소스와 연결을 나누지 않는다 — 합쳐 보기는 프로젝트 인덱스 연결에 소유권 temp 표를 만들 수 있다
+        self.ix = (MultiIndex([Index(p.db, p.scope) for p in self.parts]) if len(self.parts) > 1 else self.parts[0].ix) if self.parts else None
         self._ov = None
 
     def _part(self, scope):
@@ -1714,9 +2240,20 @@ class MergedCindexSource(CindexSource):
             self._ov = self._merged_overview()
         return self._ov
 
+    def _merged_refs(self):
+        """합쳐 본 참조 수 — 파일마다 주인이 하나라 각 인덱스의 주인 몫을 더한다 (ref_files 가 있으면 파일별 합으로)."""
+        total = 0
+        for ix, x, _ in self.ix.parts:
+            if x:
+                total += ix.q(f"SELECT IFNULL(SUM(n), 0) FROM ref_files WHERE file NOT IN (SELECT file FROM {x})")[0][0] \
+                    if "ref_files" in ix.tables else ix.q(f"SELECT COUNT(*) FROM refs r WHERE 1{Index._x(x)}")[0][0]
+            else:
+                total += int(json.loads(ix.meta.get("counts", "{}")).get("refs") or 0)
+        return total
+
     def _merged_overview(self):
         """두 인덱스를 합친 개요. 심볼·관계·파일은 ID·경로로 겹친 것을 한 번만 센다 (엔진 헤더 심볼은 양쪽에 있다).
-        참조는 두 인덱스의 합이다 — 엔진 헤더 안의 참조는 겹쳐 셀 수 있다 (위치로 빼려면 참조 전체를 읽어야 해서 개요에서는 하지 않는다)."""
+        참조는 파일 소유권으로 센다 — 엔진 인덱스가 가진 파일의 참조는 엔진 쪽만 (MultiIndex 와 같은 규칙)."""
         proj, eng = self._part("project"), self._part("engine")
         ovs = {p.scope: p.overview() for p in self.parts}
         con = sqlite3.connect(f"file:{Path(proj.db).as_posix()}?mode=ro", uri=True)
@@ -1729,7 +2266,7 @@ class MergedCindexSource(CindexSource):
             n_files = con.execute("SELECT COUNT(*) FROM (SELECT path FROM main.files UNION SELECT path FROM e.files)").fetchone()[0]
         finally:
             con.close()
-        refs = sum((o["counts"] or {}).get("refs", 0) or 0 for o in ovs.values())
+        refs = self._merged_refs()
         mods = {}
         for o in ovs.values():
             for m in o["modules"]:
@@ -1753,7 +2290,8 @@ class MergedCindexSource(CindexSource):
                 "build": {"at": pb.get("at"), "mode": f"프로젝트 {pb.get('mode') or '-'} · 엔진 {eb.get('mode') or '-'}",
                           "tus": (pb.get("tus") or 0) + (eb.get("tus") or 0) if (pb.get("tus") or eb.get("tus")) else None,
                           "engine_at": eb.get("at")},
-                "note": "프로젝트+엔진 합침 — 심볼·관계·파일은 겹친 것을 한 번만, 참조는 두 인덱스의 합 (엔진 헤더 안 참조는 겹쳐 셀 수 있다)"}
+                "note": "프로젝트+엔진 합침 — 심볼·관계·파일은 겹친 것을 한 번만, 참조는 파일 주인 기준 (엔진 인덱스가 가진 파일은 엔진 쪽만). "
+                        + self.ix.owner_note}
 
     def pipeline(self):
         """파이프라인은 인덱스마다 다르다 — 자주 바뀌는 프로젝트 인덱스를 보이고 엔진 인덱스는 사실 줄로 붙인다."""
@@ -1970,7 +2508,7 @@ def cmd_eval(root, kind):
 
 def main():
     ap = argparse.ArgumentParser(description="clangd 기반 의미 인덱스")
-    ap.add_argument("command", choices=["cdb", "build", "ingest", "status", "sym", "refs", "callers", "callees",
+    ap.add_argument("command", choices=["cdb", "build", "ingest", "optimize", "status", "sym", "refs", "callers", "callees",
                                         "bases", "derived", "overrides", "members", "impact", "file", "eval"])
     ap.add_argument("arg", nargs="*", default=[])
     ap.add_argument("--root", default=".")
@@ -1992,6 +2530,10 @@ def main():
     ap.add_argument("--timeout", type=int, default=0, help="build --mode bg: 초 (0 = 없음)")
     ap.add_argument("--kind", default=None, choices=["decl", "def", "ref"])
     ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--cursor", default=None, help="refs: 앞 출력의 [잘림] 줄에 있는 커서로 이어 본다")
+    ap.add_argument("--path", default=None, help="refs: 경로 조각으로 좁힌다")
+    ap.add_argument("--module", default=None, help="refs: 모듈로 좁힌다 (Build.cs 이름)")
+    ap.add_argument("--force", action="store_true", help="optimize: 이미 스키마 2 여도 다시 쓴다")
     ap.add_argument("--depth", type=int, default=0, help="bases·derived·overrides: 따라갈 단계 (0 = 끝까지)")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--target", default=None)
@@ -2018,6 +2560,10 @@ def main():
         return cmd_build(root, kind, a)
     if a.command == "eval":
         return cmd_eval(root, kind)
+    if a.command == "optimize":
+        done = optimize(root, kind, a.force)
+        print("조회용 모양: " + (" · ".join(done) if done else "이미 맞다 (스키마 %d, 소유권 표시 최신)" % SCHEMA_VERSION))
+        return 0
     return cmd_query(a, root, kind)
 
 

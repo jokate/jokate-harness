@@ -38,10 +38,10 @@ grep 만으로는 절반만 본다. 그리고 엔진과 프로젝트는 변하�
 | 인덱스 갱신 / 신선도 | `python ~/.claude/skills/game-onboard/scripts/gq.py index` · `status` |
 | UE 엔진 심볼 → 선언 → 시그니처 | `python ~/.claude/skills/game-onboard/scripts/ue_q.py sym X` → `api X` / `decl X --max 60` |
 | UE 엔진 모듈·의존 / 본문 검색 | `python ~/.claude/skills/game-onboard/scripts/ue_q.py module X` · `deps X` · `rg "패턴" --module X` |
-| 부르는 쪽 / 부르는 함수 (참조 줄 원문 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py callers X` · `callees X` · `refs X` |
+| 부르는 쪽 / 부르는 함수 (참조 줄 원문 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py callers X` · `callees X` · `refs X` (많으면 총계·모듈 묶음과 `[잘림]` 줄이 나온다 → `--module`·`--path`·`--cursor`) |
 | 자식 · 재정의 (전 단계 트리) · 바꾸면 같이 볼 곳 (멤버 사용 포함) | `python ~/.claude/skills/game-onboard/scripts/cindex.py derived X` · `overrides X` · `impact X` |
 | clangd 도구 확인 / 설치 (setup 이 이미 설치) | `python ~/.claude/skills/game-onboard/scripts/clangd_tools.py status` · `install` |
-| 의미 인덱스 만들기 / 상태 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine] [--mode bg] [--unity 8]` · `status` |
+| 의미 인덱스 만들기 / 상태 / 조회용 정리 | `python ~/.claude/skills/game-onboard/scripts/cindex.py build [--scope engine] [--mode bg] [--unity 8]` · `status` · `optimize` |
 | 인덱스 전부 지금 만들기 (gq → ue_q → clangd, 단계별 결과) — 사용자는 저장소의 `index_build.bat` 으로도 | `python ~/.claude/skills/game-onboard/scripts/index_all.py [<프로젝트>] [--engine-root <엔진 폴더>] [--no-clangd]` |
 | 인덱스 웹뷰 (검색·그래프·검증·하네스 기록) — 이미 떠 있으면 그것을 연다, 사용자는 저장소의 `index_view.bat` 더블클릭으로도 연다 | `python ~/.claude/skills/game-onboard/scripts/index_view.py --open` (백그라운드로) |
 
