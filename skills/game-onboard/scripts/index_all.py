@@ -213,7 +213,7 @@ def main():
                     skip(titles[2], f"있음 {edb} (엔진 버전당 한 번 — 다시 만들려면 --engine)")
                 elif engine_tus(cdb, root, eng) == 0:
                     skip(titles[2], f"{cdb.name} 에 엔진 번역 단위가 없다 — 런처 설치 엔진이면 engine_cdb.py 로 엔진 cdb 를 만든 뒤 "
-                                    "cindex.py build --scope engine --cdb <그 파일> --mode bg --unity 8 (references/cindex.md 2절, 몇 시간)")
+                                    "cindex.py build --scope engine --cdb <그 파일> --mode bg --unity 8 --keep-error-batches (references/cindex.md 2절, 몇 시간)")
                 else:
                     mode = [] if indexer else ["--mode", "bg"]
                     print("\n엔진 clangd 색인은 엔진 버전당 한 번이고 오래 걸린다." +

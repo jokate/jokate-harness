@@ -15,8 +15,8 @@
   3. 엔진의 *.Build.cs 로 모듈 폴더를 찾고, rsp 가 있는 엔진 모듈의 .cpp 로 <out>/<이름>/engine/compile_commands.json 을 쓴다.
      항목마다 /std:c++20 (rsp 에 없다)과 빈 .gen.cpp 폴더(/I, gen_stubs 참고)를 붙인다.
 
-그 뒤: cindex.py build --root <프로젝트> --scope engine --cdb <그 파일> --unity 8
-(모듈 안에서는 플래그가 같아 --unity 로 묶인다.)
+그 뒤: cindex.py build --root <프로젝트> --scope engine --cdb <그 파일> --mode bg --unity 8 --keep-error-batches
+(모듈 안에서는 플래그가 같아 --unity 로 묶인다. 오류 난 묶음을 풀면 시간이 몇 배가 된다 — references/cindex.md 2절.)
 """
 import argparse
 import json

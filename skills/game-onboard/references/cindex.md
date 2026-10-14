@@ -68,8 +68,10 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   응답 파일(`compileCommands_<이름>/<모듈>.<번호>.rsp`)을 쓴다. `engine_cdb.py` 가 그것으로 엔진 항목을 합성한다:
   ```
   python ~/.claude/skills/game-onboard/scripts/engine_cdb.py --root <프로젝트>      # 뼈대 복사본에서 UBT -VSCode → 엔진 cdb
-  python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --cdb ~/.claude/cache/game-harness/engine-cdb/<이름>/engine/compile_commands.json --mode bg --unity 8 --jobs 6
+  python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --cdb ~/.claude/cache/game-harness/engine-cdb/<이름>/engine/compile_commands.json --mode bg --unity 8 --jobs 6 --keep-error-batches
   ```
+  `--keep-error-batches`: UE 5.7 엔진에서는 묶음의 24%(Engine · Core · UnrealEd 에 몰림)가 오류였고, 풀어서 다시 하면 TU 1만 개 · 약 13시간이 더 든다.
+  풀어 본 TU 의 60% 는 오류가 사라졌다(묶음 탓) — 정확도를 더 원하면 이 옵션을 빼고 하룻밤 돌린다.
   프로젝트 폴더에 `.vscode` 를 만들지 않으려고 `.uproject` · Config · Source · Plugins 의 소스만 복사한 곳에서 생성한다. 항목마다 `/std:c++20` 과
   빈 `.gen.cpp` 폴더를 붙인다 — 런처 엔진은 `.gen.cpp` 를 싣지 않아 `UE_INLINE_GENERATED_CPP_BY_NAME` 이 TU 마다 fatal error 가 되고 유니티 묶음이 전부 풀린다.
   `--modules A,B` 로 몇 모듈만 먼저 시험한다. 실측(MNYS · UE 5.7): 모듈 847 · TU 23,602 → 묶음 3,399, 모듈 4개 시험은 VERIFICATION.md 2026-10-14.
