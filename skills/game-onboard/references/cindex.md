@@ -63,9 +63,17 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   `cdb` 는 실패하면 `-NoExecCodeGenActions` 로 UHT 를 건너뛰고 한 번 더 한다 (`--codegen auto`, 기본). 생성 코드 폴더
   `Intermediate/Build/<플랫폼>/<앱>/Inc/<모듈>` 은 이 모드와 평소 빌드가 같이 쓰므로 (UEBuildTarget.cs) 마지막 에디터 빌드의 `.generated.h` 를 쓴다 —
   에디터 빌드를 한 번도 안 했으면 UCLASS 타입이 빠진다. `--codegen on` = 다시 안 함, `off` = 처음부터 건너뜀. 5.1–5.3 은 UHT 를 기본으로 안 돈다.
-- **런처 설치 엔진**: 엔진 모듈이 미리 빌드돼 있어 위 데이터베이스에는 **프로젝트 파일만** 나온다. 엔진 cpp 까지 색인하려면
-  VS Code 프로젝트 생성기의 `.vscode/compileCommands_<이름>.json` (cl.exe + 모듈별 rsp, 엔진 모듈 포함)을 쓴다.
-  `/std` 가 빠져 있으니 `--extra-arg=/std:c++20` 을 준다. `cindex.py build` 는 이 파일을 자동으로 찾아 `compile_commands.json` 이름으로 복사해 넘긴다.
+- **런처 설치 엔진**: 엔진 모듈이 미리 빌드돼 있어 위 데이터베이스에는 **프로젝트 파일만** 나온다. VS Code 프로젝트 생성기의
+  `.vscode/compileCommands_<이름>.json` 에도 엔진 `.cpp` 항목은 없다(UE 5.7 에서 0개 — 예전 안내가 틀렸다). 대신 생성기는 타깃이 쓰는 모든 모듈의
+  응답 파일(`compileCommands_<이름>/<모듈>.<번호>.rsp`)을 쓴다. `engine_cdb.py` 가 그것으로 엔진 항목을 합성한다:
+  ```
+  python ~/.claude/skills/game-onboard/scripts/engine_cdb.py --root <프로젝트>      # 뼈대 복사본에서 UBT -VSCode → 엔진 cdb
+  python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --cdb ~/.claude/cache/game-harness/engine-cdb/<이름>/engine/compile_commands.json --mode bg --unity 8 --jobs 6
+  ```
+  프로젝트 폴더에 `.vscode` 를 만들지 않으려고 `.uproject` · Config · Source · Plugins 의 소스만 복사한 곳에서 생성한다. 항목마다 `/std:c++20` 과
+  빈 `.gen.cpp` 폴더를 붙인다 — 런처 엔진은 `.gen.cpp` 를 싣지 않아 `UE_INLINE_GENERATED_CPP_BY_NAME` 이 TU 마다 fatal error 가 되고 유니티 묶음이 전부 풀린다.
+  `--modules A,B` 로 몇 모듈만 먼저 시험한다. 실측(MNYS · UE 5.7): 모듈 847 · TU 23,602 → 묶음 3,399, 모듈 4개 시험은 VERIFICATION.md 2026-10-14.
+  엔진 범위는 **배경 색인(`--mode bg`)을 권한다** — 몇 시간짜리라 중간에 끊겨도 만든 샤드부터 이어진다(clangd-indexer 는 처음부터 다시).
 - **그 외 C++**: 빌드 시스템이 만든 것 (CMake 는 `CMAKE_EXPORT_COMPILE_COMMANDS=ON`) → `--cdb`.
 
 ## 3. 만들기 — 속도에 따라 고른다
