@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """인덱스를 지금 한 번에 만든다 (저장소의 index_build.bat 이 부른다). 표준 라이브러리만 쓴다.
 
-  python index_all.py [프로젝트 폴더] [--engine-root <엔진 폴더>] [--no-clangd] [--cdb] [--engine]
+  python index_all.py [프로젝트 폴더] [--engine-root <엔진 폴더>] [--no-clangd] [--cdb] [--engine] [--jobs N]
 
 프로젝트 폴더를 안 주면: 지금 폴더가 프로젝트면 그것, 아니면 하네스 이벤트 로그의 가장 최근 프로젝트 (index_view.py 와 같다).
 
@@ -124,7 +124,9 @@ def main():
     ap.add_argument("--no-clangd", action="store_true", help="정규식 인덱스(gq·ue_q)만 만든다")
     ap.add_argument("--cdb", action="store_true", help="compile_commands.json 이 있어도 다시 만든다 (모듈·파일을 더했을 때)")
     ap.add_argument("--engine", action="store_true", help="엔진 clangd 인덱스가 있어도 다시 만든다 (오래 걸린다)")
+    ap.add_argument("--jobs", type=int, default=0, help="clangd 색인 병렬 수 (0 = clangd 기본, 보통 코어 전부)")
     a = ap.parse_args()
+    jobs = ["--jobs", str(a.jobs)] if a.jobs > 0 else []
 
     root, kind, note = resolve_project(a.root)
     if note:
@@ -201,9 +203,9 @@ def main():
                 skip(titles[3], "compile_commands.json 이 없다 (3단계 출력을 본다)")
             else:
                 if clangd:
-                    step(titles[1], "cindex.py", ["build", "--root", r, "--mode", "bg"])
+                    step(titles[1], "cindex.py", ["build", "--root", r, "--mode", "bg", *jobs])
                 else:
-                    step(titles[1], "cindex.py", ["build", "--root", r])
+                    step(titles[1], "cindex.py", ["build", "--root", r, *jobs])
                 edb = cindex.db_for("engine", root, kind)
                 if not eng_ok:
                     skip(titles[2], "엔진 폴더를 못 찾았다 — --engine-root 로 지정")
@@ -216,7 +218,7 @@ def main():
                     mode = [] if indexer else ["--mode", "bg"]
                     print("\n엔진 clangd 색인은 엔진 버전당 한 번이고 오래 걸린다." +
                           (" clangd-indexer 는 중간에 멈추면 처음부터 다시 한다." if indexer else ""), flush=True)
-                    step(titles[2], "cindex.py", ["build", "--root", r, "--scope", "engine", "--unity", "8", *mode])
+                    step(titles[2], "cindex.py", ["build", "--root", r, "--scope", "engine", "--unity", "8", *mode, *jobs])
                 if any(d and d.exists() for d in (cindex.db_for("project", root, kind), edb)):
                     step(titles[3], "cindex.py", ["optimize", "--root", r])
                 else:

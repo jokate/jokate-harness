@@ -49,6 +49,41 @@ def uri_path(uri):
 
 # ---------------------------------------------------------------- compile_commands
 
+def split_windows(cmd):
+    """Windows 명령줄을 인자로 나눈다 (CommandLineToArgvW 규칙: 따옴표는 묶기만 하고 인자에서 빠진다, 역슬래시는 따옴표 앞에서만 이스케이프).
+    shlex(posix=False)는 따옴표를 남긴다 — UE 의 compile_commands 는 `cl.exe @"…obj.rsp"` 라 `@"…"` 가 그대로 넘어가
+    clangd 가 응답 파일을 못 열고 TU 가 전부 빈 채로 끝났다 (MNYS · UE 5.7, 412 TU 중 389)."""
+    args, cur, quoted, has, i, n = [], [], False, False, 0, len(cmd)
+    while i < n:
+        c = cmd[i]
+        if c == "\\":
+            j = i
+            while j < n and cmd[j] == "\\":
+                j += 1
+            k = j - i
+            if j < n and cmd[j] == '"':
+                cur.append("\\" * (k // 2))
+                if k % 2:  # 홀수 개 뒤의 따옴표는 글자다
+                    cur.append('"')
+                    j += 1
+            else:
+                cur.append("\\" * k)
+            has, i = True, j
+        elif c == '"':
+            quoted, has, i = not quoted, True, i + 1
+        elif c in " \t\r\n" and not quoted:
+            if has:
+                args.append("".join(cur))
+                cur, has = [], False
+            i += 1
+        else:
+            cur.append(c)
+            has, i = True, i + 1
+    if has:
+        args.append("".join(cur))
+    return args
+
+
 def entries_of(cdb_path):
     """compile_commands.json → [{file, directory, args}] (file 은 절대 경로). command 문자열이면 셸 규칙으로 나눈다."""
     out = []
@@ -58,9 +93,7 @@ def entries_of(cdb_path):
             args = list(e["arguments"])
         else:
             cmd = e.get("command", "")
-            args = shlex.split(cmd, posix=os.name != "nt")
-            if os.name == "nt":
-                args = [a[1:-1] if len(a) > 1 and a[0] == a[-1] == '"' else a for a in args]
+            args = split_windows(cmd) if os.name == "nt" else shlex.split(cmd)
         f = e["file"]
         f = f if os.path.isabs(f) else os.path.join(d, f)
         out.append({"file": os.path.normpath(f), "directory": d, "args": args})
