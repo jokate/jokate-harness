@@ -964,7 +964,10 @@ def build_indexer(root, eng, scope, a, out_dir, roots):
     single_failed = [f for f in failed_all if f not in mem]
     retry_set = set().union(*(mem[b] for b in failed_b)) if failed_b else set()
     retry = [e for e in entries if sp.npath(e["file"]) in retry_set]
-    if retry:
+    if retry and a.keep_error_batches:
+        print(f"실패한 묶음 {len(failed_b)}개 — 풀지 않고 둔다 (--keep-error-batches)")
+        errors["unity_failed"] = len(failed_b)
+    elif retry:
         print(f"실패한 묶음 {len(failed_b)}개 → 원래 TU {len(retry)}개로 다시 색인")
         staged2 = sp.write_cdb(retry, out_dir / "unity-retry-cdb" / "compile_commands.json")
         out2, took2, e2, _ = _run_indexer(indexer, staged2, out_dir, fmt, a.jobs, a.extra_arg, None, tag="-retry")
@@ -1043,7 +1046,9 @@ def build_background(root, eng, scope, a, out_dir, roots):
         print(f"clangd 가 도중에 끝났다 — {bg / 'clangd.log'} 를 본다.")
     store.scan()
     bad_batches = [b for b in members if sp.npath(b) in store.errors]
-    if bad_batches:
+    if bad_batches and a.keep_error_batches:
+        print(f"오류 난 묶음 {len(bad_batches)}개 — 풀지 않고 둔다 (--keep-error-batches, 심볼은 대부분 들어 있다)")
+    elif bad_batches:
         # 묶음에서만 나는 오류(파일 범위 이름 충돌 등)일 수 있다 → 그 묶음을 풀어 원래 TU 로 한 번 더 돈다. 다음 빌드도 풀어 둔다
         for b in bad_batches:
             split.update(sp.npath(m) for m in members[b])
@@ -2526,6 +2531,9 @@ def main():
     ap.add_argument("--format", default="binary", choices=["binary", "yaml"],
                     help="build --mode indexer: 출력 형식. binary(RIFF)가 17배쯤 작고 적재가 빠르다")
     ap.add_argument("--unity", type=int, default=0, help="build: 같은 플래그의 .cpp 를 N 개씩 한 TU 로 묶는다 (0 = 끔)")
+    ap.add_argument("--keep-error-batches", action="store_true",
+                    help="build --unity: 오류 난 묶음을 원래 TU 로 풀어 다시 색인하지 않는다. 엔진처럼 큰 범위에서 시간을 아낀다 "
+                         "(UE 5.7 엔진: 묶음 24%% 가 오류, 풀면 TU 1만 개 · 약 13시간)")
     ap.add_argument("--clangd", default=None, help="build --mode bg: clangd 경로 (기본 CLANGD > PATH > ~/.claude/tools)")
     ap.add_argument("--timeout", type=int, default=0, help="build --mode bg: 초 (0 = 없음)")
     ap.add_argument("--kind", default=None, choices=["decl", "def", "ref"])

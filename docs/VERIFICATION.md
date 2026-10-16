@@ -486,6 +486,42 @@ DB 하나에 100만을 넘는 심볼은 개수도 잘렸다. 고친 것:
 - optimize 비용: 엔진 인덱스 98초(표 복사 28초), 1.37GB → 1.50GB. 프로젝트 인덱스 16초. `build` 는 적재 끝에 같은 일을 한다.
 - 조사 보고서의 "같은 DB 두 번" 측정(45s)과 옛 코드 수치가 다른 것은 이번에는 실제 두 인덱스 쌍(프로젝트 몫이 먼저 차는)으로 쟀기 때문이다.
 
+## 2026-10-14 — 실제 UE 5.7 · Windows (MNYS): 응답 파일 따옴표 · 런처 설치 엔진의 엔진 cdb
+
+처음으로 실제 UE 프로젝트(MNYS, UE 5.7 런처 설치, MSVC 14.44, Windows 11, 16스레드 · 32GB)에서 clangd 단계를 끝까지 돌렸다.
+
+**1. 프로젝트 인덱스가 비어 있었다.** 10-07 에 만든 MNYS clangd 인덱스는 412 TU 중 389 가 오류, 색인 15초, 심볼 3.7만 · 파일 833 이었다.
+clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`. `cindex.py cdb` 의 항목은 `cl.exe @"…obj.rsp"` 인데
+`entries_of` 가 `shlex.split(posix=False)` 로 나눠 `@"…"` 의 따옴표가 인자에 남았다(토큰 전체가 따옴표일 때만 벗겼다).
+고침: `cindex_speed.split_windows` (CommandLineToArgvW 규칙). 같은 TU 하나를 clangd-indexer 로: 13.7초, 최대 575MB, RIFF 12.5MB, 오류 2줄(프로젝트 코드의 include 누락).
+
+| MNYS 프로젝트 인덱스 (`index_all.py --jobs 8`, `--mode bg`) | 고치기 전 (10-07) | 고친 뒤 |
+|---|---|---|
+| 색인 시간 | 15초 | 1,361초 (TU 412, 전부 재색인 — 플래그 변경으로 잡힘) |
+| 오류 있던 TU | 389 | 178 (원인은 따로 보지 않았다 — 표본은 유니티 · PCH 밖에서 드러난 include 누락) |
+| 심볼 · 참조 · 관계 · 파일 | 3.7만 · 21.7만 · 563 · 833 | 33.7만 · 214만 · 2.3만 · 6,394 |
+| `derived UGameplayAbility` (엔진 클래스 → 프로젝트 자식) | — | 4개(2단계), 0.1초 |
+
+**2. 런처 설치 엔진에는 엔진 cdb 가 없다.** `GenerateClangDatabase` 결과에도, cindex.md 2절이 안내하던 VS Code 생성기의
+`.vscode/compileCommands_<이름>.json` 에도 엔진 `.cpp` 항목이 0개였다(`-projectfiles -VSCode -game -engine -rocket`, 항목 1,211개 전부 프로젝트).
+대신 생성기는 타깃이 쓰는 모든 모듈의 rsp(`compileCommands_<이름>/<모듈>.<번호>.rsp`, `/I` 575줄 + `/FI` 2줄, `/D` · `/std` 없음)를 쓴다.
+`engine_cdb.py` 가 그 rsp 에 엔진 모듈 폴더의 `.cpp` 를 붙여 항목을 만든다(다른 플랫폼 폴더 · 안에 든 다른 모듈 제외). 프로젝트에 `.vscode` 를 만들지 않게
+뼈대 복사본(.uproject · Config · Source · Plugins 의 소스, 10.8MB)에서 UBT 를 돌린다(31초). MNYS 기준 엔진 모듈 847 · TU 23,602, 엔진 밖 모듈 118.
+
+런처 엔진은 `.generated.h` 만 싣고 `.gen.cpp` 는 없다(엔진 `Engine` 모듈 UHT 폴더: generated.h 1,458 · gen.cpp 0) → `#include UE_INLINE_GENERATED_CPP_BY_NAME(X)`
+가 TU 마다 fatal error 가 되고, 유니티 묶음이 전부 "오류"로 잡혀 원래 TU 로 다시 돈다(시험 1: 묶음 18/18 → TU 140 재색인, TU 하나 약 2분).
+빈 `X.gen.cpp` 13,893개 폴더를 `/I` 로 붙여 막았다.
+
+| 시험 (엔진 모듈 일부 → 임시 DB) | 결과 |
+|---|---|
+| 1: GameplayAbilities 140 TU, indexer `--unity 8 --jobs 8`, 빈 .gen.cpp 없음 | 묶음 18개 107초, 18개 전부 `.gen.cpp` fatal error → 재색인으로 넘어가 중단. clangd-indexer 최대 8.0GB |
+| 2: AIModule · EnhancedInput · GameplayAbilities · GameplayTags 353 TU, `--mode bg --unity 8 --jobs 8`, 빈 .gen.cpp 있음 | 묶음 46개, 414초, 오류 난 묶음 1개(풀어서 다시), clangd 최대 11.6GB. 심볼 19.8만 · 참조 141만 · 파일 3,737, DB 262MB |
+
+전체 엔진(묶음 3,399, `--mode bg --jobs 6`)은 이 기록을 쓰는 동안 돌고 있다 — 처음 40분 속도로 약 14시간. 결과는 아직 없다.
+
+시험: `tests/test_cindex_speed.py`(명령줄 나누기 4), `tests/test_engine_cdb.py`(가짜 엔진 폴더로 합성 · 빈 .gen.cpp 2) 통과.
+`tests/test_cindex_query.py` 는 Windows 에서 9개 중 4개가 임시 폴더 정리(`PermissionError: WinError 32` — 열린 sqlite)에서 ERROR — 이 변경과 무관해 보이지만 고치지 않았다.
+
 ## 2026-10-16 — 훅 정리: 매몰 경고 · 그림 열기를 게임 프로젝트로 좁힌다
 
 근거(하네스 이벤트 로그 `events.jsonl`, 10-07 ~ 10-16 약 10일, 726건): `stuck.warn` 514건(전체의 71%)으로 가장 많았고,
@@ -521,6 +557,10 @@ DB 하나에 100만을 넘는 심볼은 개수도 잘렸다. 고친 것:
 - "실패 TU" 표시를 "오류 있던 TU" 로 (오류가 있어도 심볼은 대부분 남는다 — 시험) (2026-10-07)
 - 그림: mermaid·marked 동봉(설치 불필요) + Stop 훅 `diagram_view.py` 가 답변 속 mermaid 를 HTML 로 열기 (2026-10-07)
 - clangd 조회 스키마 2: 파일 소유권 분할 · 요약 표 · 경로 순 keyset 커서 · `optimize` · 에이전트용 `refs` 출력 (2026-10-08)
+- compile_commands 의 `@"…rsp"` 따옴표 벗기기(`split_windows`) — 실제 UE 프로젝트 인덱스가 비던 것 · `index_all.py --jobs` (2026-10-14)
+- 런처 설치 엔진의 엔진 cdb 합성 `engine_cdb.py` (VS Code 생성기의 모듈 rsp + 엔진 .cpp, 빈 .gen.cpp) (2026-10-14)
+
+- 위키 하네스(jokate-wiki) 연결: 규칙 템플릿 [선택] '위키' 모듈 · game-architecture 5절 4번 확정 단계 · game-design-doc 사양 표를 위키 원자료로 (2026-10-17)
 
 - 훅 범위: `stuck_watch` · `diagram_view` 를 게임 프로젝트에서만 (2026-10-16)
 
@@ -532,4 +572,6 @@ DB 하나에 100만을 넘는 심볼은 개수도 잘렸다. 고친 것:
 - 대화형 세션에서 PowerShell 도구로 한글 인자 명령이 파싱 실패하는지 (헤드리스에서만 관찰)
 - `diagram_view.py` 를 실제 Claude Code 세션의 Stop 에서 — 문서의 입력 형식대로 만든 stdin 으로만 시험했다. Windows 의 `os.startfile` 열기도 미확인
 - 스키마 2 를 실제 UE 엔진 인덱스·Windows(번들 SQLite 3.35~3.53)에서: 실행 계획, optimize 시간·디스크, 소유권 분할로 잃는 참조 수
+- 실제 UE 전체 엔진 clangd 인덱스(`engine_cdb.py` → `--mode bg --unity 8`): 끝까지의 시간 · 메모리 · DB 크기 · 오류 묶음 비율 (2026-10-14 진행 중)
+- `engine_cdb.py` 를 소스 빌드 엔진 · UE 5.6 이하 · Unity 에서
 - 평가 케이스가 MNYS 1인 개발자 문맥에 치우쳐 있다 — 팀 프로젝트의 커밋 습관에서 변경 이력 신호가 어떻게 나오는지 모름
