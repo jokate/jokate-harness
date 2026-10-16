@@ -545,6 +545,8 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - compile_commands 의 `@"…rsp"` 따옴표 벗기기(`split_windows`) — 실제 UE 프로젝트 인덱스가 비던 것 · `index_all.py --jobs` (2026-10-14)
 - 런처 설치 엔진의 엔진 cdb 합성 `engine_cdb.py` (VS Code 생성기의 모듈 rsp + 엔진 .cpp, 빈 .gen.cpp) (2026-10-14)
 
+- 위키 하네스(jokate-wiki) 연결: 규칙 템플릿 [선택] '위키' 모듈 · game-architecture 5절 4번 확정 단계 · game-design-doc 사양 표를 위키 원자료로 (2026-10-17)
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음
