@@ -5,6 +5,8 @@
   fail  셸 명령이 연속 N회 실패 (PostToolUseFailure: Bash / PowerShell, 성공하면 0으로)
 
 임계값: 기본 edit 5, fail 3. <프로젝트>/.claude/stuck_watch.json 의 {"edit": 8, "fail": 4} 로 덮어쓴다. 0 이면 끈다.
+범위: 게임 프로젝트(UE / Unity, game_context.detect)에서만 돈다. edit 은 코드 파일(CODE_EXT)만 센다 — 문서를 고쳐 쓰는 것은 매몰이 아니다.
+  (2026-10-14 기준 10일간 경고 514건 중 473건이 게임이 아닌 릴레이 작업 폴더, 나머지 대부분이 문서 반복 수정이었다.)
 상태: ~/.claude/cache/stuck/<session_id>.json
 반복이 없는 방향 이탈은 못 잡는다. 그건 사람이 [RESET] 으로 건다 (handoff.py).
 어떤 경우에도 도구 호출을 막지 않는다.
@@ -21,6 +23,8 @@ except Exception:  # 이벤트 로그가 설치되지 않았어도 훅은 돈다
         pass
 
 DEFAULTS = {"edit": 5, "fail": 3}
+CODE_EXT = {".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hh", ".inl", ".cs", ".py", ".lua", ".hlsl", ".usf", ".ush",
+            ".shader", ".compute", ".cginc"}
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 SHELL_TOOLS = {"Bash", "PowerShell"}
 STATE_DIR = Path.home() / ".claude" / "cache" / "stuck"
@@ -31,7 +35,7 @@ def sig_edit(event, data, state, limits):
         return None
     inp = data.get("tool_input") or {}
     path = inp.get("file_path") or inp.get("notebook_path")
-    if not path:
+    if not path or Path(path).suffix.lower() not in CODE_EXT:
         return None
     counts = state.setdefault("edit", {})
     n = counts[path] = counts.get(path, 0) + 1
@@ -57,6 +61,17 @@ def sig_fail(event, data, state, limits):
 SIGNALS = [sig_edit, sig_fail]
 
 
+def in_game_project(data):
+    try:
+        from game_context import detect
+    except Exception:  # 같은 폴더에 game_context.py 가 없으면(옛 설치) 예전처럼 어디서나 돈다
+        return True
+    try:
+        return detect(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())[0] is not None
+    except OSError:
+        return False
+
+
 def load_limits(data):
     limits = dict(DEFAULTS)
     root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
@@ -69,6 +84,8 @@ def load_limits(data):
 
 def main():
     data = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
+    if not in_game_project(data):
+        return
     event = data.get("hook_event_name")
     session = data.get("session_id") or "unknown"
     path = STATE_DIR / f"{session}.json"

@@ -522,6 +522,21 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 시험: `tests/test_cindex_speed.py`(명령줄 나누기 4), `tests/test_engine_cdb.py`(가짜 엔진 폴더로 합성 · 빈 .gen.cpp 2) 통과.
 `tests/test_cindex_query.py` 는 Windows 에서 9개 중 4개가 임시 폴더 정리(`PermissionError: WinError 32` — 열린 sqlite)에서 ERROR — 이 변경과 무관해 보이지만 고치지 않았다.
 
+## 2026-10-16 — 훅 정리: 매몰 경고 · 그림 열기를 게임 프로젝트로 좁힌다
+
+근거(하네스 이벤트 로그 `events.jsonl`, 10-07 ~ 10-16 약 10일, 726건): `stuck.warn` 514건(전체의 71%)으로 가장 많았고,
+그중 473건(92%)이 게임이 아닌 릴레이 작업 폴더(`workspace`), 21건이 게임 아닌 다른 폴더였다. MNYS 는 8건.
+경고의 종류는 전부 "같은 파일을 N회 수정"이었고, 대화 기록으로 보면 문서(설계 초안 · 메모)를 고쳐 쓰는 일에서 났다.
+설정이 전역(`~/.claude/settings.json`)이라 하네스의 훅이 게임과 무관한 세션 — 다른 저장소의 캠페인 런까지 — 에 경고 문구를 맥락으로 넣고 있었다.
+
+고친 것:
+- `stuck_watch.py`: 게임 프로젝트(`game_context.detect`)가 아니면 아무것도 안 한다. "같은 파일 N회 수정"은 코드 파일(`CODE_EXT`)만 센다. 셸 연속 실패 신호는 그대로.
+- `diagram_view.py`: 게임 프로젝트가 아니면 아무것도 안 한다(게임 아닌 세션에서 브라우저가 뜨지 않게).
+
+시험: `skills/game-bootstrap/tests/test_hook_scope.py` 2/2 — 게임 · 코드 5회 → 경고 / 게임 · 문서 5회 → 없음 / 게임 아님 → 없음,
+그림: 게임 아님 → 아무것도 안 함 / 게임 → `Saved/ClaudeArch` 에 HTML.
+설치본(`~/.claude/hooks/`)은 복사라 `install.py --force` 를 다시 돌려야 반영된다.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -546,6 +561,8 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 런처 설치 엔진의 엔진 cdb 합성 `engine_cdb.py` (VS Code 생성기의 모듈 rsp + 엔진 .cpp, 빈 .gen.cpp) (2026-10-14)
 
 - 위키 하네스(jokate-wiki) 연결: 규칙 템플릿 [선택] '위키' 모듈 · game-architecture 5절 4번 확정 단계 · game-design-doc 사양 표를 위키 원자료로 (2026-10-17)
+
+- 훅 범위: `stuck_watch` · `diagram_view` 를 게임 프로젝트에서만 (2026-10-16)
 
 ## 검증 안 된 것
 
