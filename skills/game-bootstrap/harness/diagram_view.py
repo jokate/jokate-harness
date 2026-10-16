@@ -4,8 +4,9 @@ Claude Code 대화창은 Mermaid 를 그리지 않고 `graph LR` · `subgraph �
 game-architecture 의 "저장 후 render.py --open" 규칙은 모델이 지켜야 동작하고, 그 스킬 밖의 답변에는 없다.
 이 훅은 어떤 답변이든 그림이 있으면 연다.
 
-저장: 게임 프로젝트면 <UE>/Saved/ClaudeArch · <Unity>/Library/ClaudeArch (VCS 가 무시하는 폴더),
-      아니면 ~/.claude/cache/game-harness/diagrams. 이름은 <날짜>-chat-<내용 해시>.md/.html.
+범위: 게임 프로젝트(UE / Unity)에서만 돈다 — 게임이 아닌 세션(릴레이 작업 등)에서 브라우저가 뜨지 않게.
+저장: <UE>/Saved/ClaudeArch · <Unity>/Library/ClaudeArch (VCS 가 무시하는 폴더). 거기에 못 쓰면 ~/.claude/cache/game-harness/diagrams.
+      이름은 <날짜>-chat-<내용 해시>.md/.html.
       같은 내용이 이미 렌더돼 있으면 다시 열지 않는다.
 GAME_HARNESS_NO_OPEN=1 이면 파일만 만들고 열지 않는다 (평가처럼 사람이 없는 실행).
 렌더는 ~/.claude/skills/game-architecture/scripts/render.py (mermaid·marked 동봉) 를 쓴다.
@@ -95,6 +96,8 @@ def main():
         return
     session = data.get("session_id", "")
     folder, root = out_dir(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
+    if root is None:  # 게임 프로젝트가 아니다
+        return
     digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
     if any(any(d.glob(f"*-chat-{digest}.html")) for d in (folder, CACHE)):
         return
