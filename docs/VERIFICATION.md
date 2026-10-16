@@ -507,6 +507,8 @@ DB 하나에 100만을 넘는 심볼은 개수도 잘렸다. 고친 것:
 - 그림: mermaid·marked 동봉(설치 불필요) + Stop 훅 `diagram_view.py` 가 답변 속 mermaid 를 HTML 로 열기 (2026-10-07)
 - clangd 조회 스키마 2: 파일 소유권 분할 · 요약 표 · 경로 순 keyset 커서 · `optimize` · 에이전트용 `refs` 출력 (2026-10-08)
 
+- 위키 하네스(jokate-wiki) 연결: 규칙 템플릿 [선택] '위키' 모듈 · game-architecture 5절 4번 확정 단계 · game-design-doc 사양 표를 위키 원자료로 (2026-10-17)
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음
