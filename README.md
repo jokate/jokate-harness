@@ -20,7 +20,7 @@ skills/
   game-mcp/           4층 · 에디터 MCP 운용
 mods/
   game-harness-monitor/  Claude Code mod · 하네스 기능이 동작하면 상태줄·토스트·/harness 패널로 보인다
-setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + 프로젝트 세팅 + 사용법 출력
+setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + (옆에 있으면) 위키 하네스 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
 rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
@@ -34,8 +34,11 @@ index_view.bat        인덱스 웹뷰
 `setup.bat` 더블클릭 (Windows) — 또는 게임 프로젝트 폴더를 `setup.bat` 위에 끌어다 놓는다. 한 번에:
 
 1. 스킬·훅·mod 를 `~/.claude` 에 설치하고 `settings.json` 에 훅과 mod(`env.CLAUDE_CODE_PLUGIN_DIRS`)를 등록한다 (원본은 `settings.json.bak`)
-2. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다)
-3. 사용법을 출력한다
+2. 위키 하네스(jokate-wiki)가 이 폴더 옆에 있거나 `JOKATE_WIKI_DIR` 로 알려 주면 그것도 설치한다 (없으면 건너뛴다, `--no-wiki` 로 끈다)
+3. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다).
+   위키 하네스가 있으면 그 프로젝트의 위키까지 만든다 — 면담 답 초안 · 위키(`~/.jokate-wiki/<프로젝트>`) · 뼈대 · 세션 시작 훅, AI 없음.
+   면담 다듬기 · 파트 묶기 · 설명 미리 채우기는 그 뒤 Claude Code 에서 `/wiki-bootstrap` (선택)
+4. 사용법을 출력한다
 
 PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하다 — 다른 프로젝트를 추가할 때도 같은 파일.
 그 뒤에는 그 프로젝트에서 Claude Code 를 **새로** 열고 평소처럼 요청하면 된다.
