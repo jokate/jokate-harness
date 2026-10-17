@@ -537,6 +537,13 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 그림: 게임 아님 → 아무것도 안 함 / 게임 → `Saved/ClaudeArch` 에 HTML.
 설치본(`~/.claude/hooks/`)은 복사라 `install.py --force` 를 다시 돌려야 반영된다.
 
+## 2026-10-17 — gq 가 소스 안 `Library` 폴더를 통째로 빼던 문제 · cindex 시험의 Windows 정리 오류
+
+- MNYS 위키를 만들다 `Source/MNYS/Public/Library/YSBlueprintFunctionLibrary.h` 의 `UYSBlueprintFunctionLibrary`(피해 공식 `GetFinalDamage` 등)가 gq 인덱스에 없는 것을 발견했다.
+  원인: `SKIP_DIRS` 의 `Library`(Unity 캐시) · `Temp` · `Logs` · `obj` · `Build` 를 깊이와 상관없이 뺐다. → 이 다섯은 **프로젝트 루트 바로 아래일 때만** 뺀다(`ROOT_ONLY_SKIP`). `Saved` · `Intermediate` · `Binaries` 등은 플러그인 안에도 생기므로 그대로 어디서든 뺀다.
+  시험: `skills/game-onboard/tests/test_gq_skip.py` — 소스 안 Library · Build 는 들어오고, 루트 Library · 어디서든 Intermediate 는 빠진다. 고치기 전 코드에서는 실패.
+- `tests/test_cindex_query.py` 의 Windows 오류 4건(10-14 기록, `WinError 32` — 열린 sqlite 를 임시 폴더 정리에서 못 지움): 시험이 연 `Index` 연결을 tearDown 에서 닫는다. game-onboard 시험 전부 OK.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
@@ -563,6 +570,8 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 위키 하네스(jokate-wiki) 연결: 규칙 템플릿 [선택] '위키' 모듈 · game-architecture 5절 4번 확정 단계 · game-design-doc 사양 표를 위키 원자료로 (2026-10-17)
 
 - 훅 범위: `stuck_watch` · `diagram_view` 를 게임 프로젝트에서만 (2026-10-16)
+
+- gq: Library · Temp · Logs · obj · Build 는 루트에서만 뺀다 (2026-10-17)
 
 ## 검증 안 된 것
 

@@ -35,7 +35,10 @@ for _s in (sys.stdout, sys.stderr):
 
 CAP = 4096
 SKIP_DIRS = {".git", ".svn", ".vs", ".idea", ".vscode", ".claude", "Saved", "Intermediate", "Binaries",
-             "DerivedDataCache", "Library", "Temp", "Logs", "obj", "Build", "node_modules", "__pycache__"}
+             "DerivedDataCache", "node_modules", "__pycache__"}
+# Unity · 빌드 캐시 폴더는 프로젝트 루트 바로 아래일 때만 뺀다. 어디서든 빼면 UE 소스의
+# Source/<모듈>/Public/Library 같은 폴더가 통째로 빠진다(2026-10-17 MNYS: UYSBlueprintFunctionLibrary 누락).
+ROOT_ONLY_SKIP = {"Library", "Temp", "Logs", "obj", "Build"}
 EXCLUDE = []
 ROOT = [None]
 UNITY_ASSET_EXT = {".prefab", ".unity", ".asset", ".controller", ".overrideController", ".anim",
@@ -108,6 +111,8 @@ def load_excludes(root):
 
 def skipped(d):
     if d.name in SKIP_DIRS or d.name.startswith("__External"):
+        return True
+    if d.name in ROOT_ONLY_SKIP and ROOT[0] is not None and d.parent == ROOT[0]:
         return True
     return any(d == e or e in d.parents for e in EXCLUDE)
 

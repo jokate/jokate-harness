@@ -113,7 +113,16 @@ class Fixture:
         return pdb, edb
 
     def open(self, pdb, edb):
-        return cindex.MultiIndex([cindex.Index(pdb, "project"), cindex.Index(edb, "engine")])
+        ixs = [cindex.Index(pdb, "project"), cindex.Index(edb, "engine")]
+        self.__dict__.setdefault("opened", []).extend(ixs)  # tearDown 에서 닫는다 — Windows 는 열린 sqlite 를 못 지운다
+        return cindex.MultiIndex(ixs)
+
+    def close_all(self):
+        for ix in self.__dict__.get("opened", []):
+            try:
+                ix.con.close()
+            except Exception:
+                pass
 
 
 def key(r):
@@ -126,6 +135,7 @@ class MergedQueryTest(unittest.TestCase):
         self.fx = Fixture(self.tmpdir.name)
 
     def tearDown(self):
+        self.fx.close_all()
         self.tmpdir.cleanup()
 
     def truth_for(self, sym, mask=None):
@@ -220,7 +230,9 @@ class MergedQueryTest(unittest.TestCase):
     def test_project_alone_ignores_own_stats(self):
         """엔진 인덱스 없이 프로젝트 인덱스만 보면 엔진 헤더 참조도 다 센다 — 'own' 요약 표를 쓰면 안 된다."""
         pdb, _ = self.fx.build()
-        mx = cindex.MultiIndex([cindex.Index(pdb, "project")])
+        ix = cindex.Index(pdb, "project")
+        self.fx.__dict__.setdefault("opened", []).append(ix)
+        mx = cindex.MultiIndex([ix])
         self.assertFalse(mx.parts[0][2])
         n = sum(1 for r in self.fx.proj_refs if r[0] == self.fx.hot)
         self.assertEqual(mx.ref_count(self.fx.hot), n)
