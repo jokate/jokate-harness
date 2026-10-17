@@ -38,7 +38,8 @@ index_view.bat        인덱스 웹뷰
 3. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다).
    위키 하네스가 있으면 그 프로젝트의 위키까지 만든다 — 면담 답 초안 · 위키(`~/.jokate-wiki/<프로젝트>`) · 뼈대 · 세션 시작 훅, AI 없음.
    면담 다듬기 · 파트 묶기 · 설명 미리 채우기는 그 뒤 Claude Code 에서 `/wiki-bootstrap` (선택)
-4. 사용법을 출력한다
+4. clangd 프로젝트 인덱스(호출 · 참조 · 영향 범위)가 없으면 지금 만들지 묻는다 — 백그라운드로 처음 20–30분, 엔진 단계 없음(`index_all.py --project-only`), 로그는 `~/.claude/cache/game-harness/index_build_<프로젝트>.log`. `--clangd` 면 묻지 않고 시작, `--no-clangd` 면 안 한다. 그 뒤로는 세션 시작 때 바뀐 것만 갱신된다
+5. 사용법을 출력한다
 
 PowerShell 에서는 `.\setup.bat "D:\Work\MyGame"`. 다시 돌려도 안전하다 — 다른 프로젝트를 추가할 때도 같은 파일.
 그 뒤에는 그 프로젝트에서 Claude Code 를 **새로** 열고 평소처럼 요청하면 된다.

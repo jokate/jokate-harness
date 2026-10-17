@@ -42,3 +42,42 @@ class FindWikiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClangdOptionTest(unittest.TestCase):
+    def test_existing_index_detected(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            self.assertIsNone(setup.clangd_index(p))
+            db = p / "Saved" / "ClaudeIndex" / "clangd.sqlite"
+            db.parent.mkdir(parents=True)
+            db.write_text("", encoding="utf-8")
+            self.assertEqual(setup.clangd_index(p), db)
+
+    def test_background_build_is_project_only_with_log(self):
+        calls = []
+
+        class FakePopen:
+            def __init__(self, argv, **kw):
+                calls.append((argv, kw))
+
+        with tempfile.TemporaryDirectory() as td:
+            orig = setup.subprocess.Popen
+            setup.subprocess.Popen = FakePopen
+            try:
+                log = setup.start_clangd_bg(Path(td) / "MyGame", home=td)
+            finally:
+                setup.subprocess.Popen = orig
+            self.assertTrue(log.is_file())
+        argv, kw = calls[0]
+        self.assertTrue(argv[1].endswith("index_all.py"))
+        self.assertIn("--project-only", argv)
+        self.assertIn("MyGame", log.name)
+
+    def test_no_question_without_terminal(self):
+        orig = setup.sys.stdin
+        try:
+            setup.sys.stdin = None
+            self.assertFalse(setup.ask_yes("?"))
+        finally:
+            setup.sys.stdin = orig
