@@ -544,6 +544,11 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
   시험: `skills/game-onboard/tests/test_gq_skip.py` — 소스 안 Library · Build 는 들어오고, 루트 Library · 어디서든 Intermediate 는 빠진다. 고치기 전 코드에서는 실패.
 - `tests/test_cindex_query.py` 의 Windows 오류 4건(10-14 기록, `WinError 32` — 열린 sqlite 를 임시 폴더 정리에서 못 지움): 시험이 연 `Index` 연결을 tearDown 에서 닫는다. game-onboard 시험 전부 OK.
 
+## 2026-10-17 (2) — setup 이 위키 하네스까지
+
+- `setup.py`: jokate-wiki 를 찾으면(환경변수 `JOKATE_WIKI_DIR` → 이 폴더 옆 → 이 폴더 안) 위키 하네스를 설치하고, 프로젝트 세팅 뒤 `wq.py setup` 으로 그 프로젝트의 위키(면담 답 초안 · 뼈대 · 세션 시작 훅, AI 없음)까지 만든다. 없으면 한 줄 안내 후 건너뛴다. `--no-wiki` 로 끈다.
+- 시험: `skills/game-bootstrap/tests/test_setup_wiki.py` (찾는 순서 · 파일 둘 다 있어야 함). `wq.py setup` 자체 시험은 jokate-wiki 쪽(test_wq_setup · test_install).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
