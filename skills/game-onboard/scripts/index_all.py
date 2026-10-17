@@ -13,7 +13,7 @@
   4. clangd 프로젝트   cindex.py build --mode bg                    두 번째부터 바뀐 것만 (clangd 가 없고 clangd-indexer 만 있으면 전체 색인)
   5. clangd 엔진       cindex.py build --scope engine --unity 8     엔진 clangd 인덱스가 없을 때만, --engine 이면 다시. 엔진 버전당 한 번, 오래 걸린다
   6. clangd 조회 정리  cindex.py optimize                           옛 모양 인덱스를 조회용으로 다시 쓰고(색인은 그대로) 소유권 표시를 맞춘다
-  --no-clangd 면 1·2 만.
+  --no-clangd 면 1·2 만. --project-only 면 2·5(엔진)를 건너뛴다 — setup 이 처음 프로젝트 인덱스를 만들 때 쓴다.
 
 각 단계는 따로 돈다 — 하나가 실패해도 다음 단계로 간다. 앞 단계의 결과가 필요한 단계는 이유를 적고 건너뛴다.
 끝에 단계별 결과를 낸다. 실패가 하나라도 있으면 종료 코드 1, 프로젝트를 못 찾으면 2.
@@ -125,6 +125,8 @@ def main():
     ap.add_argument("--cdb", action="store_true", help="compile_commands.json 이 있어도 다시 만든다 (모듈·파일을 더했을 때)")
     ap.add_argument("--engine", action="store_true", help="엔진 clangd 인덱스가 있어도 다시 만든다 (오래 걸린다)")
     ap.add_argument("--jobs", type=int, default=0, help="clangd 색인 병렬 수 (0 = clangd 기본, 보통 코어 전부)")
+    ap.add_argument("--project-only", action="store_true",
+                    help="엔진 단계(2 엔진 좌표 · 5 엔진 clangd)를 건너뛴다 — 프로젝트 인덱스만. setup 이 백그라운드로 부른다")
     a = ap.parse_args()
     jobs = ["--jobs", str(a.jobs)] if a.jobs > 0 else []
 
@@ -146,7 +148,7 @@ def main():
     eng_ok = bool(eng and (eng / "Source").is_dir())
     if kind == "ue" and not eng_ok:
         print("엔진 폴더를 못 찾았다. 찾아본 곳:\n  " + "\n  ".join(ue_q.engine_report(root)), flush=True)
-    if kind == "ue" and not eng_ok and sys.stdin.isatty():
+    if kind == "ue" and not eng_ok and sys.stdin.isatty() and not a.project_only:
         try:
             given = ask_engine()
         except KeyboardInterrupt:
@@ -174,7 +176,9 @@ def main():
     t_all = time.time()
     try:
         step("1 프로젝트 좌표 (gq)", "gq.py", ["index", "--root", r])
-        if kind == "ue":
+        if a.project_only:
+            skip("2 엔진 좌표 (ue_q)", "--project-only")
+        elif kind == "ue":
             step("2 엔진 좌표 (ue_q)", "ue_q.py", ["index", "--root", r])
         else:
             skip("2 엔진 좌표 (ue_q)", "UE 프로젝트가 아니다")
@@ -207,7 +211,9 @@ def main():
                 else:
                     step(titles[1], "cindex.py", ["build", "--root", r, *jobs])
                 edb = cindex.db_for("engine", root, kind)
-                if not eng_ok:
+                if a.project_only:
+                    skip(titles[2], "--project-only")
+                elif not eng_ok:
                     skip(titles[2], "엔진 폴더를 못 찾았다 — --engine-root 로 지정")
                 elif edb and edb.exists() and not a.engine:
                     skip(titles[2], f"있음 {edb} (엔진 버전당 한 번 — 다시 만들려면 --engine)")

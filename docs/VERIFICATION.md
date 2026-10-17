@@ -549,6 +549,13 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - `setup.py`: jokate-wiki 를 찾으면(환경변수 `JOKATE_WIKI_DIR` → 이 폴더 옆 → 이 폴더 안) 위키 하네스를 설치하고, 프로젝트 세팅 뒤 `wq.py setup` 으로 그 프로젝트의 위키(면담 답 초안 · 뼈대 · 세션 시작 훅, AI 없음)까지 만든다. 없으면 한 줄 안내 후 건너뛴다. `--no-wiki` 로 끈다.
 - 시험: `skills/game-bootstrap/tests/test_setup_wiki.py` (찾는 순서 · 파일 둘 다 있어야 함). `wq.py setup` 자체 시험은 jokate-wiki 쪽(test_wq_setup · test_install).
 
+## 2026-10-17 (3) — setup 에서 clangd 프로젝트 인덱스 처음 만들기
+
+- `index_all.py --project-only`: 엔진 단계(2 엔진 좌표 · 5 엔진 clangd)를 건너뛰고 프로젝트 인덱스만(gq · cdb · clangd 프로젝트 · optimize).
+- `setup.py`: UE 프로젝트에 clangd 인덱스가 없으면 묻고(창이 없으면 묻지 않음) 백그라운드로 `index_all.py <프로젝트> --project-only` 를 띄운다. 로그 `~/.claude/cache/game-harness/index_build_<프로젝트>.log`. `--clangd` · `--no-clangd`.
+- 짝 변경(jokate-wiki): 세션 시작 drift 훅의 cindex 갱신이 `cindex.py --mode bg`(하위 명령 없음 — argparse 오류)로 늘 실패하던 것을 `build --root P --mode bg` · `cdb --root P` 로 고치고, clangd 인덱스가 있고 소스가 그보다 새로울 때만 띄운다.
+- 시험: `test_setup_wiki.py` ClangdOptionTest 3개. 실제 색인은 돌리지 않았다(MNYS 는 이미 인덱스가 최신).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
