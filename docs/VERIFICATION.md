@@ -556,6 +556,14 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 짝 변경(jokate-wiki): 세션 시작 drift 훅의 cindex 갱신이 `cindex.py --mode bg`(하위 명령 없음 — argparse 오류)로 늘 실패하던 것을 `build --root P --mode bg` · `cdb --root P` 로 고치고, clangd 인덱스가 있고 소스가 그보다 새로울 때만 띄운다.
 - 시험: `test_setup_wiki.py` ClangdOptionTest 3개. 실제 색인은 돌리지 않았다(MNYS 는 이미 인덱스가 최신).
 
+## 2026-10-20 — 그림 스킬(diagram-design) 연결 · 구조 그림 HTML 은 요약 먼저
+
+- 사용자: "HTML 이 난잡하게 써지는 거 같은데 짧게 요약해서 보여 주는 게 좋겠다 / 문서가 너무 길어 볼 때마다 불편하다".
+- `render.py`: game-architecture 답변이면 **선택지 · 그림을 맨 위**, 요청 축 · 확장 지점 · 신호는 접힌 `<details>` '근거'로(`--full` 로 끔). 다른 글은 그대로. 시험 `skills/game-architecture/tests/test_render.py` 3개.
+- game-architecture SKILL: diagram-design 이 있으면 보여 줄 그림은 그 스킬로(현재 구조 = architecture, 선택지 Before/After = architecture-delta, 노드 12개 이하, 한 장에 그림 하나 + 요약 3줄). 기록 .md 의 mermaid 는 원본으로 둔다.
+- `setup.py`: 옆 폴더(또는 `DIAGRAM_DESIGN_DIR`)의 diagram-design 을 `~/.claude/skills/diagram-design` 으로 링크. 시험 DiagramDesignTest.
+- 설치 전 점검: 스킬 스크립트 6개는 표준 라이브러리만(네트워크 · 외부 실행 없음), PNG 내보내기만 Playwright(설치 안 함).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

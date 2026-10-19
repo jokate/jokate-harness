@@ -81,3 +81,21 @@ class ClangdOptionTest(unittest.TestCase):
             self.assertFalse(setup.ask_yes("?"))
         finally:
             setup.sys.stdin = orig
+
+
+class DiagramDesignTest(unittest.TestCase):
+    def test_find_and_link(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            repo = td / "game-harness"
+            repo.mkdir()
+            self.assertIsNone(setup.find_diagram_design(env={}, repo=repo))
+            skill = td / "diagram-design" / "skills" / "diagram-design"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("x", encoding="utf-8")
+            dd = setup.find_diagram_design(env={}, repo=repo)
+            self.assertEqual(dd, (td / "diagram-design").resolve())
+            dst = td / "home" / ".claude" / "skills" / "diagram-design"
+            self.assertEqual(setup.link_skill(skill, dst), "linked")
+            self.assertTrue((dst / "SKILL.md").is_file())
+            self.assertEqual(setup.link_skill(skill, dst), "kept")

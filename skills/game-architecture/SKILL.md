@@ -79,7 +79,13 @@ description: 게임 프로젝트(UE / Unity)에서 기능을 구현하거나 구
 **그림은 반드시 렌더해서 보여 준다.** Claude Code 대화창은 Mermaid 를 그리지 않고 코드로만 보인다 — 코드 블록만 내면 사용자는 그림을 못 본다.
 1. 답변 전체(아래 출력 형식 그대로, mermaid 블록 포함)를 `<프로젝트>/Saved/ClaudeArch/<YYYYMMDD>-<주제>.md` 로 저장한다 (Unity 는 `Library/ClaudeArch/`. 프로젝트 인덱스와 같은, VCS 가 무시하는 폴더다).
 2. `python ~/.claude/skills/game-architecture/scripts/render.py <그 파일.md> --open` — 단일 HTML 을 만들고 브라우저로 연다. mermaid·marked 는 `scripts/vendor/` 에 동봉돼 있어 설치·인터넷이 필요 없다.
+   HTML 은 **선택지 · 그림을 맨 위**에 두고 요청 축 · 확장 지점 · 신호는 접힌 '근거'로 내린다(기본. 전부 펼치려면 `--full`).
 3. 대화창에는 mermaid 코드를 다시 붙이지 않는다. 선택지 요약(각 세 줄)과 HTML 경로만 적는다.
+
+**diagram-design 스킬이 설치돼 있으면** (`~/.claude/skills/diagram-design`) 보여 줄 그림은 그 스킬로 그린다 — 기록 `.md` 의 mermaid 는 그대로 둔다(원본, diff 됨).
+- 현재 구조도 → `architecture` 형, 선택지별 Before/After → `architecture-delta` 형(바뀌는 노드가 강조된다). 노드 12개 이하(`--detail=balanced`), 독자 `engineer`.
+- 파일은 같은 폴더에 `<YYYYMMDD>-<주제>-<그림>.html`. **한 장에 그림 하나 + 요약 3줄**, 긴 설명을 HTML 에 넣지 않는다(사용자: 긴 HTML 은 볼 때마다 불편하다).
+- 스킬이 없거나 실패하면 위 render.py 로 충분하다.
 
 대화창에 mermaid 블록이 남으면 Stop 훅 `diagram_view.py` 가 그 답변을 HTML 로 렌더해 연다 (안전망 — 이름 붙은 기록은 위 1~2로 남긴다).
 파일 쓰기가 막혀 있으면(읽기 전용 세션) mermaid 블록을 대화에 내고, 그림으로 보려면 저장 후 render.py 를 돌리라고 한 줄 적는다.

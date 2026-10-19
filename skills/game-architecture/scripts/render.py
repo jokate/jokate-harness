@@ -34,6 +34,7 @@ table{{border-collapse:collapse;display:block;overflow-x:auto}} th,td{{border:1p
 code,pre{{background:var(--code);border-radius:4px}} pre{{padding:12px;overflow-x:auto}} code{{padding:1px 4px}}
 .mermaid{{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin:12px 0;overflow-x:auto}}
 #raw{{white-space:pre-wrap}} .note{{color:var(--mute);font-size:13px}}
+details{{border-top:1px solid var(--line);margin-top:20px;padding-top:8px}} summary{{color:var(--mute);cursor:pointer}}
 </style></head><body>
 <div id="out"><pre id="raw">{raw}</pre><p class="note">스크립트를 불러오지 못해 원문을 표시한다 (render.py 옆 vendor/ 폴더가 있는지, 또는 --js-dir).</p></div>
 {scripts}
@@ -63,7 +64,32 @@ def scripts(js_dir=None):
     return tags + f"<script>{fallback}</script>"
 
 
-def render(md, out, title, js_dir=None):
+FRONT = ("선택지", "그림")  # 먼저 보일 절 — 나머지(요청 축 · 확장 지점 · 신호 …)는 접힌 '근거'로
+
+
+def summary_first(md):
+    """game-architecture 답변이면 '선택지' · '그림' 을 위로, 나머지 절은 접힌 <details> 하나로 내린다.
+    긴 HTML 이 볼 때마다 불편하다는 사용자 피드백(2026-10-20). '## 선택지' 가 없는 글은 그대로 둔다."""
+    lines = md.splitlines()
+    heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
+    if not any(lines[i][3:].strip() == "선택지" for i in heads):
+        return md
+    pre = "\n".join(lines[:heads[0]]).rstrip()
+    secs = []
+    for n, i in enumerate(heads):
+        end = heads[n + 1] if n + 1 < len(heads) else len(lines)
+        secs.append((lines[i][3:].strip(), "\n".join(lines[i:end]).rstrip()))
+    front = [t for name in FRONT for title, t in secs if title == name]
+    rest = [(title, t) for title, t in secs if title not in FRONT]
+    out = ([pre] if pre else []) + front
+    if rest:
+        names = " · ".join(title for title, _ in rest)
+        out.append(f"<details><summary>근거 — {names}</summary>\n\n" + "\n\n".join(t for _, t in rest) + "\n\n</details>")
+    return "\n\n".join(out) + "\n"
+
+
+def render(md, out, title, js_dir=None, full=False):
+    md = md if full else summary_first(md)
     out = Path(out)
     out.write_text(PAGE.format(title=html.escape(title), raw=html.escape(md),
                                md_json=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir)),
@@ -89,11 +115,12 @@ def main():
     ap.add_argument("-o", "--out")
     ap.add_argument("--js-dir")
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
+    ap.add_argument("--full", action="store_true", help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 근거는 접기)")
     a = ap.parse_args()
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
-    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir)
+    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full)
     print(out)
     if a.open:
         err = open_file(out)
