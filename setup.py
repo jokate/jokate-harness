@@ -59,6 +59,32 @@ def find_wiki(env=None, repo=REPO):
     return None
 
 
+def find_diagram_design(env=None, repo=REPO):
+    """그림 스킬(diagram-design) 저장소 폴더 또는 None — DIAGRAM_DESIGN_DIR → 이 폴더 옆 diagram-design."""
+    env = os.environ if env is None else env
+    for c in (env.get("DIAGRAM_DESIGN_DIR"), repo.parent / "diagram-design"):
+        if c and (Path(c) / "skills" / "diagram-design" / "SKILL.md").is_file():
+            return Path(c).resolve()
+    return None
+
+
+def link_skill(src: Path, dst: Path) -> str:
+    """dst 에 src 폴더를 링크한다(symlink → Windows 정션). 이미 있으면 그대로. → 'kept' | 'linked' | 'failed'."""
+    if os.path.lexists(dst):
+        return "kept"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(src, dst, target_is_directory=True)
+        return "linked"
+    except (OSError, NotImplementedError):
+        pass
+    if os.name == "nt":
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(dst), str(src)], capture_output=True, text=True)
+        if r.returncode == 0 and dst.exists():
+            return "linked"
+    return "failed"
+
+
 def clangd_index(project: Path):
     p = Path(project) / "Saved" / "ClaudeIndex" / "clangd.sqlite"
     return p if p.is_file() else None
@@ -111,6 +137,12 @@ def main(argv=None):
         print("건너뛰었다 (--no-wiki).")
     else:
         print("없음 — jokate-wiki 를 이 폴더 옆에 두거나 JOKATE_WIKI_DIR 로 알려 주면 위키까지 같이 세팅한다 (선택).")
+    dd = find_diagram_design()
+    if dd:
+        st = link_skill(dd / "skills" / "diagram-design", Path.home() / ".claude" / "skills" / "diagram-design")
+        print(f"그림 스킬(diagram-design): {st} — 처음 그릴 때 스타일을 한 번 묻는다")
+    else:
+        print("그림 스킬(diagram-design): 없음 — 이 폴더 옆에 받아 두면 구조 그림을 그것으로 그린다 (선택)")
 
     print("\n[3/3] 프로젝트 세팅")
     target = args[0].strip().strip('"') if args else ask_project()

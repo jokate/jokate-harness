@@ -36,6 +36,7 @@ index_view.bat        인덱스 웹뷰
 1. 스킬·훅·mod 를 `~/.claude` 에 설치하고 `settings.json` 에 훅과 mod(`env.CLAUDE_CODE_PLUGIN_DIRS`)를 등록한다 (원본은 `settings.json.bak`)
 2. 위키 하네스([jokate-wiki](https://github.com/jokate/jokate-wiki), 비공개)가 이 폴더 옆에 있거나 `JOKATE_WIKI_DIR` 로 알려 주면 그것도 설치한다 (없으면 건너뛴다, `--no-wiki` 로 끈다).
    새 PC 에서는 같은 폴더 안에 나란히 받는다: `git clone https://github.com/jokate/jokate-harness.git game-harness` · `git clone https://github.com/jokate/jokate-wiki.git jokate-wiki`
+   그림 스킬 [diagram-design](https://github.com/cathrynlavery/diagram-design)(MIT)도 옆에 받아 두면(`git clone --depth 1 https://github.com/cathrynlavery/diagram-design.git diagram-design`) 스킬로 연결한다 — game-architecture 의 구조 그림 · 위키의 보기용 그림을 그것으로 그린다. 처음 그릴 때 스타일을 한 번 묻는다
 3. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다).
    위키 하네스가 있으면 그 프로젝트의 위키까지 만든다 — 면담 답 초안 · 위키(`~/.jokate-wiki/<프로젝트>`) · 뼈대 · 세션 시작 훅, AI 없음.
    면담 다듬기 · 파트 묶기 · 설명 미리 채우기는 그 뒤 Claude Code 에서 `/wiki-bootstrap` (선택)
