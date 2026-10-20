@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -68,6 +69,21 @@ class HookScope(unittest.TestCase):
         self.assertIn("전체 내용", html)
         self.assertFalse(old.with_suffix(".html").exists())
         self.assertEqual(run("diagram_view.py", {"last_assistant_message": "또.", "cwd": str(self.game)}, self.home), "")
+
+    def test_diagram_view_structure_figure(self):
+        arch = self.game / "Saved" / "ClaudeArch"
+        arch.mkdir(parents=True)
+        doc = arch / "20261020-조건.md"
+        doc.write_text("# 조건\n\n## 선택지\n| A | 4곳 |\n\n## 그림\n```mermaid\ngraph LR\n  A --> B\n```\n\n## 근거\n- x\n",
+                       encoding="utf-8")
+        msg = json.loads(run("diagram_view.py", {"last_assistant_message": "끝.", "cwd": str(self.game)}, self.home))
+        self.assertIn("구조도 0장", msg["systemMessage"])  # diagram-design Before/After 가 없으면 알린다
+        html = doc.with_suffix(".html")
+        os.utime(html, (time.time() - 60, time.time() - 60))
+        (arch / "20261020-조건-구조-A.html").write_text("<svg/>", encoding="utf-8")  # 나중에 그린 구조도
+        msg = json.loads(run("diagram_view.py", {"last_assistant_message": "그림.", "cwd": str(self.game)}, self.home))
+        self.assertNotIn("구조도 0장", msg["systemMessage"])
+        self.assertIn('figure class=\\"dd\\"', html.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

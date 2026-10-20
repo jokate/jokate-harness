@@ -171,5 +171,55 @@ class ReadabilityTest(unittest.TestCase):
         self.assertEqual(render.check("# 메모\n\n## 아무 절\n글\n")["extra_sections"], [])  # 구조 조사 문서가 아니면 안 본다
 
 
+class DiagramDesignFigureTest(unittest.TestCase):
+    """diagram-design 구조도(<문서 이름>-구조*.html)를 '그림' 절에 끼워 넣고, 없으면 읽기 점검이 잡는다."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.dir = Path(self._td.name)
+        self.doc = self.dir / "20261020-조건.md"
+        self.doc.write_text(NUMBERED, encoding="utf-8")
+
+    def test_figures_found_beside_doc(self):
+        (self.dir / "20261020-조건-구조-C.html").write_text("<svg/>", encoding="utf-8")
+        (self.dir / "20261020-조건-구조-A.html").write_text("<svg/>", encoding="utf-8")
+        (self.dir / "20261020-다른.md").write_text("x", encoding="utf-8")
+        self.assertEqual([p.name for p in render.dd_figs(self.doc)],
+                         ["20261020-조건-구조-A.html", "20261020-조건-구조-C.html"])
+
+    def test_embed_into_figure_section_and_fold_mermaid_as_text(self):
+        fig = self.dir / "20261020-조건-구조-C.html"
+        fig.write_text("<svg/>", encoding="utf-8")
+        out = render.embed_figs(NUMBERED, [fig], self.dir)
+        sec = out.split("## 3. 현재 구조")[1].split("## 6.")[0]
+        self.assertIn('<iframe src="20261020-%EC%A1%B0%EA%B1%B4-%EA%B5%AC%EC%A1%B0-C.html"', sec)
+        self.assertIn("<summary>Mermaid 원본</summary>", sec)
+        self.assertIn("```text", sec)
+        self.assertNotIn("```mermaid", sec)
+
+    def test_no_figure_section_appends_one(self):
+        fig = self.dir / "x-구조.html"
+        out = render.embed_figs("# t\n\n## 선택지\n| A |\n", [fig], self.dir)
+        self.assertIn("## 그림\n\n<figure", out)
+
+    def test_render_with_src_embeds_and_check_counts(self):
+        html_out = self.doc.with_suffix(".html")
+        self.assertEqual(render.check(NUMBERED, render.dd_figs(self.doc))["figures"], 0)
+        line, ok = render.report(render.check(NUMBERED, []))
+        self.assertFalse(ok)
+        self.assertIn("구조도 0장", line)
+        (self.dir / "20261020-조건-구조-C.html").write_text("<svg/>", encoding="utf-8")
+        render.render(NUMBERED, html_out, "t", src=self.doc)
+        self.assertIn("figure class=\\\"dd\\\"", html_out.read_text(encoding="utf-8"))
+        self.assertEqual(render.check(NUMBERED, render.dd_figs(self.doc, exclude=html_out))["figures"], 1)
+        self.assertIsNone(render.check("# 메모\n\n글\n")["figures"])  # 구조 조사 문서가 아니면 안 본다
+
+    def test_question_section_is_front(self):
+        md = NUMBERED.replace("## 8. 사용자 결정", "## 질문")
+        head = render.summary_first(md).split("<details>")[0]
+        self.assertIn("## 질문", head)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,11 +11,13 @@ Stop 훅 diagram_view.py 가 이 모듈의 render()·open_file() 을 쓴다.
 """
 
 import argparse
+import glob
 import html
 import json
 import os
 import re
 import sys
+import urllib.parse
 import webbrowser
 from pathlib import Path
 
@@ -37,6 +39,8 @@ code,pre{{background:var(--code);border-radius:4px}} pre{{padding:12px;overflow-
 #raw{{white-space:pre-wrap}} .note{{color:var(--mute);font-size:13px}}
 details{{border-top:1px solid var(--line);margin-top:20px;padding-top:8px}} summary{{color:var(--mute);cursor:pointer}}
 .mermaid{{cursor:zoom-in}} .mermaid.zoom{{cursor:zoom-out}} .mermaid.zoom svg{{max-width:none!important;width:auto!important;height:auto}}
+figure.dd{{margin:12px 0}} figure.dd iframe{{width:100%;height:min(80vh,760px);min-height:420px;border:1px solid var(--line);border-radius:6px;background:#fff;resize:vertical}}
+figure.dd figcaption{{color:var(--mute);font-size:13px}}
 </style></head><body>
 <div id="out"><pre id="raw">{raw}</pre><p class="note">스크립트를 불러오지 못해 원문을 표시한다 (render.py 옆 vendor/ 폴더가 있는지, 또는 --js-dir).</p></div>
 {scripts}
@@ -71,7 +75,7 @@ def scripts(js_dir=None):
 
 # 먼저 보일 절, 이 순서로 — 제목 앞 번호와 뒤 설명은 무시하고 앞 낱말로 맞춘다("## 6. 선택지 — …" → 선택지).
 # 나머지(요청 축 · 확장 지점 · 신호 · 설계 노트 · 검증 …)는 접힌 '근거'로.
-FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("그림", "현재 구조"), ("결정", "사용자 결정", "고를 것"))
+FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("그림", "현재 구조"), ("질문", "결정", "사용자 결정", "고를 것"))
 VISIBLE_MAX = 30  # 첫 화면(접힌 근거 위) 글 줄 수 기준 — 그림 한 장은 한 줄로 센다
 LONG = 120  # 보이는 부분에서 이보다 긴 줄은 첫 문장만 보이고 나머지는 '더보기'로 접는다
 
@@ -132,15 +136,28 @@ def summary_first(md):
     return "\n\n".join(out) + "\n"
 
 
-def check(md):
-    """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수와 그 안의 긴 줄 수. render.py 가 출력해 모델이 고칠 근거로 쓴다."""
+def check(md, figs=None):
+    """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수 · 긴 줄 수 · 근거 밖 절 · 구조도 장 수.
+    render.py 와 Stop 훅이 출력해 모델이 고칠 근거로 쓴다. 구조 조사 문서(선택지 절이 있는 글)가 아니면 절 · 구조도는 안 본다."""
     view = MERMAID.sub("(그림)", readable(md).split("<details>")[0])
     vis = [ln for ln in view.splitlines() if ln.strip()]
     long_ = [ln for ln in _prose(md, clip=False) if len(ln) > LONG]
     names = [_sec_name(ln) for ln in md.splitlines() if ln.startswith("## ")]
-    extra = [] if not any(n.startswith("선택지") for n in names) else \
-        [n for n in names if _front_rank(n) is None and n != "근거"]  # game-architecture 문서는 '근거' 에서 끝난다
-    return {"visible_lines": len(vis), "long_lines": len(long_), "extra_sections": extra}
+    arch = any(n.startswith("선택지") for n in names)
+    extra = [n for n in names if _front_rank(n) is None and n != "근거"] if arch else []  # '근거' 에서 끝난다
+    return {"visible_lines": len(vis), "long_lines": len(long_), "extra_sections": extra,
+            "figures": len(figs or []) if arch else None}
+
+
+def report(c):
+    """check() 결과 → (한 줄, 기준 안인가)."""
+    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"] and c["figures"] != 0
+    line = f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
+    if c["figures"] is not None:
+        line += f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (
+            ": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"
+        line += f" · 구조도 {c['figures']}장(기준 1 이상 — diagram-design Before/After, <문서 이름>{FIG_SUFFIX}-<선택지>.html)"
+    return line + ("" if ok else " — 넘었다. SKILL.md '읽기 규칙'대로 고쳐 다시 저장 · 렌더한다"), ok
 
 
 MERMAID = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*mermaid[ \t]*\r?\n.*?^[ \t]*\1[ \t]*$", re.M | re.S)
@@ -191,7 +208,50 @@ def readable(md):
     return s if s is not md else diagram_first(md)
 
 
-def render(md, out, title, js_dir=None, full=False):
+# 같은 출처로 열리면(웹 서버) 그림 높이에 맞춘다. file:// 은 브라우저가 막아 CSS 높이를 그대로 쓴다
+FIT = "try{this.style.height=this.contentDocument.documentElement.scrollHeight+'px'}catch(e){}"
+FIG_SUFFIX = "-구조"  # diagram-design 이 그린 Before/After 구조도: <문서 이름>-구조[-<선택지>].html, 문서와 같은 폴더
+
+
+def dd_figs(src, exclude=None):
+    """문서 옆의 diagram-design 구조도 파일들. 없으면 []."""
+    if not src:
+        return []
+    src = Path(src)
+    try:
+        return sorted(p for p in src.parent.glob(f"{glob.escape(src.stem)}{FIG_SUFFIX}*.html")
+                      if exclude is None or p.resolve() != Path(exclude).resolve())
+    except OSError:
+        return []
+
+
+def embed_figs(md, figs, out_dir):
+    """'그림' 절 맨 앞에 diagram-design 구조도를 끼워 넣는다. 그 절의 Mermaid 는 원본 코드로 접는다
+    (닫힌 <details> 안에서는 mermaid 가 크기를 못 재므로 그리지 않고 글로 둔다). '그림' 절이 없으면 새로 만든다."""
+    if not figs:
+        return md
+    tags = []
+    for p in figs:
+        rel = urllib.parse.quote(os.path.relpath(p, out_dir).replace(os.sep, "/"))
+        tags.append(f'<figure class="dd"><iframe src="{rel}" loading="lazy" title="{html.escape(p.stem)}" onload="{FIT}"></iframe>'
+                    f'<figcaption>{html.escape(p.stem)} · <a href="{rel}" target="_blank">새 창으로 크게</a></figcaption></figure>')
+    block = "\n\n".join(tags)
+    lines = md.splitlines()
+    heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
+    at = next((n for n, i in enumerate(heads) if _sec_name(lines[i]).startswith(FRONT[2])), None)  # 그림 · 현재 구조
+    if at is None:
+        return md.rstrip() + f"\n\n## 그림\n\n{block}\n"
+    i, end = heads[at], heads[at + 1] if at + 1 < len(heads) else len(lines)
+    body = "\n".join(lines[i + 1:end]).strip()
+    if body:
+        src = re.sub(r"^([ \t]*(?:`{3,}|~{3,})[ \t]*)mermaid", r"\1text", body, flags=re.M)
+        block += f"\n\n<details><summary>Mermaid 원본</summary>\n\n{src}\n\n</details>"
+    return "\n".join(lines[:i + 1] + ["", block, ""] + lines[end:]) + "\n"
+
+
+def render(md, out, title, js_dir=None, full=False, src=None):
+    """src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다."""
+    md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent)
     md = md if full else readable(md)
     out = Path(out)
     out.write_text(PAGE.format(title=html.escape(title), raw=html.escape(md),
@@ -224,13 +284,9 @@ def main():
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
-    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full)
+    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full, src=src)
     print(out)
-    c = check(md)
-    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"]
-    extra = f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"
-    print(f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)" + extra
-          + ("" if ok else " — 넘었다. SKILL.md '읽기 규칙'대로 줄이거나 표로 바꿔 다시 저장한다"))
+    print(report(check(md, dd_figs(src, exclude=out)))[0])
     if a.open:
         err = open_file(out)
         if err:

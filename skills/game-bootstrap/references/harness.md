@@ -51,7 +51,7 @@
 ```
 
 위는 최소 조각이다. `install.py` 가 출력하는 조각에는 handoff·stuck_watch·harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)와
-Stop 의 diagram_view(답변 속 mermaid · 최근 1시간에 저장한 구조 문서 → HTML 렌더·열기, 요약 · 그림 먼저 · 나머지 접기, `GAME_HARNESS_NO_OPEN=1` 이면 열지 않음)도 들어 있다.
+Stop 의 diagram_view(답변 속 mermaid · 최근 1시간에 저장한 구조 문서(+ 옆의 diagram-design 구조도) → HTML 렌더·열기 · 읽기 점검, 요약 · 그림 먼저 · 나머지 접기, `GAME_HARNESS_NO_OPEN=1` 이면 열지 않음)도 들어 있다.
 stuck_watch 와 diagram_view 는 게임 프로젝트(UE / Unity)에서만 돈다. stuck_watch 의 "같은 파일 N회 수정"은 코드 파일만 센다 (2026-10-16, 경고의 92% 가 게임이 아닌 작업 폴더였다).
 `harness_events.py` 는 훅이 import 하는 모듈이라 `~/.claude/hooks/` 에 같이 두기만 하고 settings 에는 등록하지 않는다.
 
