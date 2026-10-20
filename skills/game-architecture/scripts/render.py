@@ -258,7 +258,8 @@ def report(c):
     if c["figures"] is not None:
         line += f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (
             ": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"
-        line += f" · 구조도 {c['figures']}장(기준 1 이상 — diagram-design Before/After, <문서 이름>{FIG_SUFFIX}-<선택지>.html)"
+        line += (f" · 구조도 {c['figures']}장(기준 1 이상 — diagram-design 전 · 후, 형식은 바뀌는 것에 맞게 references/diagram-types.md,"
+                 f" <문서 이름>{FIG_SUFFIX}-<선택지>-<형식>[-전|-후].html)")
     return line + ("" if ok else " — 넘었다. SKILL.md '읽기 규칙'대로 고쳐 다시 저장 · 렌더한다"), ok
 
 

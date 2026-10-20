@@ -78,9 +78,12 @@ description: 게임 프로젝트(UE / Unity)에서 기능을 구현하거나 구
 ## 4. 근거를 그림으로 낸다
 
 **구조도는 반드시 그린다 — Before/After 를 diagram-design 으로.** 사용자 요청(2026-10-20).
-- 선택지마다 한 장: `architecture-delta` 형, Before = 지금 구조, After = 그 선택지를 적용한 구조(바뀌는 노드 · 간선이 강조된다).
-  diagram-design 예산대로 컴포넌트 8개 · 관계 10개 이하, 독자 `engineer`, 한 장에 그림 하나.
-- 파일은 문서와 같은 폴더에 `<문서 이름>-구조-<선택지>.html` (예: `20261020-조건-구조-C.html`). render.py 가 문서의 '그림' 절에 끼워 넣는다.
+**형식은 "무엇이 바뀌나" 로 고른다 — 구조 질문이라고 아키텍처 그림이 아니다.** 연결이 바뀌면 Architecture delta,
+상태 · 전이면 State machine, 호출 순서면 Sequence, 판정 분기면 Flowchart, 데이터 구조면 ER, 상속 → 조합이면 UML class …
+표와 규칙: [references/diagram-types.md](references/diagram-types.md). 사용자가 형식을 말하면 그것을 쓴다.
+- 그림 절 첫 줄에 `바뀌는 것: <한 줄> → <형식>`. 형식은 한 문서에 두 가지까지.
+- 선택지마다 전 · 후: Architecture delta 는 한 장, 그 밖의 형식은 같은 배치의 두 장(바뀐 요소만 강조). 독자 `engineer`, 형식별 예산은 diagram-design 의 type 문서대로.
+- 파일은 문서와 같은 폴더에 `<문서 이름>-구조-<선택지>-<형식>[-전|-후].html` (예: `20261020-조건-구조-C-sequence-전.html`). render.py 가 '그림' 절에 이름순으로 끼워 넣는다.
 - diagram-design 이 없으면(`~/.claude/skills/diagram-design`) `setup.bat` 을 다시 돌리라고 알리고 아래 Mermaid Before/After 로 대신한다.
 - 기록 `.md` 의 Mermaid 는 그대로 둔다(원본, diff 된다). 구조도가 있으면 HTML 에서는 접힌 'Mermaid 원본'으로 내려간다.
 
@@ -98,7 +101,7 @@ Mermaid 규칙 (렌더러 호환 — 어기면 GitLab·Azure DevOps·SVN HTML �
 
 **그림은 반드시 렌더해서 보여 준다.** Claude Code 대화창은 Mermaid 를 그리지 않고 코드로만 보인다 — 코드 블록만 내면 사용자는 그림을 못 본다.
 1. 답변 전체(아래 출력 형식 그대로, mermaid 블록 포함)를 `<프로젝트>/Saved/ClaudeArch/<YYYYMMDD>-<주제>.md` 로 저장한다 (Unity 는 `Library/ClaudeArch/`. 프로젝트 인덱스와 같은, VCS 가 무시하는 폴더다).
-2. 위 구조도(diagram-design)를 `<문서 이름>-구조-<선택지>.html` 로 저장한다.
+2. 위 그림(diagram-design, 바뀌는 것에 맞는 형식)을 `<문서 이름>-구조-<선택지>-<형식>[-전|-후].html` 로 저장한다.
 3. `python ~/.claude/skills/game-architecture/scripts/render.py <그 파일.md> --open` — 단일 HTML 을 만들고 브라우저로 연다. mermaid·marked 는 `scripts/vendor/` 에 동봉돼 있어 설치·인터넷이 필요 없다.
    HTML 은 **한눈에 · 선택지 · 그림(구조도) · 질문을 맨 위**에 두고 나머지는 접힌 '근거'로 내린다. 보이는 부분의 120자 넘는 줄은 첫 문장만 남기고 접는다(전부 펼치려면 `--full`).
    출력 끝의 `읽기 점검:` 줄이 기준(첫 화면 30줄 · 긴 줄 0 · 근거 밖 절 0 · 구조도 1장 이상, 그림 한 장은 한 줄)을 넘으면 아래 '읽기 규칙'대로 고쳐 다시 저장 · 렌더한다.
@@ -147,7 +150,8 @@ Stop 훅 `diagram_view.py` 가 안전망이다 — 최근 저장한 구조 문�
 | B. … | … | … | … | … |
 
 ## 그림
-(diagram-design 구조도 — <문서 이름>-구조-<선택지>.html, render.py 가 여기에 끼워 넣는다)
+바뀌는 것: <한 줄> → <형식> (references/diagram-types.md)
+(diagram-design 그림 — <문서 이름>-구조-<선택지>-<형식>[-전|-후].html, render.py 가 여기에 끼워 넣는다)
 ### 지금 구조 — <한 줄>
 (mermaid 원본)
 ### 다음 요청 때 고칠 곳 — A 4 · B 5 · C 0
