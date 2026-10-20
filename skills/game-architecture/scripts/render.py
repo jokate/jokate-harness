@@ -14,6 +14,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 import webbrowser
 from pathlib import Path
@@ -35,6 +36,7 @@ code,pre{{background:var(--code);border-radius:4px}} pre{{padding:12px;overflow-
 .mermaid{{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin:12px 0;overflow-x:auto}}
 #raw{{white-space:pre-wrap}} .note{{color:var(--mute);font-size:13px}}
 details{{border-top:1px solid var(--line);margin-top:20px;padding-top:8px}} summary{{color:var(--mute);cursor:pointer}}
+.mermaid{{cursor:zoom-in}} .mermaid.zoom{{cursor:zoom-out}} .mermaid.zoom svg{{max-width:none!important;width:auto!important;height:auto}}
 </style></head><body>
 <div id="out"><pre id="raw">{raw}</pre><p class="note">스크립트를 불러오지 못해 원문을 표시한다 (render.py 옆 vendor/ 폴더가 있는지, 또는 --js-dir).</p></div>
 {scripts}
@@ -45,7 +47,10 @@ if (window.marked) {{
   r.code = (t, lang) => {{ const x = typeof t === 'object' ? t : {{text: t, lang}};
     return x.lang === 'mermaid' ? '<div class="mermaid">' + x.text.replace(/</g,'&lt;') + '</div>' : code(t, lang); }};
   document.getElementById('out').innerHTML = marked.parse(md, {{renderer: r}});
-  if (window.mermaid) {{ mermaid.initialize({{startOnLoad:false, theme:'default'}}); mermaid.run(); }}
+  if (window.mermaid) {{ mermaid.initialize({{startOnLoad:false, theme:'default'}});
+    // 그림을 누르면 원래 크기로 (큰 그림이 화면 폭에 맞춰 줄어 글자가 작을 때)
+    Promise.resolve(mermaid.run()).then(() => document.querySelectorAll('.mermaid').forEach(el => {{
+      el.title = '누르면 크게 / 다시 누르면 맞춤'; el.onclick = () => el.classList.toggle('zoom'); }})); }}
 }}
 </script></body></html>
 """
@@ -64,32 +69,127 @@ def scripts(js_dir=None):
     return tags + f"<script>{fallback}</script>"
 
 
-FRONT = ("선택지", "그림")  # 먼저 보일 절 — 나머지(요청 축 · 확장 지점 · 신호 …)는 접힌 '근거'로
+# 먼저 보일 절, 이 순서로 — 제목 앞 번호와 뒤 설명은 무시하고 앞 낱말로 맞춘다("## 6. 선택지 — …" → 선택지).
+# 나머지(요청 축 · 확장 지점 · 신호 · 설계 노트 · 검증 …)는 접힌 '근거'로.
+FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("그림", "현재 구조"), ("결정", "사용자 결정", "고를 것"))
+VISIBLE_MAX = 30  # 첫 화면(접힌 근거 위) 글 줄 수 기준 — 그림 한 장은 한 줄로 센다
+LONG = 120  # 보이는 부분에서 이보다 긴 줄은 첫 문장만 보이고 나머지는 '더보기'로 접는다
+
+
+def _sec_name(head):
+    t = re.sub(r"^\d+(\.\d+)*\.?\s*", "", head.lstrip("#").strip())
+    return re.split(r"\s+[—–]\s+|\s+-\s+|\s*\(", t)[0].strip()
+
+
+def _front_rank(name):
+    return next((r for r, keys in enumerate(FRONT) if name.startswith(keys)), None)
+
+
+def _fold_long(text, limit=LONG):
+    """긴 목록 · 글 줄을 '첫 문장 + 접힌 나머지' 로. 코드 블록 · 표 · 제목은 그대로."""
+    out, fence = [], None
+    for ln in text.splitlines():
+        s = ln.strip()
+        if fence or re.match(r"(`{3,}|~{3,})", s):
+            if fence and s.startswith(fence):
+                fence = None
+            elif not fence:
+                fence = re.match(r"(`{3,}|~{3,})", s).group(1)
+            out.append(ln)
+            continue
+        if len(s) <= limit or s.startswith(("#", "|", "<", ">")):
+            out.append(ln)
+            continue
+        m = re.search(r"[.!?](?=\s)", ln[12:])  # 앞 12자 안의 마침표(번호 · 약어)는 문장 끝으로 안 본다
+        cut = m.end() + 12 if m else -1
+        if cut <= 0 or len(ln) - cut < 15:
+            out.append(ln)
+            continue
+        out.append(f"{ln[:cut]} <details class=\"more\"><summary>더보기</summary>{ln[cut:].strip()}</details>")
+    return "\n".join(out)
 
 
 def summary_first(md):
-    """game-architecture 답변이면 '선택지' · '그림' 을 위로, 나머지 절은 접힌 <details> 하나로 내린다.
-    긴 HTML 이 볼 때마다 불편하다는 사용자 피드백(2026-10-20). '## 선택지' 가 없는 글은 그대로 둔다."""
+    """game-architecture 답변이면 결론 · 선택지 · 그림 · 결정 절을 위로, 나머지 절은 접힌 <details> 하나로 내린다.
+    보이는 절의 긴 줄은 첫 문장만 남기고 접는다. 긴 줄글 HTML 이 읽기 힘들다는 사용자 피드백(2026-10-20).
+    '선택지' 절이 없는 글은 그대로 둔다."""
     lines = md.splitlines()
     heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
-    if not any(lines[i][3:].strip() == "선택지" for i in heads):
+    if not any(_sec_name(lines[i]).startswith("선택지") for i in heads):
         return md
     pre = "\n".join(lines[:heads[0]]).rstrip()
     secs = []
     for n, i in enumerate(heads):
         end = heads[n + 1] if n + 1 < len(heads) else len(lines)
-        secs.append((lines[i][3:].strip(), "\n".join(lines[i:end]).rstrip()))
-    front = [t for name in FRONT for title, t in secs if title == name]
-    rest = [(title, t) for title, t in secs if title not in FRONT]
-    out = ([pre] if pre else []) + front
+        secs.append((_sec_name(lines[i]), n, "\n".join(lines[i:end]).rstrip()))
+    front = sorted((s for s in secs if _front_rank(s[0]) is not None), key=lambda s: (_front_rank(s[0]), s[1]))
+    rest = [s for s in secs if _front_rank(s[0]) is None]
+    out = ([_fold_long(pre)] if pre else []) + [_fold_long(t) for _, _, t in front]
     if rest:
-        names = " · ".join(title for title, _ in rest)
-        out.append(f"<details><summary>근거 — {names}</summary>\n\n" + "\n\n".join(t for _, t in rest) + "\n\n</details>")
+        subs = lambda t: [_sec_name(ln) for ln in t.splitlines() if ln.startswith("### ")]  # noqa: E731
+        names = " · ".join(n for name, _, t in rest for n in (subs(t) if name == "근거" else [name]))
+        out.append(f"<details><summary>근거 — {names}</summary>\n\n" + "\n\n".join(t for _, _, t in rest) + "\n\n</details>")
     return "\n\n".join(out) + "\n"
 
 
+def check(md):
+    """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수와 그 안의 긴 줄 수. render.py 가 출력해 모델이 고칠 근거로 쓴다."""
+    view = MERMAID.sub("(그림)", readable(md).split("<details>")[0])
+    vis = [ln for ln in view.splitlines() if ln.strip()]
+    long_ = [ln for ln in _prose(md, clip=False) if len(ln) > LONG]
+    return {"visible_lines": len(vis), "long_lines": len(long_)}
+
+
+MERMAID = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*mermaid[ \t]*\r?\n.*?^[ \t]*\1[ \t]*$", re.M | re.S)
+SUMMARY_LINES = 3
+
+
+def _prose(md, clip=True):
+    """요약 후보 줄 — 코드 블록 · 표 · 제목 · HTML · 인용 · 구분선을 뺀 글."""
+    out, fence = [], None
+    for ln in md.splitlines():
+        s = ln.strip()
+        if fence:
+            fence = None if s.startswith(fence) else fence
+            continue
+        m = re.match(r"(`{3,}|~{3,})", s)
+        if m:
+            fence = m.group(1)
+            continue
+        if s and not s.startswith(("#", "|", "<", ">")) and not set(s) <= set("-=*_ "):
+            out.append(s if not clip or len(s) <= 140 else s[:139] + "…")
+    return out
+
+
+def diagram_first(md, keep=SUMMARY_LINES):
+    """그림이 든 글(구조 문서 · 답변)을 '제목 → 요약 몇 줄 → 그림 → 접힌 전체 내용' 으로. 그림이 없으면 그대로.
+    그림 제목은 그 블록 바로 앞의 소제목. 긴 HTML 이 볼 때마다 불편하다는 사용자 피드백(2026-10-20)."""
+    blocks = list(MERMAID.finditer(md))
+    if not blocks:
+        return md
+    title = next((ln for ln in md.splitlines() if ln.startswith("# ")), "")
+    lead = _prose(md[:blocks[0].start()]) or _prose(md)  # 첫 그림 앞의 글을 먼저
+    summary = [s if re.match(r"([-*]|\d+\.) ", s) else "- " + s for s in lead[:keep]]
+    figs = []
+    for i, m in enumerate(blocks, 1):
+        heads = [ln.lstrip("#").strip() for ln in md[:m.start()].splitlines() if re.match(r"#{2,4} ", ln)]
+        figs.append(f"### {heads[-1] if heads else f'그림 {i}'}\n\n{m.group(0).strip()}")
+    n = iter(range(1, len(blocks) + 1))
+    rest = MERMAID.sub(lambda m: f"*(위 그림 {next(n)})*", md)
+    rest = "\n".join(ln for ln in rest.splitlines() if ln != title).strip()
+    out = ([title] if title else []) + (["\n".join(summary)] if summary else []) + figs
+    out.append(f"<details><summary>전체 내용</summary>\n\n{rest}\n\n</details>")
+    return "\n\n".join(out) + "\n"
+
+
+def readable(md):
+    """기본 보기: game-architecture 답변이면 summary_first, 그 밖에 그림이 든 글이면 diagram_first."""
+    s = summary_first(md)
+    return s if s is not md else diagram_first(md)
+
+
 def render(md, out, title, js_dir=None, full=False):
-    md = md if full else summary_first(md)
+    md = md if full else readable(md)
     out = Path(out)
     out.write_text(PAGE.format(title=html.escape(title), raw=html.escape(md),
                                md_json=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir)),
@@ -115,13 +215,18 @@ def main():
     ap.add_argument("-o", "--out")
     ap.add_argument("--js-dir")
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
-    ap.add_argument("--full", action="store_true", help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 근거는 접기)")
+    ap.add_argument("--full", action="store_true",
+                    help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 그 밖의 글은 요약 · 그림 먼저, 나머지는 접기)")
     a = ap.parse_args()
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
     out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full)
     print(out)
+    c = check(md)
+    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0
+    print(f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
+          + ("" if ok else " — 넘었다. SKILL.md '읽기 규칙'대로 줄이거나 표로 바꿔 다시 저장한다"))
     if a.open:
         err = open_file(out)
         if err:

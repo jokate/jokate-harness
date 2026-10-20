@@ -1,4 +1,8 @@
-"""Stop: 이번 답변에 ```mermaid 블록이 있으면 HTML 로 렌더해 브라우저로 연다. 답변을 막거나 바꾸지 않는다.
+"""Stop: 이번 답변에 ```mermaid 블록이 있거나, 이번에 저장한 구조 문서(ClaudeArch/*.md)의 HTML 이 없거나 낡았으면
+HTML 로 렌더해 브라우저로 연다. 답변을 막거나 바꾸지 않는다.
+
+보기: render.py 기본 보기 — game-architecture 답변은 선택지 · 그림 먼저, 그 밖의 글은 제목 → 요약 3줄 → 그림,
+나머지는 접는다. 그림은 누르면 크게. 긴 HTML 이 볼 때마다 불편하다는 사용자 피드백(2026-10-20).
 
 Claude Code 대화창은 Mermaid 를 그리지 않고 `graph LR` · `subgraph …` 같은 코드로 보인다.
 game-architecture 의 "저장 후 render.py --open" 규칙은 모델이 지켜야 동작하고, 그 스킬 밖의 답변에는 없다.
@@ -24,6 +28,8 @@ RENDER_DIRS = [Path.home() / ".claude" / "skills" / "game-architecture" / "scrip
                HERE.parent.parent / "game-architecture" / "scripts"]  # 저장소에서 바로 돌릴 때
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*mermaid[ \t]*\r?\n.*?^[ \t]*\1[ \t]*$", re.M | re.S)
 TAIL_BYTES = 4_000_000
+DOC_WINDOW = 3600  # 구조 문서: 최근 1시간 안에 저장된 .md 만 (오래된 기록을 갑자기 열지 않게)
+MAX_DOCS = 3
 CACHE = Path.home() / ".claude" / "cache" / "game-harness" / "diagrams"
 
 try:
@@ -79,8 +85,55 @@ def load_render():
     return None
 
 
+def fresh_docs(folder, now=None):
+    """이번에 저장된 구조 문서 — ClaudeArch 의 .md 중 그림이 있고, 최근 저장됐고, HTML 이 없거나 더 오래된 것.
+    모델이 render.py 를 빠뜨려도 구조 문서는 보기 좋게 열린다. 훅이 만든 '-chat-' 기록은 뺀다."""
+    now = time.time() if now is None else now
+    out = []
+    try:
+        cands = sorted(folder.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return out
+    for p in cands:
+        try:
+            mt = p.stat().st_mtime
+            if "-chat-" in p.name or now - mt > DOC_WINDOW:
+                continue
+            h = p.with_suffix(".html")
+            if h.is_file() and h.stat().st_mtime >= mt:
+                continue
+            if FENCE.search(p.read_text(encoding="utf-8", errors="replace")):
+                out.append(p)
+        except OSError:
+            continue
+        if len(out) >= MAX_DOCS:
+            break
+    return out
+
+
+def title_of(text, fallback):
+    return next((ln.lstrip("# ").strip() for ln in text.splitlines() if ln.startswith("# ")), fallback)
+
+
 def reply(msg):
     sys.stdout.write(json.dumps({"systemMessage": msg}))
+
+
+def render_answer(render, text, folder):
+    """답변 속 그림 → <날짜>-chat-<해시>.md/.html. 같은 내용이 이미 있으면 None."""
+    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
+    if any(any(d.glob(f"*-chat-{digest}.html")) for d in (folder, CACHE)):
+        return None
+    name = f"{time.strftime('%Y%m%d-%H%M')}-chat-{digest}"
+    title = title_of(text, f"Claude 답변 그림 {time.strftime('%Y-%m-%d %H:%M')}")
+    for d in (folder, CACHE):  # 프로젝트 폴더에 못 쓰면(읽기 전용 등) 캐시로
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{name}.md").write_text(text, encoding="utf-8")
+            return render.render(text, d / f"{name}.html", title)
+        except OSError:
+            continue
+    return None
 
 
 def main():
@@ -92,40 +145,39 @@ def main():
     if not isinstance(text, str):
         text = from_transcript(data.get("transcript_path"))
     n = len(FENCE.findall(text or ""))
-    if not n:
-        return
     session = data.get("session_id", "")
     folder, root = out_dir(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd())
     if root is None:  # 게임 프로젝트가 아니다
         return
-    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
-    if any(any(d.glob(f"*-chat-{digest}.html")) for d in (folder, CACHE)):
+    docs = fresh_docs(folder)
+    if not n and not docs:
         return
     render = load_render()
     if render is None:
-        reply(f"답변에 Mermaid 그림 {n}장이 있지만 render.py 를 못 찾아 렌더하지 못했다 — setup.bat 을 다시 돌린다.")
+        reply("그림이 있지만 render.py 를 못 찾아 렌더하지 못했다 — setup.bat 을 다시 돌린다.")
         harness_emit("diagram.render", "render.py 없음", ok=False, session=session, project=root or "",
                      source="diagram_view")
         return
-    name = f"{time.strftime('%Y%m%d-%H%M')}-chat-{digest}"
-    title = next((ln.lstrip("# ").strip() for ln in text.splitlines() if ln.startswith("# ")),
-                 f"Claude 답변 그림 {time.strftime('%Y-%m-%d %H:%M')}")
-    for d in (folder, CACHE):  # 프로젝트 폴더에 못 쓰면(읽기 전용 등) 캐시로
+    made = []
+    for p in docs:  # 구조 문서 — 같은 이름의 .html 로
         try:
-            d.mkdir(parents=True, exist_ok=True)
-            (d / f"{name}.md").write_text(text, encoding="utf-8")
-            html = render.render(text, d / f"{name}.html", title)
-            break
+            t = p.read_text(encoding="utf-8")
+            made.append(("구조 문서", render.render(t, p.with_suffix(".html"), title_of(t, p.stem))))
         except OSError:
-            html = None
-    if html is None:
+            continue
+    if n:
+        h = render_answer(render, text, folder)
+        if h:
+            made.append((f"Mermaid 그림 {n}장", h))
+    if not made:
         return
-    err = None if os.environ.get("GAME_HARNESS_NO_OPEN") == "1" else render.open_file(html)
-    opened = "열지 않음 (GAME_HARNESS_NO_OPEN)" if os.environ.get("GAME_HARNESS_NO_OPEN") == "1" else \
-        (f"열지 못했다: {err} — 직접 연다" if err else "브라우저로 열었다")
-    reply(f"Mermaid 그림 {n}장 → {html} ({opened})")
-    harness_emit("diagram.render", f"{n}장 · {html.name}", ok=err is None, session=session, project=root or "",
-                 source="diagram_view")
+    no_open = os.environ.get("GAME_HARNESS_NO_OPEN") == "1"
+    errs = [] if no_open else [e for e in (render.open_file(h) for _, h in made) if e]
+    opened = "열지 않음 (GAME_HARNESS_NO_OPEN)" if no_open else \
+        (f"열지 못했다: {errs[0]} — 직접 연다" if errs else "브라우저로 열었다")
+    reply(" · ".join(f"{k} → {h}" for k, h in made) + f" ({opened})")
+    harness_emit("diagram.render", " · ".join(f"{k} {h.name}" for k, h in made), ok=not errs, session=session,
+                 project=root or "", source="diagram_view")
 
 
 if __name__ == "__main__":

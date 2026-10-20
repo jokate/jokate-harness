@@ -84,4 +84,4 @@ sequenceDiagram
 `render.py` 는 `scripts/vendor/` 에 동봉한 marked 12.0.2·mermaid 11.17.2 를 쓴다 — 설치할 것이 없고 사내망에서도 그려진다.
 HTML 만 다른 PC 로 옮기면 동봉 파일을 못 찾아 CDN 으로 넘어간다. 다른 파일을 쓰려면 `--js-dir <폴더>` (marked.min.js, mermaid.min.js).
 어느 쪽도 못 불러오면 원문 Markdown 이 그대로 보인다 (`flowchart LR`·`subgraph …` 가 글자로 보이는 화면이 이것이다).
-Claude Code 대화창은 Mermaid 를 그리지 않는다. 답변에 mermaid 블록이 있으면 Stop 훅 `diagram_view.py` 가 HTML 로 렌더해 연다.
+Claude Code 대화창은 Mermaid 를 그리지 않는다. 답변에 mermaid 블록이 있거나 ClaudeArch 에 구조 문서를 저장하면 Stop 훅 `diagram_view.py` 가 HTML 로 렌더해 연다(요약 · 그림 먼저, 근거 접기, 그림은 누르면 크게).

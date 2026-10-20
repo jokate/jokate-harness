@@ -54,6 +54,21 @@ class HookScope(unittest.TestCase):
         self.assertIn("Mermaid", out)
         self.assertTrue(any((self.game / "Saved" / "ClaudeArch").glob("*.html")))
 
+    def test_diagram_view_renders_fresh_structure_doc(self):
+        arch = self.game / "Saved" / "ClaudeArch"
+        arch.mkdir(parents=True)
+        doc = arch / "20261020-전투.md"
+        doc.write_text("# 전투\n\n요약 줄.\n\n## 구조\n```mermaid\ngraph LR\n  A --> B\n```\n", encoding="utf-8")
+        old = arch / "20260101-옛.md"
+        old.write_text("# 옛\n```mermaid\ngraph LR\n  A --> B\n```\n", encoding="utf-8")
+        os.utime(old, (1, 1))  # 오래된 기록은 열지 않는다
+        out = run("diagram_view.py", {"last_assistant_message": "끝냈다.", "cwd": str(self.game)}, self.home)
+        self.assertIn("구조 문서", json.loads(out)["systemMessage"])
+        html = doc.with_suffix(".html").read_text(encoding="utf-8")
+        self.assertIn("전체 내용", html)
+        self.assertFalse(old.with_suffix(".html").exists())
+        self.assertEqual(run("diagram_view.py", {"last_assistant_message": "또.", "cwd": str(self.game)}, self.home), "")
+
 
 if __name__ == "__main__":
     unittest.main()
