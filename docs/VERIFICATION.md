@@ -606,6 +606,14 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - `game-harness-monitor` mod: 도구 호출을 인덱스(gq · clangd · 위키 · ue_q) 대 직접(grep · 찾기 · 읽기)으로 세어 **프롬프트 위 띠**로 보인다(게임 프로젝트). clangd 인덱스가 있는데 0회 · grep 5회 이상이면 노란 경고. clangd · 위키를 처음 쓰면 토스트. `/harness` 패널에 탐색 막대 · 최근 탐색. `/harness-history` 는 세션별 탐색 · 하네스 기능 · 최근 기록 HTML(다크 모드)을 만들어 연다 — 지난 세션은 `search_history.py` 가 대화 기록에서 센다(캐시). 시험 10개, `claude plugin validate` 통과.
 - 확인: 실제 MNYS 기록으로 이력 페이지를 만들어 Edge 헤드리스로 밝게 · 어둡게 캡처. 띠는 다음 세션부터 보인다(mod 는 세션 시작 때 읽힌다).
 
+## 2026-10-20 (6) — 그림 형식은 "무엇이 바뀌나" 로 고른다 · 모니터 띠 나눠 쓰기
+
+- 사용자: "무조건 아키텍처로 뽑는다 — 구조를 뽑아 달라 한다고 아키텍처가 아니라, 기존에서 어떻게 바뀌는지에 맞는 다이어그램을 골라야 한다 (diagram-design 은 형식이 많다)".
+- `references/diagram-types.md`: 바뀌는 것 → 형식 표 12행(연결 → Architecture delta, 클래스 정의 → UML class, 상태 → State machine, 순서 → Sequence, 판정 → Flowchart, 데이터 → ER, 흐름 → Data flow, 의존 → Dependency, 계층 → Layer stack, 소유 → Nested, 인계 → Swimlane, 이관 → Timeline) + 파일 표기. 그림 절 첫 줄에 `바뀌는 것: … → 형식`, 한 문서 두 형식까지, 사용자가 말한 형식 우선, 전 · 후 두 장은 같은 배치.
+- SKILL 4절 · 출력 형식 · 파일 이름(`<문서>-구조-<선택지>-<형식>[-전|-후].html`) · render.py 읽기 점검 문구.
+- 확인: Sonnet 에게 규칙만 주고 시나리오 6개(보스 페이즈 · 히트 판정 · DataTable · 초기화 순서 · 상속 → 컴포넌트 · 서브시스템 참조)를 고르게 함 → State machine · Flowchart · ER · Sequence · UML class · Architecture delta, 6/6. 지적된 두 가지(파일 표기가 sequence 만 예시, "컴포넌트로" 가 두 행에 걸침)를 고쳤다.
+- 모니터 mod: 프롬프트 위 띠가 내 줄만 돌려주어 아래 플러그인의 띠를 가렸다 → next(e) 로 받은 띠를 내 한 줄 밑에 둔다. 시험에 "다른 플러그인 띠가 함께 보이는지".
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
