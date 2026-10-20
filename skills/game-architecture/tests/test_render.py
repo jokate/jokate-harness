@@ -1,5 +1,6 @@
 """render.py — 선택지 · 그림 먼저, 나머지 근거는 접는다 (2026-10-20 사용자: HTML 이 길고 난잡하다)."""
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -180,6 +181,30 @@ class DiagramDesignFigureTest(unittest.TestCase):
         self.dir = Path(self._td.name)
         self.doc = self.dir / "20261020-조건.md"
         self.doc.write_text(NUMBERED, encoding="utf-8")
+        old, render.DD_EXPORT = render.DD_EXPORT, self.dir / "없는-export_svg.py"  # 설치본과 무관하게: 기본은 iframe
+        self.addCleanup(setattr, render, "DD_EXPORT", old)
+
+    def test_inline_svg_when_exported(self):
+        fig = self.dir / "20261020-조건-구조-C.html"
+        fig.write_text("<html></html>", encoding="utf-8")
+        svg = fig.with_suffix(".svg")
+        svg.write_text('<?xml version="1.0"?>\n<svg viewBox="0 0 1200 600">\n\n  <title id="t">조건 판정 전후</title>\n</svg>\n',
+                       encoding="utf-8")
+        os.utime(fig, (1, 1))  # 내보낸 SVG 가 더 새롭다 → 다시 만들지 않고 쓴다
+        out = render.embed_figs(NUMBERED, [fig], self.dir)
+        self.assertIn('<div class="ddsvg"><svg viewBox="0 0 1200 600">', out)
+        self.assertNotIn("<iframe", out)
+        self.assertNotIn("<?xml", out)
+        block = out.split('<figure class="dd">')[1].split("</figure>")[0]
+        self.assertNotIn("\n\n", block)  # 빈 줄이 있으면 마크다운이 HTML 덩어리를 끊는다
+        self.assertIn("<figcaption>조건 판정 전후 · ", out)
+
+    def test_page_has_theme_toggle_and_dark_tokens(self):
+        with tempfile.TemporaryDirectory() as td:
+            page = render.render(NUMBERED, Path(td) / "d.html", "t").read_text(encoding="utf-8")
+        for part in ('id="theme"', ":root[data-theme=dark]", "prefers-color-scheme:dark", "localStorage", "theme: isDark()"):
+            self.assertIn(part, page)
+        self.assertNotIn("__MD__", page)
 
     def test_figures_found_beside_doc(self):
         (self.dir / "20261020-조건-구조-C.html").write_text("<svg/>", encoding="utf-8")

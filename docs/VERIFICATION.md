@@ -588,6 +588,15 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 실물 확인: 예시 문서의 선택지 C 를 diagram-design 으로 그림(컴포넌트 4 · 관계 4 · 변경 7) → verify-architecture-delta · verify-geometry · self_check 모두 0건. 문서에 끼워 넣은 HTML 을 웹 서버로 열어 iframe 로드 · 높이 762px 맞춤 확인(화면 캡처는 패널이 접혀 못 함).
 - 시험: test_render 17개, test_hook_scope 4개.
 
+## 2026-10-20 (4) — 문서 HTML 을 보기 좋게 · 다크 모드
+
+- 사용자: "HTML 이 딱딱하다, 예쁘게 / 다크 모드 지원".
+- `render.py` 페이지 틀: 절마다 카드, '한눈에 · 결론' 은 강조 카드, 표는 둥근 테두리 · 머리줄 · 줄 강조, 접힌 근거는 펼침 카드, 글꼴 Pretendard(CDN, 없으면 맑은 고딕).
+- 다크 모드: 시스템 설정을 따르고 오른쪽 위 버튼으로 자동 → 밝게 → 어둡게(브라우저에 기억). Mermaid 는 테마(neutral / dark)에 맞춰 다시 그리고, diagram-design 구조도는 어두울 때 색을 뒤집는다.
+- 구조도를 iframe 대신 **SVG 로 문서에 바로** 넣는다(diagram-design `export_svg.py`, 결과는 옆에 `.svg` 로 두고 바뀔 때만 다시 만듦) — iframe 은 폭이 모자라 After 패널이 잘렸다. 못 꺼내면 iframe. 누르면 원래 크기, 캡션은 SVG 제목.
+- 틀 채우기를 `str.format` 에서 `page()`(자리 한 번에 바꾸기)로 — CSS · JS 의 중괄호를 두 겹으로 쓰지 않는다.
+- 확인: Edge 헤드리스로 밝게 · 어둡게 캡처 — 카드 · 표 · 구조도(Before · 바뀌는 것 · After 모두 보임) · Mermaid 어두운 테마 확인. 시험 test_render 19개, test_hook_scope 4개.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
