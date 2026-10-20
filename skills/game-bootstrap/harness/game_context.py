@@ -51,6 +51,28 @@ def source_repo(root):
     return f"소스 저장소: `{rel}` ({k}, 커밋 {n}, 소스 {src}) — 루트와 별도 저장소다. evidence.py 는 `--path {rel}`."
 
 
+def search_routing(root, engine, home=None):
+    """있는 인덱스만 골라 '어떤 질문엔 어떤 명령' 을 명령 줄 그대로 준다.
+    스킬 이름만 알려 주면 모델이 스킬을 부르지 않고 grep 으로 간다 — MNYS 실제 세션 61개에서 clangd 0회 ·
+    위키 0회 · grep 714회, game-onboard 0회(2026-10-20). 그래서 스킬을 거치지 않아도 바로 쓸 수 있게 한다."""
+    home = Path(home) if home else Path.home()
+    idx = root / ("Library" if engine.startswith("Unity") else "Saved") / "ClaudeIndex"
+    onboard = "python ~/.claude/skills/game-onboard/scripts"
+    wiki = home / ".jokate-wiki" / root.name
+    out = []
+    if (idx / "symbols.json").is_file():
+        out.append(f"- 어디에 있나 (클래스 · 함수 · 애셋 · 문서) → `{onboard}/gq.py find <이름>` · 심볼 좌표 `gq.py sym <이름>`")
+    if (idx / "clangd.sqlite").is_file():
+        out.append(f"- 누가 부르나 · 누가 재정의하나 · 바꾸면 어디가 영향받나 → `{onboard}/cindex.py callers <심볼>` · "
+                   "`derived <클래스>` · `impact <심볼>` (clangd 의미 인덱스, 컴파일 기준 — grep 으로 추측하지 않는다)")
+    if (wiki / "index.md").is_file():
+        out.append(f"- 시스템 구조 · 기획 사양 · 결정 → 위키 `{wiki.as_posix()}/index.md` 부터 (wiki-query 스킬)")
+    if not out:
+        return []
+    return ["코드 찾기 — grep · 파일 통째 읽기보다 인덱스를 먼저 쓴다 (하네스 모니터가 세션마다 센다):", *out,
+            "- 문자열 · 주석 · 설정값처럼 인덱스에 없는 것만 → rg"]
+
+
 def main():
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
@@ -70,6 +92,7 @@ def main():
         "- 기획서 읽기·사양 정리·기획과 구현 대조 → game-design-doc",
         "- 패턴 비교·선택 → game-patterns · 테스트·검증 → game-testing · 에디터 MCP 조작 → game-mcp",
     ]
+    lines += search_routing(root, engine)
     is_setup = (root / ".claude" / "session_start.json").is_file() or (root / "CLAUDE.md").is_file()
     if not is_setup:
         lines.append("이 프로젝트는 세팅 전이다 (CLAUDE.md·인덱스 갱신 없음). 필요하면 사용자에게 /game-bootstrap 을 안내한다.")
