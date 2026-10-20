@@ -354,6 +354,25 @@ async function openHistory($: EngineInterface): Promise<string> {
     : `하네스 이력 페이지를 만들었다 — 브라우저로 연다: ${out}`
 }
 
+// 내 한 줄 — 한 줄을 넘지 않게 잘라 다른 플러그인 몫의 줄을 남긴다
+function searchRow($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], c: Counts, idle: boolean) {
+  const { Box, Text } = $.ui.resolve(e)
+  return (
+    <Box key="game-harness-search" flexDirection="row" flexWrap="nowrap">
+      <Text bold color="claude">코드 탐색 </Text>
+      <Text dimColor>│ 인덱스 </Text>
+      {INDEX_KINDS.map((k, i) => (
+        <Text key={k} color={c[k] > 0 ? 'success' : k === 'clangd' && idle ? 'warning' : 'subtle'}>
+          {i > 0 ? ' · ' : ''}{SHORT[k]} {c[k]}
+        </Text>
+      ))}
+      <Text dimColor> │ 직접 </Text>
+      <Text dimColor>{DIRECT_KINDS.map(k => `${SHORT[k]} ${c[k]}`).join(' · ')}</Text>
+      {idle ? <Text color="warning"> │ clangd 인덱스가 있는데 grep 만 씀</Text> : <Text dimColor> │ /harness 상세</Text>}
+    </Box>
+  )
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     $.clock.every(POLL_MS, () => pollSafely($))
@@ -398,26 +417,21 @@ export const register: Register = on => {
   on('command.run', { command: 'harness-history' }, async $ => ({ text: await openHistory($) }))
 
   // 프롬프트 위 띠: 이번 세션에 코드를 무엇으로 찾았나. 게임 프로젝트이거나 인덱스를 한 번이라도 썼을 때만.
+  // 띠는 다른 플러그인과 나눠 쓴다 — 아래 플러그인(과 엔진)이 그린 것을 next(e) 로 받아 내 한 줄 밑에 그대로 둔다.
+  // 내 줄만 돌려주면 그 아래 플러그인의 띠가 사라진다(사용자: "다른 플러그인도 잡아먹는다", 2026-10-20).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const rest = await next(e)
     const c = await read($, counts)
     const proj = await read($, project)
     const idx = total(c, INDEX_KINDS)
     const dir = total(c, DIRECT_KINDS)
-    if (e.props.hasSurvey || idx + dir === 0 || (!proj.isGame && idx === 0)) return next(e)
-    const { Box, Text } = $.ui.resolve(e)
+    if (e.props.hasSurvey || idx + dir === 0 || (!proj.isGame && idx === 0)) return rest
+    const { Box } = $.ui.resolve(e)
     const idle = clangdIdle(c, proj)
     return (
-      <Box flexDirection="row" flexWrap="wrap">
-        <Text bold color="claude">코드 탐색 </Text>
-        <Text dimColor>│ 인덱스 </Text>
-        {INDEX_KINDS.map((k, i) => (
-          <Text key={k} color={c[k] > 0 ? 'success' : k === 'clangd' && idle ? 'warning' : 'subtle'}>
-            {i > 0 ? ' · ' : ''}{SHORT[k]} {c[k]}
-          </Text>
-        ))}
-        <Text dimColor> │ 직접 </Text>
-        <Text dimColor>{DIRECT_KINDS.map(k => `${SHORT[k]} ${c[k]}`).join(' · ')}</Text>
-        {idle ? <Text color="warning"> │ clangd 인덱스가 있는데 grep 만 씀</Text> : <Text dimColor> │ /harness 상세</Text>}
+      <Box flexDirection="column">
+        {searchRow($, e, c, idle)}
+        {rest}
       </Box>
     )
   })

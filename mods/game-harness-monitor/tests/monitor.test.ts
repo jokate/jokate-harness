@@ -155,8 +155,18 @@ test('코드 탐색을 세어 프롬프트 위 띠로 크게 보이고, clangd �
   on('ui.status', () => ({ value: undefined }) as never)
   on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } as never })
   on('tool.call', () => ({ result: 'ok' }) as never)
+  // 아래에 깔린 다른 플러그인의 띠 — 내 띠가 그것을 가리면 안 된다
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Text({ children: '다른 플러그인 띠' }))
 
   await $.session.start({ cwd: '/proj', surface: null, isInteractive: false })
+  const bandProps = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 100,
+    scroll: { offset: 0, bodyRows: 6 }, view: {} }
+  for (const surface of ['terminal', 'desktop'] as const) {  // 센 것이 없을 때: 다른 플러그인 띠만
+    const ui = await $.ui.mount({ plugin: 'game-harness-monitor', surface, component: 'AbovePrompt', props: bandProps } as never)
+    expect(await ui.find({ type: 'Text', text: /다른 플러그인 띠/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /코드 탐색/ })).toBeUndefined()
+    await ui.unmount()
+  }
   for (let i = 0; i < 5; i += 1) await $.tool.call({ tool: 'Grep', pattern: 'Hit', tool_use_id: `g${i}` } as never)
   await $.tool.call({ tool: 'Read', file_path: '/proj/Source/A.cpp', tool_use_id: 'r1' } as never)
 
@@ -166,6 +176,7 @@ test('코드 탐색을 세어 프롬프트 위 띠로 크게 보이고, clangd �
     const ui = await $.ui.mount({ plugin: 'game-harness-monitor', surface, component: 'AbovePrompt', props } as never)
     expect(await ui.find({ type: 'Text', text: /코드 탐색/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /clangd 인덱스가 있는데 grep 만 씀/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /다른 플러그인 띠/ })).toBeDefined()  // 띠를 나눠 쓴다
     await ui.unmount()
   }
 
