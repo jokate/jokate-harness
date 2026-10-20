@@ -578,6 +578,16 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 시험: test_render 11개, test_hook_scope 3개, 하네스 전체 시험 OK.
 - 이어서 사용자 "근거까지만 넣어 놓자": 구조 조사 문서는 '근거' 절에서 끝난다(설계 노트 · 검증 기준 · 범위 밖 · 부록 금지 — 고른 뒤 5단계 계획에서). 읽기 점검에 `근거 밖 절 N개(기준 0)` — 예시 원본 7개, 새 형식 0개. 시험 test_render 12개.
 
+## 2026-10-20 (3) — 질문은 표로 · 구조도는 diagram-design Before/After 를 반드시
+
+- 사용자: "구조를 잡다가 질문이 필요하면 질문 리스트로 가독성 좋게 / 구조도는 반드시 그려 줘야 한다 (Before After) — 그 구조도 그려 주는 것 활용".
+- game-architecture SKILL: '질문 쓰는 법' — `| # | 질문 | 갈래 | 답에 따라 바뀌는 것 |` 표 하나, 한 행 한 줄, 갈래 2–3개, 막는 질문을 위로, 5개 이하. 조사 중 막히면 그 자리에서 표로 묻는다. 문서 절 '결정할 것' → '질문'.
+- 구조도 필수: 선택지마다 diagram-design `architecture-delta` 한 장(Before = 지금, After = 그 선택지), `<문서 이름>-구조-<선택지>.html` 로 문서 옆에. 없으면 setup.bat 안내 후 Mermaid 로 대신.
+- `render.py`: 문서 옆 구조도를 '그림' 절에 iframe 으로 끼워 넣고(같은 출처면 높이를 그림에 맞춤), 그 절의 Mermaid 는 접힌 'Mermaid 원본'(코드)으로. 읽기 점검에 `구조도 N장(기준 1 이상)`.
+- Stop 훅: 구조도를 나중에 그려도 문서를 다시 렌더해 끼워 넣고, 기준을 넘으면 읽기 점검 줄을 알린다.
+- 실물 확인: 예시 문서의 선택지 C 를 diagram-design 으로 그림(컴포넌트 4 · 관계 4 · 변경 7) → verify-architecture-delta · verify-geometry · self_check 모두 0건. 문서에 끼워 넣은 HTML 을 웹 서버로 열어 iframe 로드 · 높이 762px 맞춤 확인(화면 캡처는 패널이 접혀 못 함).
+- 시험: test_render 17개, test_hook_scope 4개.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

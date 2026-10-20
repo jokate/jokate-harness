@@ -15,6 +15,7 @@ game-architecture 의 "저장 후 render.py --open" 규칙은 모델이 지켜�
 GAME_HARNESS_NO_OPEN=1 이면 파일만 만들고 열지 않는다 (평가처럼 사람이 없는 실행).
 렌더는 ~/.claude/skills/game-architecture/scripts/render.py (mermaid·marked 동봉) 를 쓴다.
 """
+import glob
 import hashlib
 import json
 import os
@@ -96,7 +97,9 @@ def fresh_docs(folder, now=None):
         return out
     for p in cands:
         try:
-            mt = p.stat().st_mtime
+            # 문서 옆 diagram-design 구조도(<이름>-구조*.html)를 나중에 그렸어도 다시 렌더해 끼워 넣는다
+            figs = [f.stat().st_mtime for f in p.parent.glob(f"{glob.escape(p.stem)}-구조*.html")]
+            mt = max([p.stat().st_mtime] + figs)
             if "-chat-" in p.name or now - mt > DOC_WINDOW:
                 continue
             h = p.with_suffix(".html")
@@ -158,12 +161,16 @@ def main():
         harness_emit("diagram.render", "render.py 없음", ok=False, session=session, project=root or "",
                      source="diagram_view")
         return
-    made = []
-    for p in docs:  # 구조 문서 — 같은 이름의 .html 로
+    made, notes = [], []
+    for p in docs:  # 구조 문서 — 같은 이름의 .html 로, 옆의 구조도를 끼워 넣고 읽기 점검
         try:
             t = p.read_text(encoding="utf-8")
-            made.append(("구조 문서", render.render(t, p.with_suffix(".html"), title_of(t, p.stem))))
-        except OSError:
+            h = render.render(t, p.with_suffix(".html"), title_of(t, p.stem), src=p)
+            made.append(("구조 문서", h))
+            line, ok = render.report(render.check(t, render.dd_figs(p, exclude=h)))
+            if not ok:
+                notes.append(f"{p.name} {line}")
+        except (OSError, AttributeError, TypeError):  # 옛 render.py(설치본이 낡음)면 점검 없이
             continue
     if n:
         h = render_answer(render, text, folder)
@@ -175,7 +182,7 @@ def main():
     errs = [] if no_open else [e for e in (render.open_file(h) for _, h in made) if e]
     opened = "열지 않음 (GAME_HARNESS_NO_OPEN)" if no_open else \
         (f"열지 못했다: {errs[0]} — 직접 연다" if errs else "브라우저로 열었다")
-    reply(" · ".join(f"{k} → {h}" for k, h in made) + f" ({opened})")
+    reply(" · ".join(f"{k} → {h}" for k, h in made) + f" ({opened})" + "".join("\n" + x for x in notes))
     harness_emit("diagram.render", " · ".join(f"{k} {h.name}" for k, h in made), ok=not errs, session=session,
                  project=root or "", source="diagram_view")
 
