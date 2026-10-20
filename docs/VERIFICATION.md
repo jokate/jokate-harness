@@ -597,6 +597,15 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 틀 채우기를 `str.format` 에서 `page()`(자리 한 번에 바꾸기)로 — CSS · JS 의 중괄호를 두 겹으로 쓰지 않는다.
 - 확인: Edge 헤드리스로 밝게 · 어둡게 캡처 — 카드 · 표 · 구조도(Before · 바뀌는 것 · After 모두 보임) · Mermaid 어두운 테마 확인. 시험 test_render 19개, test_hook_scope 4개.
 
+## 2026-10-20 (5) — 코드를 무엇으로 찾았나: 모니터 띠 · 이력 페이지 · 세션 라우팅
+
+- 사용자: "clangd 인덱스가 많이 안 불리는 것 같다 / 하단에 쥐똥만하게 나온다 — 클로드 코드 mod 로 확실히 알 수 있게, 이력은 상세 페이지로".
+- 실측(MNYS 실제 세션 61개, 대화 기록): clangd 0 · 위키 0 · gq 17 · ue_q 285 · grep 714 · 파일 읽기 336 — 인덱스 비율 22%. clangd 프로젝트 인덱스가 제대로 생긴 10-14 뒤에도 grep 만 썼다. game-onboard 스킬은 0회 불림.
+- 원인: 세션 시작 라우팅이 "구조 질문 → game-onboard" 스킬 이름만 줬다. 스킬을 안 부르면 모델은 인덱스 명령을 모른다.
+- `game_context.py`: 있는 인덱스만 골라 "어디에 있나 → gq.py find · 누가 부르나/재정의/영향 → cindex.py callers/derived/impact · 구조/사양 → 위키 index.md · 나머지만 rg" 를 명령 줄 그대로 넣는다. MNYS 에서 그 명령이 cwd 그대로 도는 것 확인. 시험 test_game_context 4개.
+- `game-harness-monitor` mod: 도구 호출을 인덱스(gq · clangd · 위키 · ue_q) 대 직접(grep · 찾기 · 읽기)으로 세어 **프롬프트 위 띠**로 보인다(게임 프로젝트). clangd 인덱스가 있는데 0회 · grep 5회 이상이면 노란 경고. clangd · 위키를 처음 쓰면 토스트. `/harness` 패널에 탐색 막대 · 최근 탐색. `/harness-history` 는 세션별 탐색 · 하네스 기능 · 최근 기록 HTML(다크 모드)을 만들어 연다 — 지난 세션은 `search_history.py` 가 대화 기록에서 센다(캐시). 시험 10개, `claude plugin validate` 통과.
+- 확인: 실제 MNYS 기록으로 이력 페이지를 만들어 Edge 헤드리스로 밝게 · 어둡게 캡처. 띠는 다음 세션부터 보인다(mod 는 세션 시작 때 읽힌다).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

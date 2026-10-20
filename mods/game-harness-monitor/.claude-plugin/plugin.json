@@ -1,7 +1,7 @@
 {
   "name": "game-harness-monitor",
   "version": "0.1.0",
-  "description": "game-harness 의 훅·스킬·조회 스크립트가 이 세션에서 동작하기 시작하면 상태줄·토스트·/harness 패널로 보여준다",
+  "description": "코드를 무엇으로 찾았는지(인덱스 대 grep)를 프롬프트 위 띠로, 하네스 기능을 상태줄·토스트·/harness 패널로, 세션들 이력을 /harness-history HTML 로 보여준다",
   "author": { "name": "jokate" },
   "types": "./types/index.d.ts"
 }
