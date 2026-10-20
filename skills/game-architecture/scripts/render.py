@@ -137,7 +137,10 @@ def check(md):
     view = MERMAID.sub("(그림)", readable(md).split("<details>")[0])
     vis = [ln for ln in view.splitlines() if ln.strip()]
     long_ = [ln for ln in _prose(md, clip=False) if len(ln) > LONG]
-    return {"visible_lines": len(vis), "long_lines": len(long_)}
+    names = [_sec_name(ln) for ln in md.splitlines() if ln.startswith("## ")]
+    extra = [] if not any(n.startswith("선택지") for n in names) else \
+        [n for n in names if _front_rank(n) is None and n != "근거"]  # game-architecture 문서는 '근거' 에서 끝난다
+    return {"visible_lines": len(vis), "long_lines": len(long_), "extra_sections": extra}
 
 
 MERMAID = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*mermaid[ \t]*\r?\n.*?^[ \t]*\1[ \t]*$", re.M | re.S)
@@ -224,8 +227,9 @@ def main():
     out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full)
     print(out)
     c = check(md)
-    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0
-    print(f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
+    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"]
+    extra = f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"
+    print(f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)" + extra
           + ("" if ok else " — 넘었다. SKILL.md '읽기 규칙'대로 줄이거나 표로 바꿔 다시 저장한다"))
     if a.open:
         err = open_file(out)

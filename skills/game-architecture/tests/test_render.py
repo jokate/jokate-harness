@@ -164,6 +164,12 @@ class ReadabilityTest(unittest.TestCase):
         long_doc = NUMBERED.replace("- 짧은 결론.", "- " + "가" * 200)
         self.assertEqual(render.check(long_doc)["long_lines"], 1)
 
+    def test_check_flags_sections_after_evidence(self):
+        self.assertEqual(render.check(NUMBERED)["extra_sections"], ["요청 축", "C 설계 노트"])
+        ends = "# t\n\n## 한눈에\n- a\n\n## 선택지\n| A |\n\n## 결정할 것\n1. q\n\n## 근거\n### 신호\n"
+        self.assertEqual(render.check(ends)["extra_sections"], [])
+        self.assertEqual(render.check("# 메모\n\n## 아무 절\n글\n")["extra_sections"], [])  # 구조 조사 문서가 아니면 안 본다
+
 
 if __name__ == "__main__":
     unittest.main()
