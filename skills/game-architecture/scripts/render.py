@@ -16,7 +16,9 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 import urllib.parse
 import webbrowser
 from pathlib import Path
@@ -26,38 +28,138 @@ VENDOR = HERE / "vendor"  # marked 12.0.2 · mermaid 11.17.2 (vendor/README.md)
 CDN = {"marked": "https://cdn.jsdelivr.net/npm/marked@12/marked.min.js",
        "mermaid": "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"}
 
+# 페이지 틀 — __TITLE__ · __STAMP__ · __RAW__ · __SCRIPTS__ · __MD__ 를 한 번에 바꿔 넣는다(page()).
+# 절마다 카드, '한눈에' 는 강조 카드, 표는 둥근 테두리, 접힌 근거는 펼침 카드. 다크 모드: 시스템 설정을 따르고
+# 오른쪽 위 버튼으로 자동 → 밝게 → 어둡게(브라우저에 기억). Mermaid 는 테마에 맞춰 다시 그리고,
+# diagram-design 구조도(iframe)는 어두울 때 색을 뒤집어 맞춘다. 사용자: "딱딱하지 않게 예쁘게 · 다크 모드"(2026-10-20).
 PAGE = """<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title>
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<script>try{var t=localStorage.getItem('gh-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
 <style>
-:root{{--bg:#fff;--fg:#1f2328;--mute:#59636e;--line:#d1d9e0;--code:#f6f8fa}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#0d1117;--fg:#e6edf3;--mute:#9198a1;--line:#3d444d;--code:#151b23}}}}
-body{{background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,"Malgun Gothic",sans-serif;max-width:980px;margin:0 auto;padding:24px 16px}}
-table{{border-collapse:collapse;display:block;overflow-x:auto}} th,td{{border:1px solid var(--line);padding:4px 10px}}
-code,pre{{background:var(--code);border-radius:4px}} pre{{padding:12px;overflow-x:auto}} code{{padding:1px 4px}}
-.mermaid{{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;margin:12px 0;overflow-x:auto}}
-#raw{{white-space:pre-wrap}} .note{{color:var(--mute);font-size:13px}}
-details{{border-top:1px solid var(--line);margin-top:20px;padding-top:8px}} summary{{color:var(--mute);cursor:pointer}}
-.mermaid{{cursor:zoom-in}} .mermaid.zoom{{cursor:zoom-out}} .mermaid.zoom svg{{max-width:none!important;width:auto!important;height:auto}}
-figure.dd{{margin:12px 0}} figure.dd iframe{{width:100%;height:min(80vh,760px);min-height:420px;border:1px solid var(--line);border-radius:6px;background:#fff;resize:vertical}}
-figure.dd figcaption{{color:var(--mute);font-size:13px}}
-</style></head><body>
-<div id="out"><pre id="raw">{raw}</pre><p class="note">스크립트를 불러오지 못해 원문을 표시한다 (render.py 옆 vendor/ 폴더가 있는지, 또는 --js-dir).</p></div>
-{scripts}
+:root{--bg:#f6f5f2;--card:#fff;--fg:#1d2125;--mute:#5f6b76;--line:#e4e2dc;--soft:#f1efea;--code:#f3f1ec;--accent:#bf4520;--tint:rgba(191,69,32,.07);--shadow:0 1px 2px rgba(29,33,37,.05);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1215;--card:#171b20;--fg:#e4e7ea;--mute:#98a2ad;--line:#2a3037;--soft:#1d2228;--code:#1f252b;--accent:#f0875a;--tint:rgba(240,135,90,.10);--shadow:none;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0f1215;--card:#171b20;--fg:#e4e7ea;--mute:#98a2ad;--line:#2a3037;--soft:#1d2228;--code:#1f252b;--accent:#f0875a;--tint:rgba(240,135,90,.10);--shadow:none;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--fg);font:15.5px/1.7 "Pretendard Variable",Pretendard,"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;word-break:keep-all;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:36px 20px 72px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+.eyebrow{font-size:12px;letter-spacing:.06em;color:var(--mute)}
+.theme{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
+.theme:hover{border-color:var(--accent)} .theme:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{font-size:30px;line-height:1.3;letter-spacing:-.02em;margin:4px 0 22px;text-wrap:balance}
+h2{font-size:18px;line-height:1.4;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";flex:none;width:4px;height:18px;border-radius:2px;background:var(--accent)}
+h3{font-size:15px;margin:18px 0 8px}
+section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 24px;margin:0 0 16px;box-shadow:var(--shadow)}
+section.card>:last-child{margin-bottom:0}
+section.lead{background:var(--tint);border-color:transparent}
+p{margin:8px 0} ul,ol{padding-left:1.3em;margin:8px 0} li{margin:5px 0} li::marker{color:var(--mute)}
+strong{font-weight:650} a{color:var(--accent);text-underline-offset:2px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:12px 0;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th{background:var(--soft);color:var(--mute);font-weight:600;font-size:12.5px;text-align:left;white-space:nowrap}
+th,td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0} tbody tr:hover td{background:var(--tint)}
+code{font-family:ui-monospace,D2Coding,Consolas,monospace;font-size:.88em;background:var(--code);border-radius:5px;padding:1px 5px}
+pre{background:var(--code);border-radius:10px;padding:14px 16px;overflow-x:auto;line-height:1.55} pre code{background:none;padding:0}
+.mermaid{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0;overflow-x:auto;text-align:center;cursor:zoom-in}
+.mermaid.zoom{cursor:zoom-out} .mermaid.zoom svg{max-width:none!important;width:auto!important;height:auto}
+figure.dd{margin:12px 0} figure.dd iframe{display:block;width:100%;height:min(80vh,760px);min-height:420px;border:1px solid var(--line);border-radius:12px;background:#f5f5f5;resize:vertical}
+.ddsvg{background:#f5f5f5;border:1px solid var(--line);border-radius:12px;padding:6px;overflow-x:auto;cursor:zoom-in}
+.ddsvg.zoom{cursor:zoom-out} .ddsvg svg{display:block;width:100%;height:auto}
+[data-scheme=dark] figure.dd iframe,[data-scheme=dark] .ddsvg{filter:invert(.9) hue-rotate(180deg)}
+figure.dd figcaption{color:var(--mute);font-size:13px;margin-top:6px}
+details.fold{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:0 0 16px}
+details.fold>summary{list-style:none;cursor:pointer;padding:15px 24px;color:var(--mute);font-weight:600;display:flex;gap:10px;align-items:center}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"\\25B8";transition:transform .15s}
+details.fold[open]>summary::before{transform:rotate(90deg)}
+details.fold>.body{padding:0 24px 20px}
+section details:not(.more){margin-top:12px} section details:not(.more)>summary{cursor:pointer;color:var(--mute);font-size:13px}
+details.more{display:inline} details.more>summary{display:inline;list-style:none;cursor:pointer;color:var(--accent);font-size:12.5px;margin-left:4px}
+details.more>summary::-webkit-details-marker{display:none} details.more[open]>summary{display:none}
+#raw{white-space:pre-wrap} .note{color:var(--mute);font-size:13px}
+@media (max-width:640px){.wrap{padding:22px 16px 56px} h1{font-size:24px} section.card{padding:16px 18px}}
+@media print{.theme{display:none} section.card,details.fold{break-inside:avoid;box-shadow:none}}
+</style></head><body><div class="wrap">
+<div class="top"><span class="eyebrow">__STAMP__</span><button class="theme" id="theme" type="button" aria-label="화면 테마 바꾸기">테마: 자동</button></div>
+<div id="out"><pre id="raw">__RAW__</pre><p class="note">스크립트를 불러오지 못해 원문을 표시한다 (render.py 옆 vendor/ 폴더가 있는지, 또는 --js-dir).</p></div>
+</div>
+__SCRIPTS__
 <script>
-const md = {md_json};
-if (window.marked) {{
+const md = __MD__;
+const root = document.documentElement, out = document.getElementById('out');
+const mq = matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => root.dataset.theme === 'dark' || (root.dataset.theme !== 'light' && mq.matches);
+const LABEL = {auto: '자동', light: '밝게', dark: '어둡게'}, NEXT = {auto: 'light', light: 'dark', dark: 'auto'};
+let mode = root.dataset.theme || 'auto';
+const btn = document.getElementById('theme');
+function applyTheme() {
+  if (mode === 'auto') delete root.dataset.theme; else root.dataset.theme = mode;
+  root.dataset.scheme = isDark() ? 'dark' : 'light';
+  btn.textContent = '테마: ' + LABEL[mode];
+}
+async function drawMermaid() {
+  if (!window.mermaid) return;
+  const els = [...document.querySelectorAll('.mermaid')];
+  mermaid.initialize({startOnLoad: false, theme: isDark() ? 'dark' : 'neutral',
+                      fontFamily: '"Pretendard Variable", "Malgun Gothic", sans-serif'});
+  els.forEach(el => { if (!el.dataset.src) el.dataset.src = el.textContent;
+                      el.removeAttribute('data-processed'); el.textContent = el.dataset.src; });
+  try { await mermaid.run({nodes: els}); } catch (e) {}
+  // 그림을 누르면 원래 크기로 (큰 그림이 화면 폭에 맞춰 줄어 글자가 작을 때)
+  els.forEach(el => { el.title = '누르면 크게 / 다시 누르면 맞춤'; el.onclick = () => el.classList.toggle('zoom'); });
+}
+function decorate() {
+  // 절(h2)마다 카드로 묶는다. 제목 앞 글은 첫 카드, 접힌 근거는 펼침 카드.
+  let sec = null;
+  for (const n of [...out.childNodes]) {
+    const tag = n.nodeType === 1 ? n.tagName : '';
+    const sum = tag === 'DETAILS' && n.querySelector('summary') ? n.querySelector('summary').textContent.trim() : '';
+    if (tag === 'H1' || /^(근거|전체 내용)/.test(sum)) { sec = null; continue; }  // 'Mermaid 원본' 등은 그 절 카드 안에 둔다
+    if (tag === 'H2' || (!sec && (tag || n.textContent.trim()))) {
+      sec = document.createElement('section'); sec.className = 'card';
+      if (tag === 'H2' && /^[0-9. ]*(한눈에|결론|요약)/.test(n.textContent.trim())) sec.classList.add('lead');
+      out.insertBefore(sec, n);
+    }
+    if (sec) sec.appendChild(n);
+  }
+  document.querySelectorAll('.ddsvg').forEach(el => {  // 구조도도 누르면 원래 크기(가로 스크롤)
+    el.title = '누르면 크게 / 다시 누르면 맞춤';
+    el.onclick = () => { const s = el.querySelector('svg'), z = el.classList.toggle('zoom');
+      if (s) s.style.width = z && s.viewBox && s.viewBox.baseVal ? s.viewBox.baseVal.width + 'px' : ''; };
+  });
+  out.querySelectorAll(':scope > details').forEach(d => {
+    d.classList.add('fold');
+    const body = document.createElement('div'); body.className = 'body';
+    [...d.childNodes].filter(n => n.tagName !== 'SUMMARY').forEach(n => body.appendChild(n));
+    d.appendChild(body);
+  });
+  out.querySelectorAll('table').forEach(t => {
+    const w = document.createElement('div'); w.className = 'tbl'; t.parentNode.insertBefore(w, t); w.appendChild(t);
+  });
+}
+applyTheme();
+btn.onclick = () => { mode = NEXT[mode]; try { localStorage.setItem('gh-theme', mode); } catch (e) {} applyTheme(); drawMermaid(); };
+mq.addEventListener('change', () => { if (mode === 'auto') { applyTheme(); drawMermaid(); } });
+if (window.marked) {
   const r = new marked.Renderer(), code = r.code.bind(r);
-  r.code = (t, lang) => {{ const x = typeof t === 'object' ? t : {{text: t, lang}};
-    return x.lang === 'mermaid' ? '<div class="mermaid">' + x.text.replace(/</g,'&lt;') + '</div>' : code(t, lang); }};
-  document.getElementById('out').innerHTML = marked.parse(md, {{renderer: r}});
-  if (window.mermaid) {{ mermaid.initialize({{startOnLoad:false, theme:'default'}});
-    // 그림을 누르면 원래 크기로 (큰 그림이 화면 폭에 맞춰 줄어 글자가 작을 때)
-    Promise.resolve(mermaid.run()).then(() => document.querySelectorAll('.mermaid').forEach(el => {{
-      el.title = '누르면 크게 / 다시 누르면 맞춤'; el.onclick = () => el.classList.toggle('zoom'); }})); }}
-}}
+  r.code = (t, lang) => { const x = typeof t === 'object' ? t : {text: t, lang};
+    return x.lang === 'mermaid' ? '<div class="mermaid">' + x.text.replace(/</g,'&lt;') + '</div>' : code(t, lang); };
+  out.innerHTML = marked.parse(md, {renderer: r});
+  decorate();
+  drawMermaid();
+}
 </script></body></html>
 """
+
+
+def page(**vals):
+    """PAGE 의 __이름__ 자리를 한 번에 바꾼다(바꿔 넣은 글 안의 같은 모양은 건드리지 않는다)."""
+    return re.sub(r"__(TITLE|STAMP|RAW|SCRIPTS|MD)__", lambda m: vals[m.group(1).lower()], PAGE)
 
 
 def scripts(js_dir=None):
@@ -225,6 +327,32 @@ def dd_figs(src, exclude=None):
         return []
 
 
+DD_EXPORT = Path.home() / ".claude" / "skills" / "diagram-design" / "scripts" / "export_svg.py"
+
+
+def dd_svg(fig):
+    """diagram-design 구조도 HTML → 문서에 바로 넣을 SVG 글. diagram-design 의 export_svg.py 가
+    스타일을 SVG 안에 담고 정의 ID 에 파일 이름을 붙여 준다(여러 장이 한 문서에 있어도 안 섞인다).
+    결과는 옆에 <이름>.svg 로 두고 구조도가 바뀔 때만 다시 만든다. 도구가 없거나 실패하면 None."""
+    svg = Path(fig).with_suffix(".svg")
+    try:
+        if not svg.is_file() or svg.stat().st_mtime < Path(fig).stat().st_mtime:
+            if not DD_EXPORT.is_file():
+                return None
+            r = subprocess.run([sys.executable, str(DD_EXPORT), str(fig), str(svg)], capture_output=True, timeout=60,
+                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+            if r.returncode != 0 or not svg.is_file():
+                return None
+        text = svg.read_text(encoding="utf-8")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    i = text.find("<svg")
+    if i < 0:
+        return None
+    # 마크다운의 HTML 덩어리는 빈 줄에서 끝나므로 빈 줄을 없앤다
+    return "\n".join(ln for ln in text[i:].splitlines() if ln.strip())
+
+
 def embed_figs(md, figs, out_dir):
     """'그림' 절 맨 앞에 diagram-design 구조도를 끼워 넣는다. 그 절의 Mermaid 는 원본 코드로 접는다
     (닫힌 <details> 안에서는 mermaid 가 크기를 못 재므로 그리지 않고 글로 둔다). '그림' 절이 없으면 새로 만든다."""
@@ -233,8 +361,14 @@ def embed_figs(md, figs, out_dir):
     tags = []
     for p in figs:
         rel = urllib.parse.quote(os.path.relpath(p, out_dir).replace(os.sep, "/"))
-        tags.append(f'<figure class="dd"><iframe src="{rel}" loading="lazy" title="{html.escape(p.stem)}" onload="{FIT}"></iframe>'
-                    f'<figcaption>{html.escape(p.stem)} · <a href="{rel}" target="_blank">새 창으로 크게</a></figcaption></figure>')
+        svg = dd_svg(p)
+        # SVG 를 문서에 바로 넣으면 폭에 맞춰 Before · 바뀌는 것 · After 가 한눈에 보인다. 못 꺼내면 iframe 으로
+        body = f'<div class="ddsvg">{svg}</div>' if svg else \
+            f'<iframe src="{rel}" loading="lazy" title="{html.escape(p.stem)}" onload="{FIT}"></iframe>'
+        cap = re.search(r"<title[^>]*>(.*?)</title>", svg or "", re.S)
+        cap = cap.group(1).strip() if cap else html.escape(p.stem)  # SVG 제목(이미 이스케이프된 글) → 없으면 파일 이름
+        tags.append(f'<figure class="dd">{body}'
+                    f'<figcaption>{cap} · <a href="{rel}" target="_blank">새 창으로 크게</a></figcaption></figure>')
     block = "\n\n".join(tags)
     lines = md.splitlines()
     heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
@@ -254,8 +388,9 @@ def render(md, out, title, js_dir=None, full=False, src=None):
     md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent)
     md = md if full else readable(md)
     out = Path(out)
-    out.write_text(PAGE.format(title=html.escape(title), raw=html.escape(md),
-                               md_json=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir)),
+    stamp = f"{Path(src).name if src else out.stem} · {time.strftime('%Y-%m-%d %H:%M')}"
+    out.write_text(page(title=html.escape(title), stamp=html.escape(stamp), raw=html.escape(md),
+                        md=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir)),
                    encoding="utf-8")
     return out
 
