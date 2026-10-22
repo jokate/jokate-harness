@@ -1035,9 +1035,14 @@ def build_background(root, eng, scope, a, out_dir, roots):
     (probe_dir / ".clangd").write_text("Index:\n  StandardLibrary: No\nCompileFlags:\n  Remove: ['*']\n", encoding="utf-8")
     probe = probe_dir / "cindex_probe.cpp"
     probe.write_text("// cindex.py 배경 색인 방아쇠\n", encoding="utf-8")
-    print(f"실행: {clangd} --background-index --compile-commands-dir={bg}" + (f" -j={a.jobs}" if a.jobs else ""))
+    # 기본은 조용히: 코어 절반 · 낮은 프로세스 우선순위 — 세션 시작 훅이 띄운 증분 색인이 에디터 · 빌드와 다투지 않게.
+    # 사람이 기다리는 실행(index_build.bat)은 --fast 로 코어 전부 · 보통 우선순위.
+    jobs = a.jobs or (0 if a.fast else max(1, (os.cpu_count() or 2) // 2))
+    print(f"실행: {clangd} --background-index --compile-commands-dir={bg}" + (f" -j={jobs}" if jobs else "")
+          + ("" if a.fast else " (조용히: 코어 절반 · 낮은 우선순위 — 빠르게는 --fast)"))
     try:
-        res = sp.run_background_index(clangd, bg, probe, a.jobs, log_path=bg / "clangd.log", timeout=a.timeout or None)
+        res = sp.run_background_index(clangd, bg, probe, jobs, log_path=bg / "clangd.log", timeout=a.timeout or None,
+                                      low_priority=not a.fast)
     except (TimeoutError, RuntimeError, OSError) as e:
         print(f"배경 색인 실패: {e} ({bg / 'clangd.log'})")
         harness_emit("index.clangd", f"배경 색인 실패: {e}", ok=False, project=root)
@@ -1061,8 +1066,8 @@ def build_background(root, eng, scope, a, out_dir, roots):
             store.own[k].unlink(missing_ok=True)
         print(f"오류 난 묶음 {len(bad_batches)}개를 풀어 다시 색인 (TU {len(entries)})")
         try:
-            res2 = sp.run_background_index(clangd, bg, probe, a.jobs, log_path=bg / "clangd-retry.log",
-                                           timeout=a.timeout or None)
+            res2 = sp.run_background_index(clangd, bg, probe, jobs, log_path=bg / "clangd-retry.log",
+                                           timeout=a.timeout or None, low_priority=not a.fast)
         except (TimeoutError, RuntimeError, OSError) as e:
             print(f"묶음을 푼 재색인 실패: {e} ({bg / 'clangd-retry.log'})")
             res2 = {"elapsed": 0, "indexed": [], "enqueued": None, "crashed": True, "failed": [str(e)]}
@@ -1094,7 +1099,8 @@ def build_background(root, eng, scope, a, out_dir, roots):
             "elapsed_index": f"{res['elapsed']:.2f}", "rebuilt": len(rebuilt), "reused": len(entries) - len(rebuilt),
             "invalidated": len(why), "invalidated_reasons": reasons, "changed_files": len(changed), "shards": len(shards),
             "unity_split": len(split) if a.unity else None,
-            "errors": errors, "out_bytes": sum(Path(s).stat().st_size for s in shards), "cold": cold}
+            "errors": errors, "out_bytes": sum(Path(s).stat().st_size for s in shards), "cold": cold,
+            "removed_shards": removed, "newest_shard": max((Path(s).stat().st_mtime for s in shards), default=0.0)}
     return shards, info
 
 
@@ -1108,14 +1114,79 @@ def cmd_build(root, kind, a):
     roots = [("project", root), ("engine", eng)]
     out_dir = db.parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    if a.yaml:
-        src, info = Path(a.yaml), {"source": "file", "mode": "적재만"}
-    elif a.mode == "bg":
-        src, info = build_background(root, eng, scope, a, out_dir, roots)
-    else:
-        src, info = build_indexer(root, eng, scope, a, out_dir, roots)
-    if src is None:
-        return 1
+    lock = None
+    if a.mode == "bg" and not a.yaml:
+        lock = take_lock(out_dir / "bg.lock")
+        if lock is None:
+            return 0
+    try:
+        if a.yaml:
+            src, info = Path(a.yaml), {"source": "file", "mode": "적재만"}
+        elif a.mode == "bg":
+            src, info = build_background(root, eng, scope, a, out_dir, roots)
+        else:
+            src, info = build_indexer(root, eng, scope, a, out_dir, roots)
+        if src is None:
+            return 1
+        return finish_build(root, kind, a, scope, db, src, info, roots)
+    finally:
+        if lock is not None:
+            lock.unlink(missing_ok=True)
+
+
+def pid_alive(pid):
+    """그 프로세스가 살아 있나. Windows 에서 os.kill(pid, 0) 은 프로세스를 끝내 버리므로 쓰지 않는다."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        ok = k32.GetExitCodeProcess(h, ctypes.byref(code))
+        k32.CloseHandle(h)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+LOCK_STALE_S = 12 * 3600
+
+
+def take_lock(path: Path):
+    """배경 색인은 프로젝트마다 하나만. 세션을 열 때마다 훅이 띄우면 큰 프로젝트에서 색인이 겹쳐 PC 가 무거워졌다
+    (2026-10-22 사용자: "다른 곳에서 쓰는데 느리다"). 살아 있는 색인이 있으면 None — 그 경우 이번 실행은 그냥 끝낸다."""
+    try:
+        cur = json.loads(path.read_text(encoding="utf-8"))
+        if pid_alive(int(cur.get("pid", 0))) and time.time() - float(cur.get("started", 0)) < LOCK_STALE_S:
+            print(f"이미 배경 색인 중이다 (pid {cur['pid']}, {time.strftime('%H:%M', time.localtime(cur['started']))} 시작) — 이번 실행은 건너뛴다")
+            harness_emit("index.clangd", f"이미 색인 중 (pid {cur['pid']}) — 건너뜀", ok=True, project=path.parent)
+            return None
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    path.write_text(json.dumps({"pid": os.getpid(), "started": time.time()}), encoding="utf-8")
+    return path
+
+
+def unchanged_since(db: Path, info: dict) -> bool:
+    """배경 색인이 샤드를 하나도 바꾸지 않았나(새로 쓴 샤드도 지운 샤드도 없고, 모든 샤드가 DB 보다 오래됨).
+    그러면 DB 를 다시 쓸 것이 없다 — MNYS 에서 바뀐 것이 없어도 전체 다시 쓰기에 약 55초가 들었다(clangd 13초)."""
+    return (db.exists() and info.get("source") == "clangd-background" and not info.get("cold")
+            and info.get("removed_shards") == 0 and float(info.get("newest_shard") or 0) <= db.stat().st_mtime)
+
+
+def finish_build(root, kind, a, scope, db, src, info, roots):
+    if a.mode == "bg" and not a.force and unchanged_since(db, info):
+        # DB 시각만 올린다 — 세션 시작 훅은 '소스가 DB 보다 새로우면' 다시 띄우므로, 안 올리면 매번 다시 돈다
+        os.utime(db, None)
+        print(f"바뀐 샤드가 없다 — 인덱스를 다시 쓰지 않는다 ({db}, 다시 쓰려면 --force)")
+        harness_emit("index.clangd", f"{scope} · 바뀐 것 없음 — 다시 쓰지 않음", ok=True, project=root)
+        return 0
     errors = info.get("errors") if isinstance(info.get("errors"), dict) else {}
     if errors.get("generated_h"):
         print("  [경고] .generated.h 누락·낡음 — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
@@ -2561,7 +2632,9 @@ def main():
     ap.add_argument("--scope", default="project", choices=["project", "engine", "all"])
     ap.add_argument("--cdb", default=None, help="compile_commands.json 파일 또는 폴더")
     ap.add_argument("--filter", default=None, help="clangd-indexer --filter (번역 단위 경로 정규식)")
-    ap.add_argument("--jobs", type=int, default=0)
+    ap.add_argument("--jobs", type=int, default=0, help="build: clangd 병렬 수 (0 = 기본: --mode bg 는 코어 절반, --fast 면 코어 전부)")
+    ap.add_argument("--fast", action="store_true",
+                    help="build --mode bg: 코어 전부 · 보통 우선순위 (사람이 기다릴 때. 기본은 조용히 — 코어 절반 · 낮은 우선순위)")
     ap.add_argument("--indexer", default=None)
     ap.add_argument("--extra-arg", action="append", help="clangd-indexer --extra-arg (예: VS Code 생성기 cdb 에 /std:c++20)")
     ap.add_argument("--yaml", default=None, help="build: 이미 만든 clangd-indexer 출력(YAML·RIFF)을 적재만")
@@ -2583,7 +2656,7 @@ def main():
     ap.add_argument("--module", default=None, help="refs: 모듈로 좁힌다 (Build.cs 이름)")
     ap.add_argument("--generated", action="store_true",
                     help="refs · callers: 생성 코드(.gen.cpp · .generated.h · Intermediate)의 참조도 보인다 (기본은 뺀다)")
-    ap.add_argument("--force", action="store_true", help="optimize: 이미 스키마 2 여도 다시 쓴다")
+    ap.add_argument("--force", action="store_true", help="optimize: 이미 스키마 2 여도 다시 쓴다 · build --mode bg: 바뀐 샤드가 없어도 DB 를 다시 쓴다")
     ap.add_argument("--depth", type=int, default=0, help="bases·derived·overrides: 따라갈 단계 (0 = 끝까지)")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--target", default=None)

@@ -124,11 +124,12 @@ def main():
     ap.add_argument("--no-clangd", action="store_true", help="정규식 인덱스(gq·ue_q)만 만든다")
     ap.add_argument("--cdb", action="store_true", help="compile_commands.json 이 있어도 다시 만든다 (모듈·파일을 더했을 때)")
     ap.add_argument("--engine", action="store_true", help="엔진 clangd 인덱스가 있어도 다시 만든다 (오래 걸린다)")
-    ap.add_argument("--jobs", type=int, default=0, help="clangd 색인 병렬 수 (0 = clangd 기본, 보통 코어 전부)")
+    ap.add_argument("--jobs", type=int, default=0, help="clangd 색인 병렬 수 (0 = 기본: 조용히 코어 절반, --fast 면 코어 전부)")
+    ap.add_argument("--fast", action="store_true", help="clangd 배경 색인을 코어 전부 · 보통 우선순위로 (index_build.bat 처럼 사람이 기다릴 때)")
     ap.add_argument("--project-only", action="store_true",
                     help="엔진 단계(2 엔진 좌표 · 5 엔진 clangd)를 건너뛴다 — 프로젝트 인덱스만. setup 이 백그라운드로 부른다")
     a = ap.parse_args()
-    jobs = ["--jobs", str(a.jobs)] if a.jobs > 0 else []
+    jobs = (["--jobs", str(a.jobs)] if a.jobs > 0 else []) + (["--fast"] if a.fast else [])
 
     root, kind, note = resolve_project(a.root)
     if note:

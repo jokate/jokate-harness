@@ -18,7 +18,7 @@ if not defined PY (
 )
 
 set PYTHONIOENCODING=utf-8
-%PY% "%~dp0skills\game-onboard\scripts\index_all.py" %*
+%PY% "%~dp0skills\game-onboard\scripts\index_all.py" --fast %*
 set RC=%ERRORLEVEL%
 echo.
 echo 아무 키나 누르면 닫힌다.
