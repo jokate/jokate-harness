@@ -4,7 +4,9 @@
 //  1) 하네스 훅·스크립트가 남기는 이벤트 로그 (~/.claude/cache/game-harness/events.jsonl,
 //     형식은 skills/game-bootstrap/harness/harness_events.py) — 읽기만 한다.
 //  2) 이 세션의 도구 호출 — 인덱스(gq · clangd · 위키 · ue_q)로 찾았나, 직접(grep · 파일 찾기 · 파일 읽기) 찾았나를 센다.
-//     세션 요약은 $.store 에 남겨 이력 페이지를 만든다. 도구 호출을 막거나 바꾸지 않는다.
+//     세션 요약은 $.store 에 남겨 이력 페이지를 만든다. 도구 호출을 막거나 결과를 바꾸지 않는다 — 소스에서 C++ 심볼을
+//     grep 하고 그 심볼이 clangd 인덱스에 있으면 결과 뒤에 cindex 명령 한 줄을 붙일 뿐이다(세션당 3번).
+//     로그 · 문서 · 설정 · 명령 출력을 거르는 grep 은 코드 탐색이 아니라 세지 않는다.
 //
 //   프롬프트 위 띠  코드 탐색 │ gq 3 · clangd 0 · 위키 2 · ue_q 0 │ 직접 grep 12 · 찾기 4 · 읽기 30   (게임 프로젝트)
 //   상태줄          harness ● 기능 N개 · 마지막 <기능>
@@ -109,6 +111,57 @@ const KIND_OF_SCRIPT: Record<string, Kind> = { cindex: 'clangd', gq: 'gq', wq: '
 const GREP_CMD = /(^|[\s|;&(])(rg|grep|egrep|findstr|Select-String|sls)(\s|$)/
 const FIND_CMD = /(^|[\s|;&(])(find|fd|Get-ChildItem|gci|dir|ls)(\s|$)/
 
+// grep 이 코드를 찾는가. 로그 · 문서 · 설정 · 앞 명령의 출력을 거르는 grep 은 코드 탐색이 아니라 세지 않는다 —
+// MNYS 세션 52개(10-20~22)의 grep 대부분이 Saved/Logs 의 로그 줄 · Docs 의 기획 용어 · git 출력이었고, 그것까지 세서
+// "clangd 인덱스가 있는데 grep 만 씀" 이 늘 떴다.
+const CODE_TARGET = /(^|[\s"'=:/\\])(Source|Plugins)([/\\\s"']|$)|\.(h|hpp|cpp|cc|cxx|inl|cs)\b|--type[= ]?(cpp|c|cs)\b|(^|\s)-t\s*(cpp|c|cs)\b/i
+const TEXT_TARGET = /Saved[/\\]Logs|\.(log|md|txt|json|ini|csv|ya?ml)\b|(^|[\s"'=:/\\])(Docs|Config|Saved)([/\\\s"']|$)/i
+const PIPED_GREP = /\|\s*(rg|grep|egrep|findstr|Select-String|sls)\b[^|;&]*/g
+const PATHLIKE = /[A-Za-z]:[/\\]\S*|\S*\/\S*/g
+// C++ 심볼처럼 보이는 이름: A::B, UE 접두 타입(FYSInput · UThing · AActor · EKind · IFace · TArray), 두 마디 이상 CamelCase
+const SYMBOL = /\b[A-Za-z_]\w*::[A-Za-z_]\w*|\b[AUFEIT][A-Z]\w*[a-z]\w*|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+\b/g
+const hasSymbol = (text: string) => new RegExp(SYMBOL.source).test(text)
+
+export function grepTarget(tool: string, args: Record<string, unknown>): 'code' | 'text' {
+  const s = (k: string) => (typeof args[k] === 'string' ? (args[k] as string) : '')
+  if (tool === 'Grep') {
+    const where = `${s('path')} ${s('glob')}`
+    if (CODE_TARGET.test(where) || /^(cpp|c|cs|csharp)$/i.test(s('type'))) return 'code'
+    if (TEXT_TARGET.test(where) || /^(md|markdown|json|log|txt|ini|yaml)$/i.test(s('type'))) return 'text'
+    return hasSymbol(s('pattern')) ? 'code' : 'text'
+  }
+  const cmd = s('command')
+  if (CODE_TARGET.test(cmd)) return 'code'
+  if (TEXT_TARGET.test(cmd)) return 'text'
+  const own = cmd.replace(PIPED_GREP, ' ')
+  if (!GREP_CMD.test(own)) return 'text' // 앞 명령의 출력만 거른다 (git log | grep …)
+  return hasSymbol(own.replace(PATHLIKE, ' ')) ? 'code' : 'text'
+}
+
+// grep 이 찾던 C++ 심볼 후보 (한정 이름 → UE 접두 타입 → 그 밖, 3개까지). 경로 · 뒤에 붙은 grep 은 뺀다.
+export function symbolCandidates(tool: string, args: Record<string, unknown>): string[] {
+  const s = (k: string) => (typeof args[k] === 'string' ? (args[k] as string) : '')
+  const text = tool === 'Grep' ? s('pattern') : s('command').replace(PIPED_GREP, ' ').replace(PATHLIKE, ' ')
+  const names = [...new Set([...text.matchAll(SYMBOL)].map(m => m[0]))]
+  const rank = (n: string) => (n.includes('::') ? 0 : /^[AUFEIT][A-Z]/.test(n) ? 1 : 2)
+  return names.sort((a, b) => rank(a) - rank(b)).slice(0, 3)
+}
+
+// `cindex.py sym <이름>` 출력의 첫 줄 — 정확히 맞는 심볼이 없으면 undefined
+export function symbolLine(out: string): string | undefined {
+  const first = out.split(/\r?\n/).find(l => l.trim() !== '')
+  if (first === undefined || /^(#|없음|clangd 인덱스 없음)/.test(first.trim())) return undefined
+  return first.trim().replace(/\s+/g, ' ')
+}
+
+export function nudgeText(name: string, found: string, script: string): string {
+  const cmd = `python ${script}`
+  return `[game-harness] grep 한 \`${name}\` 은 clangd 인덱스에 있다 — ${found}. ` +
+    `쓰는 곳 \`${cmd} refs ${name}\` · 부르는 곳 \`callers\` · 파생 \`derived\` · 바꾸면 영향 \`impact\` ` +
+    '(컴파일 기준이라 주석 · 문자열 · 같은 이름이 안 섞이고 생성 코드는 빠진다. 같은 이름이 여럿이면 A::B 로 좁힌다). ' +
+    '코드 심볼은 다음부터 이쪽을 먼저 쓴다 — 문자열 · 주석 · 로그를 찾을 때만 grep.'
+}
+
 // 도구 호출 하나 → 코드 탐색 종류. 탐색이 아니면 undefined.
 export function classify(tool: string, args: Record<string, unknown>): { kind: Kind; what: string } | undefined {
   const s = (k: string) => (typeof args[k] === 'string' ? (args[k] as string) : '')
@@ -116,11 +169,11 @@ export function classify(tool: string, args: Record<string, unknown>): { kind: K
     const cmd = s('command')
     const m = INDEX_SCRIPT.exec(cmd)
     if (m) return { kind: KIND_OF_SCRIPT[m[1]], what: [m[2], m[3]].filter(Boolean).join(' ') }
-    if (GREP_CMD.test(cmd)) return { kind: 'grep', what: cmd.slice(0, 80) }
+    if (GREP_CMD.test(cmd)) return grepTarget(tool, args) === 'code' ? { kind: 'grep', what: cmd.slice(0, 80) } : undefined
     if (FIND_CMD.test(cmd)) return { kind: 'glob', what: cmd.slice(0, 80) }
     return undefined
   }
-  if (tool === 'Grep') return { kind: 'grep', what: s('pattern') }
+  if (tool === 'Grep') return grepTarget(tool, args) === 'code' ? { kind: 'grep', what: s('pattern') } : undefined
   if (tool === 'Glob') return { kind: 'glob', what: s('pattern') }
   if (tool === 'Read') {
     const p = s('file_path')
@@ -312,6 +365,45 @@ async function record($: EngineInterface, kind: Kind, what: string): Promise<voi
   }))
 }
 
+// 소스에서 C++ 심볼을 grep 하면: 그 이름이 clangd 인덱스에 정확히 있는지 `cindex.py sym` 으로 보고, 있으면 결과 뒤에
+// cindex 명령 한 줄을 붙인다. 세션 시작 안내만으로는 모델이 grep 으로 갔다(10-20 뒤 MNYS 세션에서 clangd 0회).
+// 세션당 알림 3번 · 조회 8번까지, 심볼마다 한 번. 모듈 변수라 mod 가 다시 읽히면 처음부터 센다.
+const MAX_NUDGES = 3
+const MAX_LOOKUPS = 8
+const nudged = new Map<string, { names: Set<string>; lookups: number }>()
+
+async function lookupSymbol($: EngineInterface, script: string, root: string, name: string): Promise<string | undefined> {
+  for (const py of ['python', 'python3']) {
+    const ran = await $.process.run([py, script, 'sym', name, '--root', root, '--limit', '1'], { timeoutMs: 8000 })
+      .catch(() => undefined)
+    if (ran === undefined || ran.exitCode !== 0) continue
+    return symbolLine(ran.stdout)
+  }
+  return undefined
+}
+
+async function nudge($: EngineInterface, tool: string, args: Record<string, unknown>): Promise<string | undefined> {
+  if (!(await read($, project)).hasClangd) return undefined
+  const names = symbolCandidates(tool, args)
+  if (names.length === 0) return undefined
+  const id = await $.session.id()
+  const st = nudged.get(id) ?? { names: new Set<string>(), lookups: 0 }
+  nudged.set(id, st)
+  const root = (await $.session.root()).replace(/[\\/]+$/, '')
+  const script = `${await home($)}/.claude/skills/game-onboard/scripts/cindex.py`.replace(/\\/g, '/')
+  for (const name of names) {
+    if (st.names.size >= MAX_NUDGES || st.lookups >= MAX_LOOKUPS) return undefined
+    if (st.names.has(name)) continue
+    st.lookups += 1
+    const found = await lookupSymbol($, script, root, name)
+    // 엔진 심볼([E])은 프로젝트 인덱스가 엔진 .cpp 를 안 봐서 refs 가 반쪽이다 — 엔진 안은 ue_q 몫이라 알리지 않는다
+    if (found === undefined || found.includes('[E] ')) continue
+    st.names.add(name)
+    return nudgeText(name, found, script)
+  }
+  return undefined
+}
+
 // 지난 세션: 대화 기록에서 센 요약(game-onboard/scripts/search_history.py). mod 가 켜지기 전 세션까지 들어온다.
 // 같은 세션은 mod 가 실시간으로 센 쪽($.store)을 쓴다. 파이썬이나 스크립트가 없으면 $.store 만.
 async function pastSessions($: EngineInterface): Promise<SessionSummary[]> {
@@ -391,17 +483,20 @@ export const register: Register = on => {
   })
 
   // 도구 호출마다: 코드 탐색이면 센다. 하네스 추적 훅(PostToolUse)이 로그를 쓴 직후를 놓치지 않으려고 한 번 더 읽는다.
+  // 소스 심볼 grep 이면 결과 뒤에 cindex 안내 한 줄(context)을 붙인다 — 결과 자체는 바꾸지 않는다.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     const tool = String(e.tool)
-    if (ran.deny === undefined) {
-      const hit = classify(tool, e as unknown as Record<string, unknown>)
-      if (hit !== undefined) await record($, hit.kind, hit.what).catch(() => undefined)
-    }
     if (tool === 'Skill' || tool === 'Bash' || tool === 'PowerShell' || tool.startsWith('mcp__')) {
       $.clock.after(700, () => pollSafely($))
     }
-    return ran
+    if (ran.deny !== undefined) return ran
+    const args = e as unknown as Record<string, unknown>
+    const hit = classify(tool, args)
+    if (hit !== undefined) await record($, hit.kind, hit.what).catch(() => undefined)
+    if (hit?.kind !== 'grep') return ran
+    const hint = await nudge($, tool, args).catch(() => undefined)
+    return hint === undefined ? ran : { ...ran, context: [...(ran.context ?? []), hint] }
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'harness' }, async $ => {

@@ -164,7 +164,7 @@ r Source/…/X.cpp:3:48  in Tick  │ <그 줄 원문>
 | 목적 | 명령 |
 |---|---|
 | 심볼 좌표 (선언·정의·시그니처) | `cindex.py sym <이름 \| A::B>` |
-| 참조 위치 + **그 줄 원문** | `cindex.py refs <이름> [--kind decl\|def\|ref]` |
+| 참조 위치 + **그 줄 원문** | `cindex.py refs <이름> [--kind decl\|def\|ref]` — 생성 코드(.gen.cpp · .generated.h · Intermediate)는 기본으로 빼고 몇 개 뺐는지 한 줄. 보려면 `--generated` (callers 도 같다) |
 | 부르는 쪽 (참조의 Container) + 첫 호출 줄 | `cindex.py callers <이름>` |
 | 이 함수가 부르는 함수 | `cindex.py callees <이름>` |
 | 부모 / 자식 / 재정의 — 끝까지 따라간 트리, 단계별 개수 (`--depth N` 으로 제한) | `cindex.py bases` · `derived` · `overrides <이름>` |

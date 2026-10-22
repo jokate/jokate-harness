@@ -614,6 +614,16 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - 확인: Sonnet 에게 규칙만 주고 시나리오 6개(보스 페이즈 · 히트 판정 · DataTable · 초기화 순서 · 상속 → 컴포넌트 · 서브시스템 참조)를 고르게 함 → State machine · Flowchart · ER · Sequence · UML class · Architecture delta, 6/6. 지적된 두 가지(파일 표기가 sequence 만 예시, "컴포넌트로" 가 두 행에 걸침)를 고쳤다.
 - 모니터 mod: 프롬프트 위 띠가 내 줄만 돌려주어 아래 플러그인의 띠를 가렸다 → next(e) 로 받은 띠를 내 한 줄 밑에 둔다. 시험에 "다른 플러그인 띠가 함께 보이는지".
 
+## 2026-10-22 — clangd 가 있는데 grep: 경고를 코드 grep 만으로 · grep 순간에 cindex 안내 · cindex 결과 정리
+
+- 사용자: "clangd 를 제대로 참고 안 하는 것 같다 — 쓸 때 clangd 가 있는데 grep 을 쓴다, 이게(경고) 계속 뜬다".
+- 실측(MNYS 대화 기록 10-20~22, 세션 52): grep 202회 중 대부분이 코드가 아니었다 — `Saved/Logs` 의 로그 줄(LogYSMeasure · LiveCoding), `Docs` 의 기획 용어, `git log | grep`. 그것까지 세서 노란 경고가 늘 떴다. 소스 심볼 grep(FYSInputHistory · FYSPlaybackCondition_ActorInDistance · DispatchNext …)은 일부였다.
+- cindex 를 써 봐도 grep 으로 돌아갈 이유가 있었다: `refs FYSInputHistory` 의 경로 순 표본 8개가 전부 `Intermediate/…/YSStruct.gen.cpp`(참조 22 중 11), `callers BeginPlay` 는 같은 이름 40개 중 엔진 `APawn::BeginPlay` 를 골라 "호출자 0".
+- `cindex.py`: refs · callers 가 생성 코드(`Intermediate/` · `.gen.cpp` · `.generated.h`)를 기본으로 빼고 "생성 코드 N개는 뺐다 — 보려면 --generated" 한 줄(`--path` 를 주면 따른다). 같은 이름이면 종류 다음으로 프로젝트 심볼이 엔진 것보다 앞(`rank`), 후보 줄에 프로젝트 후보 이름을 4개까지. MNYS: `refs FYSInputHistory` → 참조 11(전부 Source) · 0.2초, `callers FYSPlaybackCondition_ActorInDistance` → 호출자 1(생성 코드 10 뺌), `callers BeginPlay` → `AYSMonster::BeginPlay` + 프로젝트 후보 14. 시험 test_cindex_query 12(새 3).
+- `game-harness-monitor`: grep 을 코드 검색일 때만 센다(`grepTarget` — Source · Plugins · .h/.cpp/.cs 대상이면 코드, 로그 · 문서 · 설정이면 아님, 앞 명령 출력만 거르면 아님, 대상이 없으면 패턴이 C++ 심볼처럼 보일 때만). 같은 기록에서 grep 202 → 99, 경고 세션 7 → 5. 소스 심볼 grep 이면 그 이름을 `cindex.py sym` 으로 확인하고 프로젝트 심볼이면 결과 뒤에 context 한 줄(`cindex.py refs <심볼>` 절대 경로 · callers · derived · impact) — 심볼마다 한 번, 세션당 3번 · 조회 8번까지, 엔진 심볼([E])은 ue_q 몫이라 안 붙인다. 시험 13(새 3), `claude plugin validate` 통과. `search_history.py` 도 같은 규칙(캐시는 규칙 판 `RULES=2` 로 다시 센다).
+- `game_context.py`: 코드 찾기 줄을 "클래스 · 함수 · 구조체 이름을 grep 하기 전에: 쓰는 곳 refs …" 로, cindex 경로를 절대 경로로(PowerShell 은 python 인자의 `~` 를 풀지 않는다). 시험 test_game_context 4.
+- 못 한 것: 대화형 세션에서 안내 줄이 실제로 모델을 cindex 로 돌리는지(다음 MNYS 세션들의 띠 · `/harness-history` 로 본다), `tsc` 타입 검사(이 PC 에 TypeScript 없음).
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

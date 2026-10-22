@@ -42,7 +42,10 @@ class SearchRouting(unittest.TestCase):
         (wiki / "index.md").write_text("# w", encoding="utf-8")
         out = self.lines()
         self.assertIn("cindex.py callers <심볼>", out)
+        self.assertIn("cindex.py refs <심볼>", out)
         self.assertIn("grep 으로 추측하지 않는다", out)
+        self.assertIn(f"python {self.home.as_posix()}/.claude/skills/game-onboard/scripts/cindex.py", out)
+        self.assertNotIn("~/", out)
         self.assertIn(f"{wiki.as_posix()}/index.md", out)
 
     def test_unity_uses_library(self):

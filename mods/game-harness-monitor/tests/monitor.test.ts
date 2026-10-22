@@ -1,6 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { belongs, classify, clangdIdle, emptyCounts, historyHtml, label, mergeSessions, parse, statusText, upsertSession } from '../hooks/register'
+import {
+  belongs, classify, clangdIdle, emptyCounts, historyHtml, label, mergeSessions, nudgeText, parse, statusText, symbolCandidates,
+  symbolLine, upsertSession,
+} from '../hooks/register'
 
 const LOG = '/home/u/.claude/cache/game-harness/events.jsonl'
 // 엔진이 경로를 그 OS 의 모양으로 바꿔 넘긴다(Windows: C:\home\u\...) — 끝 부분으로 맞춘다
@@ -167,7 +170,10 @@ test('코드 탐색을 세어 프롬프트 위 띠로 크게 보이고, clangd �
     expect(await ui.find({ type: 'Text', text: /코드 탐색/ })).toBeUndefined()
     await ui.unmount()
   }
-  for (let i = 0; i < 5; i += 1) await $.tool.call({ tool: 'Grep', pattern: 'Hit', tool_use_id: `g${i}` } as never)
+  for (let i = 0; i < 5; i += 1) await $.tool.call({ tool: 'Grep', pattern: 'Hit', path: '/proj/Source', tool_use_id: `g${i}` } as never)
+  // 로그 · 문서 grep 은 코드 탐색이 아니다 — 세지 않는다
+  await $.tool.call({ tool: 'Bash', command: 'grep -c "LogYSMeasure" Saved/Logs/MNYS.log', tool_use_id: 'l1' } as never)
+  await $.tool.call({ tool: 'Grep', pattern: '선입력', path: '/proj/Docs', tool_use_id: 'd1' } as never)
   await $.tool.call({ tool: 'Read', file_path: '/proj/Source/A.cpp', tool_use_id: 'r1' } as never)
 
   const props = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 100,
@@ -190,6 +196,82 @@ test('코드 탐색을 세어 프롬프트 위 띠로 크게 보이고, clangd �
     expect(await ui.find({ type: 'Text', text: /grep 만 씀/ })).toBeUndefined()
     await ui.unmount()
   }
+})
+
+test('grep 이 코드를 찾는지 가른다 — 로그 · 문서 · 설정 · 명령 출력 거르기는 코드 탐색이 아니다', () => {
+  const bash = (command: string) => classify('Bash', { command })?.kind
+  expect(bash('grep -rn "FYSInputHistory" -A10 Source/MNYS/Public | grep -m6 "Tag\\|InputTime"')).toBe('grep')
+  expect(bash('grep -rln "LogYSMeasure" Source | head')).toBe('grep')
+  expect(bash('grep -rnE "ActorInDistance|FYSPlaybackCondition_ActorInDistance" --include=*.h .')).toBe('grep')
+  expect(bash('grep -c "LogYSMeasure" Saved/Logs/MNYS.log')).toBeUndefined()
+  expect(bash('grep -rniE "근거리.*원거리|선입력" Docs | head -15')).toBeUndefined()
+  expect(bash('git log --oneline -15 | grep -i fix')).toBeUndefined()
+  expect(bash('tasklist | grep -i "Unre"')).toBeUndefined()
+  expect(bash('grep -rn DispatchNext')).toBe('grep')  // 경로가 없어도 심볼이면 코드
+  expect(classify('Grep', { pattern: 'GetReferencers|FAssetIdentifier\\(FGameplayTag', path: 'C:\\P\\MNYS' })?.kind).toBe('grep')
+  expect(classify('Grep', { pattern: '우클릭|통찰', path: 'C:\\P\\MNYS\\Docs' })).toBeUndefined()
+  expect(classify('Grep', { pattern: 'speed', glob: '*.cpp' })?.kind).toBe('grep')
+  expect(classify('Grep', { pattern: 'speed', type: 'md' })).toBeUndefined()
+})
+
+test('grep 이 찾던 심볼 후보 · cindex sym 첫 줄 · 안내 문구', () => {
+  expect(symbolCandidates('Grep', { pattern: 'DispatchNext\\(|EYSPlaybackEvent::\\w+' })).toEqual(['EYSPlaybackEvent', 'DispatchNext'])
+  expect(symbolCandidates('Bash', { command: 'cd Source/MNYS && grep -rn "FYSInputHistory" -A10 Public/General | grep "Tag"' }))
+    .toEqual(['FYSInputHistory'])
+  expect(symbolCandidates('Bash', { command: 'rg "UAbilityTask_PlayMontageAndWait::OnDestroy" C:/Eng/Source' }))
+    .toEqual(['UAbilityTask_PlayMontageAndWait::OnDestroy'])
+  expect(symbolCandidates('Grep', { pattern: 'UPROPERTY|float|Range' })).toEqual([])
+  expect(symbolLine('Struct          FYSInputHistory  Source/MNYS/Public/General/YSStruct.h:184\n'))
+    .toBe('Struct FYSInputHistory Source/MNYS/Public/General/YSStruct.h:184')
+  expect(symbolLine("# 정확히 일치하는 심볼 없음: 'X' — 이름이 비슷한 것\n  Class Xy  a.h:1")).toBeUndefined()
+  expect(symbolLine("없음: 'X'")).toBeUndefined()
+  const text = nudgeText('FYSInputHistory', 'Struct FYSInputHistory a.h:1', '/home/u/.claude/skills/game-onboard/scripts/cindex.py')
+  expect(text).toContain('python /home/u/.claude/skills/game-onboard/scripts/cindex.py refs FYSInputHistory')
+  expect(text).toContain('callers')
+})
+
+test('소스에서 심볼을 grep 하면 clangd 에 있을 때만 결과 뒤에 cindex 안내를 붙인다 — 심볼마다 한 번, 세션당 3번', async ($, on) => {
+  mock.clock(on, { now: 0 })
+  mock.env(on, { HOME: '/home/u' })
+  const stored: Record<string, unknown> = {}
+  const asked: string[] = []
+  on('fs.stat', ($, e) => (at(e.path, '/proj/Saved/ClaudeIndex/clangd.sqlite')
+    ? { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }
+    : { deny: 'no such file' }) as never)
+  on('fs.list', () => ({ value: [{ name: 'Game.uproject', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] }) as never)
+  on('store.get', ($, e) => ({ value: stored[e.key] }) as never)
+  on('store.set', ($, e) => { stored[e.key] = e.value; return { value: undefined } as never })
+  on('session.id', () => ({ value: 'S1' }))
+  on('session.root', () => ({ value: '/proj' }))
+  on('session.usage', () => ({ value: { startedAt: 0 } }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('ui.status', () => ({ value: undefined }) as never)
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('process.run', ($, e) => {
+    const argv = (e as unknown as { argv: string[] }).argv
+    const name = argv[argv.indexOf('sym') + 1]
+    asked.push(name)
+    const out = name === 'FMissing' ? "# 정확히 일치하는 심볼 없음: 'FMissing'\n"
+      : name === 'UEngineOnly' ? `Class           ${name}  [E] Source/Runtime/E.h:3\n`
+        : `Struct          ${name}  Source/G/${name}.h:3\n`
+    return { value: { exitCode: 0, stdout: out, stderr: '', isStdoutTruncated: false } } as never
+  })
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  await $.session.start({ cwd: '/proj', surface: null, isInteractive: false })
+
+  const grep = async (pattern: string, id: string) =>
+    (await $.tool.call({ tool: 'Grep', pattern, path: '/proj/Source', tool_use_id: id } as never)) as { context?: string[] }
+  expect((await grep('FThing', 'a')).context?.join('')).toContain('cindex.py refs FThing')
+  expect((await grep('FThing', 'b')).context).toBeUndefined()  // 같은 심볼은 한 번
+  expect((await grep('FMissing', 'c')).context).toBeUndefined()  // clangd 에 없으면 붙이지 않는다
+  const log = (await $.tool.call({ tool: 'Bash', command: 'grep -c "FOther" Saved/Logs/G.log', tool_use_id: 'd' } as never)) as { context?: string[] }
+  expect(log.context).toBeUndefined()  // 로그 grep 은 묻지도 않는다
+  expect(asked).toEqual(['FThing', 'FMissing'])
+  expect((await grep('UEngineOnly', 'h')).context).toBeUndefined()  // 엔진 심볼은 ue_q 몫
+  expect((await grep('FTwo', 'e')).context).toBeDefined()
+  expect((await grep('FThree', 'f')).context).toBeDefined()
+  expect((await grep('FFour', 'g')).context).toBeUndefined()  // 세션당 3번
 })
 
 test('지난 세션(대화 기록에서 센 것)과 실시간 요약을 합친다 — 같은 세션은 실시간 쪽', () => {
