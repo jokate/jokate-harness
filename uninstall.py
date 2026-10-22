@@ -39,7 +39,7 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 sys.path.insert(0, str(REPO))
-from install import HOOKS, LIBS, PLUGIN_DIRS_ENV, mod_dirs, mod_paths, rules_block_span  # noqa: E402
+from install import HOOKS, LIBS, OBSOLETE_HOOKS, PLUGIN_DIRS_ENV, mod_dirs, mod_paths, rules_block_span  # noqa: E402
 
 
 def is_link(p):
@@ -84,7 +84,7 @@ def remove_mods(dry):
 
 
 def remove_hooks(dry):
-    for name in HOOKS + LIBS:
+    for name in HOOKS + LIBS + OBSOLETE_HOOKS:
         p = CLAUDE / "hooks" / name
         if p.is_file():
             print(f"  - {p}")
@@ -104,7 +104,7 @@ def clean_settings(dry):
 
     def ours(h):
         blob = " ".join([str(h.get("command", ""))] + [str(x) for x in h.get("args", [])])
-        return any(("hooks" in blob and name in blob) for name in HOOKS)
+        return any(("hooks" in blob and name in blob) for name in HOOKS + OBSOLETE_HOOKS)
 
     removed = []
     hooks = settings.get("hooks") or {}

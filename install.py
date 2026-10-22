@@ -31,9 +31,15 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "handoff.py", "stuck_watch.py",
-         "harness_trace.py", "diagram_view.py"]
+HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "stuck_watch.py", "harness_trace.py"]
 LIBS = ["harness_events.py"]  # 훅이 import 하는 모듈. settings 에는 등록하지 않는다
+# 뺀 것: 설치하면 settings.json 등록과 ~/.claude/hooks 의 파일을 지운다 (백업은 settings.json.bak · <이름>.removed).
+# handoff.py · diagram_view.py — 2026-10-07~22 에 한 번도 동작하지 않았다(이벤트 0, [RESET] 0회, 렌더 흔적 0).
+# handoff 의 UserPromptSubmit 은 프롬프트마다 돌았다. docs/VERIFICATION.md 2026-10-22 (Harness² 감사).
+OBSOLETE_HOOKS = ["handoff.py", "diagram_view.py"]
+# 뺀 스킬: ~/.claude/skills 의 링크를 지운다. game-patterns — 0회 불림, 설명 490자가 세션마다 들어갔다. 내용은
+# game-architecture/references/patterns.md 로 옮겼다.
+OBSOLETE_SKILLS = ["game-patterns"]
 PLUGIN_DIRS_ENV = "CLAUDE_CODE_PLUGIN_DIRS"
 
 
@@ -84,6 +90,29 @@ def install_hooks(a):
             if dst.exists():
                 shutil.copy2(dst, str(dst) + ".bak")
             shutil.copy2(src, dst)
+    for name in OBSOLETE_HOOKS:
+        dst = dst_root / name
+        if dst.exists():
+            print(f"  x {name} (뺀 훅 — {name}.removed 로)")
+            if not a.dry_run:
+                dst.replace(str(dst) + ".removed")
+
+
+def remove_obsolete_skills(a):
+    """뺀 스킬의 설치본을 지운다. 링크(정션)는 링크만 지우고, 복사본은 <이름>.removed 로 옮긴다."""
+    for name in OBSOLETE_SKILLS:
+        dst = CLAUDE / "skills" / name
+        junction = os.name == "nt" and getattr(dst, "is_junction", lambda: False)()
+        # 저장소에서 지운 뒤에는 링크가 끊겨 exists() 가 False 다 — 링크 · 정션은 따로 본다
+        if not (dst.exists() or dst.is_symlink() or junction):
+            continue
+        print(f"  x {name} (뺀 스킬)")
+        if a.dry_run:
+            continue
+        if dst.is_symlink() or junction:
+            os.unlink(dst) if dst.is_symlink() else os.rmdir(dst)  # 정션은 rmdir 로 링크만 지운다
+        else:
+            shutil.move(str(dst), str(dst) + ".removed")
 
 
 def mod_dirs():
@@ -167,8 +196,7 @@ def settings_snippet():
     stuck = cmd("stuck_watch.py", 5)
     trace = cmd("harness_trace.py", 10, {"async": True})
     return {"hooks": {
-        "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15), cmd("handoff.py", 10)]}],
-        "UserPromptSubmit": [{"hooks": [cmd("handoff.py", 180)]}],
+        "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
         "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
                         {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [stuck]},
@@ -176,8 +204,32 @@ def settings_snippet():
         "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
                                {"matcher": "Bash|PowerShell", "hooks": [stuck]},
                                {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
-        "Stop": [{"hooks": [cmd("diagram_view.py", 30)]}],
     }}
+
+
+def drop_obsolete(hooks):
+    """settings.json 의 hooks 에서 뺀 훅(OBSOLETE_HOOKS)을 부르는 항목을 지운다. 지운 것의 '이벤트:이름' 목록."""
+    removed = []
+    for event in list(hooks):
+        groups = []
+        for g in hooks[event]:
+            keep = []
+            for h in g.get("hooks", []):
+                # 하네스가 등록한 모양만: args 의 경로가 ~/.claude/hooks/<뺀 이름> 이거나 command 안에 그 경로가 있을 때
+                paths = [Path(str(x)) for x in h.get("args", [])] + [Path(p) for p in str(h.get("command", "")).split()]
+                hit = next((n for n in OBSOLETE_HOOKS for p in paths
+                            if p.name == n and p.parent.name == "hooks" and p.parent.parent.name == ".claude"), None)
+                if hit:
+                    removed.append(f"{event}:{hit}")
+                else:
+                    keep.append(h)
+            if keep:
+                groups.append({**g, "hooks": keep})
+        if groups:
+            hooks[event] = groups
+        else:
+            del hooks[event]
+    return removed
 
 
 def mod_paths():
@@ -195,7 +247,8 @@ def add_plugin_dirs(settings):
 
 
 def apply_settings(dry):
-    """settings.json 의 hooks 에 빠진 훅만 추가한다. 기존 항목은 건드리지 않는다. 원본은 settings.json.bak 으로 남긴다."""
+    """settings.json 의 hooks 에 빠진 훅만 추가하고, 뺀 훅(OBSOLETE_HOOKS)의 등록은 지운다. 그 밖의 항목은 건드리지
+    않는다. 원본은 settings.json.bak 으로 남긴다."""
     path = CLAUDE / "settings.json"
     try:
         settings = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -203,7 +256,7 @@ def apply_settings(dry):
         print(f"  ! settings.json 을 읽지 못했다 ({e}). 고치지 않는다 — 아래 조각을 직접 합친다.")
         return False
     hooks = settings.setdefault("hooks", {})
-    added = []
+    added = [f"-{r}" for r in drop_obsolete(hooks)]
     for event, groups in settings_snippet()["hooks"].items():
         cur = hooks.setdefault(event, [])
         have = {os.path.basename(arg) for g in cur for h in g.get("hooks", []) for arg in h.get("args", [])}
@@ -222,7 +275,7 @@ def apply_settings(dry):
     if not added:
         print("  = settings.json 훅·mod 이미 등록됨")
         return True
-    print("  + settings.json 등록:", ", ".join(added))
+    print("  + settings.json 등록 · 정리:", ", ".join(added))
     if not dry:
         if path.exists():
             shutil.copy2(path, str(path) + ".bak")
@@ -249,6 +302,7 @@ def main():
     a = ap.parse_args()
     print("스킬 →", CLAUDE / "skills")
     install_skills(a)
+    remove_obsolete_skills(a)
     print("훅 →", CLAUDE / "hooks")
     install_hooks(a)
     print("mod →", CLAUDE / "mods", "(하네스 모니터: Claude Code 함수 훅 플러그인)")

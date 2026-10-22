@@ -40,8 +40,7 @@
 | 0 | `game-bootstrap` | `/game-bootstrap` 직접 호출 | 프로젝트 CLAUDE.md, 인덱스 갱신 선언, MCP 가드 파일 |
 | 1 | `game-onboard` | 구조·위치·엔진 API 질문, 누가 부르나·누가 재정의했나 | 좌표 (file:line, 모듈 그래프), 참조·호출·영향 범위 |
 | 1 | `game-design-doc` | 기획서 읽기·기획과 구현 대조 | 사양 표, 구현 대응, 판단 대기, 어긋남 |
-| 2 | `game-architecture` | 기능 추가·구현·설계 요청 (코드 전) | 선택지 A/B/C + "다음 요청 때 고칠 곳" + 근거 그림 → **사람이 고른다** |
-| 2 | `game-patterns` | 패턴 비교, 게임 도메인 문제(버프 중첩·선입력·네트워크 예측·세이브 호환 등) | 증상 → 신호 → 후보 패턴 → 엔진 관용구, 얻음/잃음/쓰지 말 때 (출처 표시 포함) |
+| 2 | `game-architecture` | 기능 추가·구현·설계 요청 (코드 전), 패턴 비교 · 게임 도메인 문제(버프 중첩·선입력·네트워크 예측·세이브 호환 등) | 선택지 A/B/C + "다음 요청 때 고칠 곳" + 근거 그림 → **사람이 고른다**. 패턴은 `references/patterns/`(옛 game-patterns): 증상 → 후보 → 엔진 관용구, 얻음/잃음/쓰지 말 때 |
 | 3 | `game-testing` | 검증 기준·테스트 | 완료 기준 먼저, 검증됨(자동/수동)/검증 안 됨 표기 |
 | 4 | `game-mcp` | 에디터 MCP 조작 | 읽기 먼저·쓰고 재조회·실패는 가드로 |
 
@@ -148,17 +147,16 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 - 구현 후 "새 컨텍스트로 이 diff 리뷰해라". 단, 리뷰 지적을 전부 따르면 과설계로 간다.
 - 스킬을 콕 집어 부르고 싶으면 이름을 말한다 ("game-architecture 로"). 자동 트리거는 확률적이다.
 
-### 매몰됐을 때 — `[RESET]`
+### 매몰됐을 때
 
-매몰된 모델은 자기 매몰을 못 알아챈다. 그래서 감지와 요약을 세션 밖에 둔다.
+매몰된 모델은 자기 매몰을 못 알아챈다. 그래서 감지를 세션 밖(훅)에 둔다.
 
-1. `[매몰 신호]` 경고가 뜨거나(같은 파일 5회 수정, 셸 명령 연속 3회 실패) 답이 이상하다 싶으면 `[RESET]` 을 친다.
-2. 훅이 대화 기록을 별도 모델(haiku)에 넘겨 `<프로젝트>/.claude/handoff.md` 를 쓴다 (긴 세션은 1분 남짓). 세션의 모델은 관여하지 않는다.
-3. 문서를 읽어 보고 `/clear`. 새 세션이 그 문서로 시작하고, 작업을 잇기 전에 무엇을 할지 먼저 확인받는다.
+1. `[매몰 신호]` 경고가 뜨거나(같은 파일 5회 수정, 셸 명령 연속 3회 실패) 답이 이상하다 싶으면 멈추고 방향을 확인한다.
+2. 방향이 틀렸으면 `/clear` 하고 새로 시작한다 — 필요한 맥락(무엇을 하려 했고 어디까지 됐나)은 한두 줄로 다시 준다.
 
 - 임계값: `<프로젝트>/.claude/stuck_watch.json` 에 `{"edit": 8, "fail": 4}`. 0 이면 끈다.
-- 한계: 반복이 없는 방향 이탈은 카운터가 못 잡는다 — 사람이 건다. HandOff 는 요약이라 틀릴 수 있다 — `/clear` 전에 읽는다.
-- `.claude/handoff.md`, `handoff.used.md` 는 커밋하지 않는다.
+- 한계: 반복이 없는 방향 이탈은 카운터가 못 잡는다 — 사람이 건다.
+- `[RESET]` 인계(별도 모델이 handoff.md 를 쓰던 훅)는 15일 동안 한 번도 쓰이지 않아 2026-10-22 에 뺐다 (docs/experience/prune-unused.md).
 
 ## 6. 요청 템플릿
 
@@ -197,27 +195,29 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 ## 7. 쓰면서 고치는 법
 
-하네스는 처음부터 완벽할 수 없다. 실패를 **어디에 반영하는지**만 정해 둔다.
+하네스는 처음부터 완벽할 수 없다. 실패를 **어디에 반영하는지**만 정해 둔다. 고치기 전에 `docs/experience/INDEX.md`
+(대조로 뒷받침된 교훈)를 보고, 고친 뒤에는 `tools/harness_probe.py` 로 지금 하네스와 수정안을 같은 과제로 대조한다.
+근거가 나오면 경험 항목을 하나 남긴다. 세션마다 들어가는 글은 `tools/context_budget.py <프로젝트>` 로 재서 하네스 몫을
+7,000 B 안에 둔다 — 더하면 다른 것을 뺀다.
 
 | 실패 | 고칠 곳 |
 |---|---|
 | 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 그 파일의 라우팅 줄, 그다음 스킬 description 트리거 문구 |
 | 스킬은 불렸는데 절차를 건너뜀 | SKILL.md 본문 (references 는 안 읽힐 수 있다 — 핵심 규칙은 본문으로) |
-| 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 |
+| 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 — 실패는 훅이 `.claude/mcp_guards.pending.json` 에 후보로 모은다 |
 | 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
 | 인덱스가 기대 위치를 못 찾는다 | `<프로젝트>/.claude/index_eval.json` 에 그 질의를 넣고 웹뷰 "질의 세트" 로 Acc@1·MRR 을 본다 |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
 | 매몰을 놓쳤다 / 경고가 너무 잦다 | `stuck_watch.py` 의 `SIGNALS` 에 신호 한 줄, 임계값은 프로젝트 `.claude/stuck_watch.json` |
-| HandOff 가 틀리거나 빠뜨림 | `handoff.py` 의 `INSTRUCTION` (형식), `extract` (무엇을 넘기나) |
-| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — Stop 훅 `diagram_view.py` 가 HTML 로 열어 준다 (setup.bat 다시). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
-| 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `run_evals.py` |
+| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --open`. HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
+| 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `tools/harness_probe.py` 로 지금 대 수정안 (정답지 과제가 있으면 `qa` 로 재현율까지) |
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.
 
 ## 8. 하네스가 동작하는지 보기 — 모니터와 웹뷰
 
 하네스의 훅과 조회 스크립트는 동작할 때마다 `~/.claude/cache/game-harness/events.jsonl` 에 한 줄을 남긴다
-(기능 id 예: `context.routing`, `session_start.gq`, `skill.game-architecture`, `script.ue_q.sym`, `index.clangd`, `stuck.warn`, `handoff.write`).
+(기능 id 예: `context.routing`, `session_start.gq`, `skill.game-architecture`, `script.ue_q.sym`, `index.clangd`, `stuck.warn`, `mcp.call`).
 
 **모니터 mod** (`mods/game-harness-monitor`, setup 이 켠다)
 - 상태줄: 이 세션에서 하나라도 동작한 뒤부터 `harness ● 기능 N개 · 마지막 <기능>` (실패가 있으면 `· 실패 N`).

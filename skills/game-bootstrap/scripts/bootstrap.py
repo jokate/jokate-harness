@@ -93,7 +93,7 @@ HOWTO = """
      "<엔진 클래스> 가 어떻게 동작하지" → 엔진 소스 인덱스로 조회
 
 3. 답이 이상해지거나 [매몰 신호] 경고가 뜨면
-     [RESET] 입력 → .claude/handoff.md 읽기 → /clear
+     멈추고 방향을 확인한다 → 아니면 /clear 로 새로 시작
 
 잘 붙었는지 확인: 1번 뒤 "이 프로젝트 구조 파악해줘" 의 첫 행동이 game-onboard 스킬 호출이면 정상.
 다른 프로젝트에도 쓰려면 그 폴더를 setup.bat 위에 끌어다 놓는다.
@@ -105,7 +105,7 @@ def git_exclude(root):
     path = root / ".git" / "info" / "exclude"
     try:
         cur = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
-        add = [p for p in ("CLAUDE.local.md", ".claude/handoff.md", ".claude/handoff.used.md", ".claude/session_start.json")
+        add = [p for p in ("CLAUDE.local.md", ".claude/session_start.json", ".claude/mcp_guards.pending.json")
                if p not in cur.split()]
         if not add:
             return

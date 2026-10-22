@@ -624,6 +624,16 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - `game_context.py`: 코드 찾기 줄을 "클래스 · 함수 · 구조체 이름을 grep 하기 전에: 쓰는 곳 refs …" 로, cindex 경로를 절대 경로로(PowerShell 은 python 인자의 `~` 를 풀지 않는다). 시험 test_game_context 4.
 - 못 한 것: 대화형 세션에서 안내 줄이 실제로 모델을 cindex 로 돌리는지(다음 MNYS 세션들의 띠 · `/harness-history` 로 본다), `tsc` 타입 검사(이 PC 에 TypeScript 없음).
 
+## 2026-10-22 (2) — Harness² 감사: 안 쓰는 것 빼기 · 대조 시험 · 경험 문서 · 항상 글 예산
+
+- 사용자: 논문 Harness²(arXiv 2610.14224, 하네스 수정안을 같은 과제로 대조해 합치고 근거 있는 교훈만 경험 문서로)를 보고 "도입할 수 있는 영역과 삭제해도 되는 부분 검증" → "전부 진행".
+- 감사(돈 안 듦, 이벤트 로그 10-07~22 · MNYS 대화 기록 127세션): handoff 0회(프롬프트마다 실행) · diagram_view 0회(렌더 흔적 0) · game-patterns 스킬 0회(description 992 B, 하네스 스킬 중 가장 김) · MNYS 에서 gq 25회 대 `Tools/mnys_q.py` 441회(세션마다 둘 다 색인) · 라우팅이 CLAUDE.local.md 와 game_context 두 곳(구조 질문이 위키 vs game-onboard 로 엇갈림) · `index.clangd` 8/8 '실패'는 오류 있던 TU 때문이었고 색인은 끝나 있었다 · MCP 가드 규칙 7개 0회 발동. 하네스 몫 항상 글 8,194 B.
+- 뺀 것: `handoff.py` · `diagram_view.py`(install.py `OBSOLETE_HOOKS` 가 settings 등록과 `~/.claude/hooks` 파일을 지운다 — 이 PC: SessionStart · UserPromptSubmit · Stop 항목 3개 지움, 파일은 `.removed`), game-patterns 스킬(`OBSOLETE_SKILLS`, 내용은 `game-architecture/references/patterns/`, description 에 패턴 질문 트리거만 더함). 매몰 경고 문구는 `[RESET]` 대신 "멈추고 /clear". `index.clangd` 는 색인이 끝나면 ok.
+- 대조 시험(새 `tools/harness_probe.py`: 팔마다 스냅숏 복사 · overlay · 위키 사본, 정답지 재현율 + run_evals 채점 + 비용 · 도구 사용, `EXPERIENCE.draft.md`): MNYS 10-17 스냅숏, 정답지 8과제 × 2 + 스킬 사례 5, Sonnet. X(지금) 재현율 0.908 · $0.356 · cindex 22 · Grep 28 / Y(라우팅 한 곳 · 위키 먼저 · cindex 줄 줄임) 0.920 · $0.360 · cindex 11 · Grep 41, 스킬 사례 둘 다 맞는 스킬 5/5 / Z(Y + cindex 줄 그대로 + "코드 세부는 cindex") 0.961 · $0.358 · cindex 22 · Grep 27 → Z 채택(`game_context.routing_lines`). 새 프로젝트 fixture 3개(run_evals): 템플릿 라우팅 절을 한 줄 안내로 바꿔도 8/8($1.10 → $0.96), 더 줄인 지금 문구로도 8/8 · $0.96. 시험 비용 합 약 $25.
+- 들인 것: ㉮ 대조 시험 도구 · ㉯ 경험 문서 `docs/experience/`(목차 + 항목 4: routing-commands · tool-output-noise · prune-unused · routing-single-source)와 MCP 실패 → `.claude/mcp_guards.pending.json` 가드 규칙 후보(같은 종류는 한 줄 · 횟수, 규칙으로 올리는 것은 game-mcp 가 사용자와, 세션 안내에 후보가 있을 때만 한 줄) · ㉰ `tools/context_budget.py`(하네스 몫 한도 7,000 B) + 시험(스킬 description 합 ≤ 4,000 B · 세션 안내 ≤ 1,800 B · 템플릿 라우팅 절 ≤ 300 B).
+- MNYS(로컬 파일만, git 제외 목록): `.claude/session_start.json` 에서 gq 색인 뺌, `CLAUDE.local.md` 라우팅 절을 한 줄 안내로(백업 `~/.claude/cache/game-harness/mnys-*.bak-20261022`). 항상 글 하네스 몫 8,194 B → 6,935 B.
+- 시험: 파이썬 전부 · 모니터 mod 13. 못 한 것: 대화형 세션의 효과(다음 MNYS 세션들), 스킬 사례를 Z 로 다시 돌리지 않음(라우팅은 Y 와 같다), 과제 수가 적어 ±0.05 재현율 차이는 잡음.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)

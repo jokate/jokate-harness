@@ -1133,7 +1133,9 @@ def cmd_build(root, kind, a):
     detail = f"{scope} · {info.get('mode', '')} · 심볼 {counts['symbols']} · 참조 {counts['refs']} · 관계 {counts['relations']}"
     if info.get("rebuilt") is not None:
         detail += f" · 재색인 {info['rebuilt']}/{info.get('batches') or info.get('tus')}"
-    harness_emit("index.clangd", detail + (f" · 오류 있던 TU {failed}" if failed else ""), ok=not failed, project=root)
+    # 색인이 끝났으면 성공이다. 오류 있던 TU 는 늘 조금 있다(MNYS 178/412 — 대부분 UHT 생성 헤더) — 실패로 찍으면
+    # 모니터 · 이력이 매번 '실패'를 보인다(2026-10-07~22 의 index.clangd 8/8 '실패'가 다 이것이었다).
+    harness_emit("index.clangd", detail + (f" · 오류 있던 TU {failed}" if failed else ""), ok=True, project=root)
     return 0
 
 

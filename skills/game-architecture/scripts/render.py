@@ -7,7 +7,7 @@
 스크립트(marked·mermaid)는 이 폴더의 vendor/ 에 동봉돼 있다 — 설치할 것이 없고 인터넷이 없어도 그려진다.
 HTML 은 동봉 파일을 먼저 불러오고, 못 불러오면(다른 PC 로 HTML 만 옮긴 경우) CDN 으로 넘어간다.
 --js-dir 를 주면 그 폴더의 marked.min.js, mermaid.min.js 만 쓴다. 어느 쪽도 못 불러오면 원문을 그대로 보인다.
-Stop 훅 diagram_view.py 가 이 모듈의 render()·open_file() 을 쓴다.
+game-architecture 가 구조 문서를 저장한 뒤 `render.py --open` 으로 쓴다.
 """
 
 import argparse
