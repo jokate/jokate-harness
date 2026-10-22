@@ -238,6 +238,59 @@ class MergedQueryTest(unittest.TestCase):
         self.assertEqual(mx.ref_count(self.fx.hot), n)
 
 
+class GeneratedAndRankTest(unittest.TestCase):
+    """생성 코드(.gen.cpp · Intermediate)는 refs · callers 기본에서 빠지고, 같은 이름이면 프로젝트 심볼이 엔진 것보다 앞선다."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        tmp = Path(self.tmpdir.name)
+        files = [("/proj/Intermediate/Build/Win64/Inc/Game/UHT/Thing.gen.cpp", "project",
+                  "Intermediate/Build/Win64/Inc/Game/UHT/Thing.gen.cpp", ""),
+                 ("/proj/Source/Game/Thing.cpp", "project", "Source/Game/Thing.cpp", "Game"),
+                 ("/proj/Plugins/P/Intermediate/Build/X.gen.cpp", "project", "Plugins/P/Intermediate/Build/X.gen.cpp", ""),
+                 ("/proj/Source/Game/Thing.generated.h", "project", "Source/Game/Thing.generated.h", "Game"),
+                 ("/eng/Source/Runtime/Engine/Pawn.h", "engine", "Source/Runtime/Engine/Pawn.h", "Engine"),
+                 ("/proj/Source/Game/My.h", "project", "Source/Game/My.h", "Game")]
+        syms = [("T1", "FThing", "", "Struct", files[1][0]), ("F1", "Use", "AMy::", "InstanceMethod", files[1][0]),
+                ("G1", "Z_Construct", "", "Function", files[0][0]),
+                ("E1", "BeginPlay", "APawn::", "InstanceMethod", files[4][0]),
+                ("P1", "BeginPlay", "AMy::", "InstanceMethod", files[5][0])]
+        refs = [("T1", REF, files[1][0], ln, 1, "F1") for ln in (10, 20, 30)]
+        refs += [("T1", REF, files[0][0], ln, 1, "G1") for ln in (1, 2, 3)]
+        refs += [("T1", REF, files[2][0], 5, 1, "G1"), ("T1", REF, files[3][0], 7, 1, cindex.NULL_ID)]
+        raw, self.db = tmp / "p.raw", tmp / "p.sqlite"
+        make_raw(raw, files, syms, refs)
+        cindex.finalize(raw, self.db)
+        self.ix = cindex.Index(self.db, "project")
+        self.mx = cindex.MultiIndex([self.ix])
+
+    def tearDown(self):
+        self.ix.con.close()
+        self.tmpdir.cleanup()
+
+    def test_generated_refs_are_left_out_by_default(self):
+        self.assertEqual(sum(n for _, n in self.mx.ref_parts("T1")), 8)
+        self.assertEqual(sum(n for _, n in self.mx.ref_parts("T1", nogen=True)), 3)
+        rows, more, _ = self.mx.refs_page("T1", None, 50, None, None, None, True)
+        self.assertEqual([r["path"] for r in rows], ["Source/Game/Thing.cpp"] * 3)
+        self.assertFalse(more)
+        self.assertEqual(dict(self.mx.modules("T1", 10, True)[0]), {"Game": 3})
+
+    def test_generated_callers_are_left_out_by_default(self):
+        self.assertEqual(self.mx.callers_total("T1"), 3)  # F1 · G1 · 파일 범위
+        self.assertEqual(self.mx.callers_total("T1", True), 1)
+        self.assertEqual([c for c, *_ in self.mx._callers("T1", 10, True)], ["F1"])
+
+    def test_project_symbol_comes_before_engine_one(self):
+        ranked = cindex.rank(self.mx.find_exact("BeginPlay"), "BeginPlay")
+        self.assertEqual([s["id"] for s in ranked], ["P1", "E1"])
+        line = cindex.others_line(ranked[0], ranked[1:])
+        self.assertIn("후보 1개 더", line)
+        self.assertNotIn("프로젝트", line)
+        line = cindex.others_line(ranked[1], ranked[:1])
+        self.assertIn("프로젝트 1: AMy::BeginPlay", line)
+
+
 class PlanTest(unittest.TestCase):
     """핫 경로의 실행 계획. 스키마 2 인덱스에서."""
 

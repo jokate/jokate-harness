@@ -20,7 +20,7 @@
   python cindex.py optimize [--force]        # 옛 모양 인덱스를 조회용(스키마 2)으로 다시 쓰고 소유권 표시를 맞춘다 (색인은 그대로)
   python cindex.py status
   python cindex.py sym <이름|A::B>          # 심볼 좌표 (선언·정의·시그니처)
-  python cindex.py refs <이름> [--kind decl|def|ref] [--module M] [--path 조각] [--cursor C]   # 총계·모듈 묶음·표본·다음 커서
+  python cindex.py refs <이름> [--kind decl|def|ref] [--module M] [--path 조각] [--cursor C] [--generated]   # 총계·모듈 묶음·표본·다음 커서 (생성 코드는 기본으로 뺀다)
   python cindex.py callers <이름>           # 이 심볼을 참조하는 함수 (참조의 Container 기준)
   python cindex.py callees <이름>           # 이 함수 안에서 참조하는 함수·메서드
   python cindex.py bases <이름> · derived <이름> · overrides <이름>   # 전 단계 트리 (--depth N 으로 제한)
@@ -1291,12 +1291,15 @@ class Index:
     def _x(excl, alias="r"):
         return f" AND {alias}.file NOT IN (SELECT file FROM {excl})" if excl else ""
 
-    def refs_part(self, sid, mask=None, limit=500, after=None, path=None, module=None, excl=None):
-        """경로 순 참조 limit 개와 더 있는지. after: 앞 페이지 마지막 (file, line, col) — 스키마 2 는 keyset, 옛 인덱스는 OFFSET 정수."""
+    def refs_part(self, sid, mask=None, limit=500, after=None, path=None, module=None, excl=None, nogen=False):
+        """경로 순 참조 limit 개와 더 있는지. after: 앞 페이지 마지막 (file, line, col) — 스키마 2 는 keyset, 옛 인덱스는 OFFSET 정수.
+        nogen: 생성 코드(GEN_SQL) 파일의 참조를 뺀다."""
         where, args = ["r.sym=?"], [sid]
         if mask:
             where.append("(r.kind & ?) != 0")
             args.append(mask)
+        if nogen:
+            where.append(GEN_SQL)
         if path:
             where.append("f.rel LIKE ? ESCAPE '\\'")
             args.append(f"%{like_escape(path)}%")
@@ -1325,16 +1328,18 @@ class Index:
         r = self.q("SELECT n_refs, n_use, n_files, n_callers, n_modules FROM sym_stats WHERE sym=?", (sid,))
         return r[0] if r else (0, 0, 0, 0, 0)
 
-    def ref_total(self, sid, mask=None, path=None, module=None, excl=None, stats_ok=False):
-        st = self.stat(sid, stats_ok) if not (path or module) and mask in (None, REF) else None
+    def ref_total(self, sid, mask=None, path=None, module=None, excl=None, stats_ok=False, nogen=False):
+        st = self.stat(sid, stats_ok) if not (path or module or nogen) and mask in (None, REF) else None
         if st is not None:
             return st[1] if mask == REF else st[0]
         where, args, join = ["r.sym=?"], [sid], ""
         if mask:
             where.append("(r.kind & ?) != 0")
             args.append(mask)
-        if path or module:
-            join = " JOIN files f ON f.id=r.file"
+        if path or module or nogen:
+            join = " LEFT JOIN files f ON f.id=r.file"
+            if nogen:
+                where.append(GEN_SQL)
             if path:
                 where.append("f.rel LIKE ? ESCAPE '\\'")
                 args.append(f"%{like_escape(path)}%")
@@ -1343,30 +1348,34 @@ class Index:
                 args.append(module)
         return self.q(f"SELECT COUNT(*) FROM refs r{join} WHERE {' AND '.join(where)}{self._x(excl)}", args)[0][0]
 
-    def callers_part(self, sid, limit, excl=None, stats_ok=False):
+    def callers_part(self, sid, limit, excl=None, stats_ok=False, nogen=False):
         """사용(Reference 비트) 참조를 Container 로 묶은 상위 limit 개: [(container, 수, 첫 파일 id, 첫 줄)].
-        요약 표가 맞으면 그것을, 아니면 SQL 로 묶는다 — 파이썬으로 전부 가져와 세지 않는다."""
-        if stats_ok:
+        요약 표가 맞으면 그것을, 아니면 SQL 로 묶는다 — 파이썬으로 전부 가져와 세지 않는다.
+        nogen: 생성 코드 파일의 참조는 빼고 묶는다 (요약 표에는 생성 코드가 섞여 있어 SQL 로)."""
+        if stats_ok and not nogen:
             return self.q("SELECT container, n, file, line FROM sym_callers WHERE sym=? ORDER BY n DESC LIMIT ?", (sid, limit))
+        join, gen = (" LEFT JOIN files f ON f.id=r.file", f" AND {GEN_SQL}") if nogen else ("", "")
         # MIN(rowid) 와 같이 쓴 맨 열(file, line)은 그 행의 값이다 (SQLite 맨 열 규칙) — 스키마 2 는 rowid 가 경로 순이다
         return [(c, n, f, ln) for c, n, _, f, ln in self.q(
-            f"SELECT container, COUNT(*) AS n, MIN(r.rowid), r.file, r.line FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0"
-            f"{self._x(excl)} GROUP BY container ORDER BY n DESC LIMIT ?", (sid, limit))]
+            f"SELECT container, COUNT(*) AS n, MIN(r.rowid), r.file, r.line FROM refs r{join} WHERE r.sym=? AND (r.kind & {REF}) != 0"
+            f"{gen}{self._x(excl)} GROUP BY container ORDER BY n DESC LIMIT ?", (sid, limit))]
 
-    def callers_total(self, sid, excl=None, stats_ok=False):
-        st = self.stat(sid, stats_ok)
+    def callers_total(self, sid, excl=None, stats_ok=False, nogen=False):
+        st = self.stat(sid, stats_ok) if not nogen else None
         if st is not None:
             return st[3]
-        return self.q(f"SELECT COUNT(DISTINCT container) FROM refs r WHERE r.sym=? AND (r.kind & {REF}) != 0{self._x(excl)}",
-                      (sid,))[0][0]
+        join, gen = (" LEFT JOIN files f ON f.id=r.file", f" AND {GEN_SQL}") if nogen else ("", "")
+        return self.q(f"SELECT COUNT(DISTINCT container) FROM refs r{join} WHERE r.sym=? AND (r.kind & {REF}) != 0"
+                      f"{gen}{self._x(excl)}", (sid,))[0][0]
 
-    def modules_part(self, sid, limit, excl=None, stats_ok=False):
+    def modules_part(self, sid, limit, excl=None, stats_ok=False, nogen=False):
         """[(모듈, 사용 수)] 상위 limit 개와 이 인덱스의 모듈 수."""
-        if stats_ok:
+        if stats_ok and not nogen:
             rows = self.q("SELECT module, n FROM sym_modules WHERE sym=? ORDER BY n DESC LIMIT ?", (sid, limit))
             return rows, self.stat(sid, True)[4]
+        gen = f" AND {GEN_SQL}" if nogen else ""
         rows = self.q(f"SELECT f.module, COUNT(*) AS n FROM refs r JOIN files f ON f.id=r.file WHERE r.sym=? "
-                      f"AND (r.kind & {REF}) != 0{self._x(excl)} GROUP BY f.module ORDER BY n DESC", (sid,))
+                      f"AND (r.kind & {REF}) != 0{gen}{self._x(excl)} GROUP BY f.module ORDER BY n DESC", (sid,))
         return rows[:limit], len(rows)
 
     def files_part(self, sid, limit, excl=None, stats_ok=False):
@@ -1385,17 +1394,29 @@ class Index:
                       "AND (r.kind & ?) = ? AND s.kind IN (%s)%s GROUP BY r.sym ORDER BY COUNT(*) DESC"
                       % (",".join("?" * len(FUNC_KINDS)), self._x(excl)), (sid, REF | CALL, REF | CALL) + FUNC_KINDS)
 
-    def has_refs(self, sid, mask=None, path=None, module=None, excl=None):
-        return self.ref_total(sid, mask, path, module, excl) > 0 if (path or module) else bool(self.q(
+    def has_refs(self, sid, mask=None, path=None, module=None, excl=None, nogen=False):
+        return self.ref_total(sid, mask, path, module, excl, nogen=nogen) > 0 if (path or module or nogen) else bool(self.q(
             f"SELECT 1 FROM refs r WHERE r.sym=?{' AND (r.kind & ?) != 0' if mask else ''}{self._x(excl)} LIMIT 1",
             (sid, mask) if mask else (sid,)))
 
 
+# 생성 코드: UHT 가 만든 .gen.cpp · .generated.h 와 Intermediate 아래 파일. refs · callers 는 기본으로 뺀다 (--generated 로 포함) —
+# MNYS 에서 FYSInputHistory 참조 22개 중 12개가 .gen.cpp 라 경로 순 표본이 생성 코드로만 찼다 (2026-10-22).
+GEN_SQL = ("NOT (COALESCE(f.rel, '') LIKE 'Intermediate/%' OR COALESCE(f.rel, '') LIKE '%/Intermediate/%' "
+           "OR COALESCE(f.rel, '') LIKE '%.gen.cpp' OR COALESCE(f.rel, '') LIKE '%.generated.h')")
+
+
+def is_engine(s):
+    return str(s["path"] or "").startswith("[E] ")
+
+
 def rank(syms, name):
+    """같은 이름이면 종류(타입 → 함수) 다음으로 프로젝트 것을 엔진 것보다 앞에 둔다 — `callers BeginPlay` 가
+    APawn::BeginPlay(엔진, 호출자 0)를 고르던 것을 막는다."""
     pref = {k: i for i, k in enumerate(TYPE_KINDS + FUNC_KINDS)}
     last = name.strip().split("::")[-1].lower()
-    return sorted(syms, key=lambda s: (s["name"].lower() != last, pref.get(s["kind"], 50), s["tpl_args"] != "",
-                                       len(s["scope"]), s["path"]))
+    return sorted(syms, key=lambda s: (s["name"].lower() != last, pref.get(s["kind"], 50), is_engine(s),
+                                       s["tpl_args"] != "", len(s["scope"]), s["path"]))
 
 
 def link_owners(ixs):
@@ -1502,19 +1523,20 @@ class MultiIndex:
         except ValueError:
             raise SystemExit(f"--cursor 형식이 아니다: {c!r}")
 
-    def refs_page(self, sid, mask=None, limit=500, cursor=None, path=None, module=None):
+    def refs_page(self, sid, mask=None, limit=500, cursor=None, path=None, module=None, nogen=False):
         """(참조 limit 개, 더 있는가, 다음 커서). 프로젝트 인덱스 몫을 경로 순으로 다 낸 뒤 엔진 몫."""
         start, after = self._cursor(cursor)
         out, more, nxt = [], False, None
         for pi, (ix, x, _) in enumerate(self.parts):
             if pi < start:
                 continue
-            rows, part_more, _ = ix.refs_part(sid, mask, limit - len(out), after if pi == start else None, path, module, x)
+            rows, part_more, _ = ix.refs_part(sid, mask, limit - len(out), after if pi == start else None, path, module, x,
+                                              nogen)
             for r in rows:
                 r["part"] = pi
             out += rows
             if len(out) >= limit:
-                more = part_more or any(ix2.has_refs(sid, mask, path, module, x2) for ix2, x2, _ in self.parts[pi + 1:])
+                more = part_more or any(ix2.has_refs(sid, mask, path, module, x2, nogen) for ix2, x2, _ in self.parts[pi + 1:])
                 if more and out:
                     nxt = self.cursor_after(out[-1])
                 break
@@ -1528,19 +1550,19 @@ class MultiIndex:
     def refs(self, sid, mask=None, limit=500):
         return self.refs_page(sid, mask, limit)[0]
 
-    def ref_parts(self, sid, mask=None, path=None, module=None):
+    def ref_parts(self, sid, mask=None, path=None, module=None, nogen=False):
         """[(역할, 참조 수)] — 파일마다 주인이 하나라 더하면 총계다."""
-        return [(ix.role, ix.ref_total(sid, mask, path, module, x, ok)) for ix, x, ok in self.parts]
+        return [(ix.role, ix.ref_total(sid, mask, path, module, x, ok, nogen)) for ix, x, ok in self.parts]
 
     def ref_count(self, sid):
         return sum(n for _, n in self.ref_parts(sid))
 
-    def _callers(self, sid, limit):
+    def _callers(self, sid, limit, nogen=False):
         """[(container, 수, 인덱스 순번, 첫 파일 id, 첫 줄)] 상위 limit. 인덱스마다 상위 limit 을 받아 합친다 —
         함수 본문은 한 파일에 있고 파일마다 주인이 하나라 호출자가 인덱스끼리 겹치지 않는다 (파일 범위 NULL 만 더해진다)."""
         merged = {}
         for pi, (ix, x, ok) in enumerate(self.parts):
-            for cont, n, f, ln in ix.callers_part(sid, limit, x, ok):
+            for cont, n, f, ln in ix.callers_part(sid, limit, x, ok, nogen):
                 cur = merged.get(cont)
                 if cur:
                     cur[0] += n
@@ -1549,17 +1571,17 @@ class MultiIndex:
         top = sorted(merged.items(), key=lambda kv: -kv[1][0])[:limit]
         return [(c, v[0], v[1], v[2], v[3]) for c, v in top]
 
-    def callers_total(self, sid):
-        return sum(ix.callers_total(sid, x, ok) for ix, x, ok in self.parts)
+    def callers_total(self, sid, nogen=False):
+        return sum(ix.callers_total(sid, x, ok, nogen) for ix, x, ok in self.parts)
 
     def callers(self, sid, limit=200):
         top = self._callers(sid, limit)
         syms = self.by_ids(c for c, *_ in top)
         return [(syms.get(c) if c != NULL_ID else None, n) for c, n, *_ in top]
 
-    def caller_sites(self, sid, limit):
+    def caller_sites(self, sid, limit, nogen=False):
         """호출자마다 첫 참조 위치 하나 (줄 원문을 같이 보이려고)."""
-        top = self._callers(sid, limit)
+        top = self._callers(sid, limit, nogen)
         syms = self.by_ids(c for c, *_ in top)
         files = {}
         for pi, (ix, _, _) in enumerate(self.parts):
@@ -1571,12 +1593,12 @@ class MultiIndex:
                         {"path": fi.get("path", ""), "line": ln, "abs_path": fi.get("abs_path")}))
         return out
 
-    def modules(self, sid, limit):
+    def modules(self, sid, limit, nogen=False):
         """([(모듈, 사용 수)] 상위 limit, 모듈 수, 모듈 수가 하한인가). 인덱스마다 TOP_MODULES 개까지 받아 합친다 —
         어느 인덱스도 잘리지 않았으면 모듈 수가 정확하고, 잘렸으면 하한이다 (사용 수 상위는 그래도 맞다)."""
         merged, totals, cut = {}, [], False
         for ix, x, ok in self.parts:
-            rows, total = ix.modules_part(sid, max(limit, TOP_MODULES), x, ok)
+            rows, total = ix.modules_part(sid, max(limit, TOP_MODULES), x, ok, nogen)
             totals.append(total)
             cut = cut or total > len(rows)
             for m, n in rows:
@@ -1731,6 +1753,16 @@ def pick_one(ix, name, kinds=None):
     return None, []
 
 
+def others_line(s, others, show=4):
+    """고른 심볼 말고 같은 이름 후보. 고른 것이 프로젝트 것이 아니거나 프로젝트 후보가 더 있으면 그 이름을 보인다."""
+    proj = [o for o in others if not is_engine(o)]
+    line = f"# 같은 이름 후보 {len(others)}개 더"
+    if proj:
+        names = " · ".join(f"{o['scope']}{o['name']}" for o in proj[:show]) + (" …" if len(proj) > show else "")
+        line += f" (프로젝트 {len(proj)}: {names})"
+    return line + " — A::B 로 좁힌다"
+
+
 def cmd_status(ix):
     counts = json.loads(ix.meta.get("counts", "{}"))
     errors = json.loads(ix.meta.get("errors", '{"count": 0}')) if ix.meta.get("errors") else {"count": "?"}
@@ -1760,15 +1792,18 @@ def refs_report(ix, s, head, a, lc):
     """에이전트용 참조 보고: 총계(인덱스별) · 사용 모듈 상위 · 프로젝트 먼저 경로 순 표본(줄 원문) · 잘림 표시와 다음 커서.
     결과가 많으면 전부 내지 않고 좁히는 법을 알려 준다 (SWE-agent: 결과 50개 이하로 요약한 검색이 하나씩 보여 주는 검색보다 해결률이 높았다)."""
     mask = {"decl": DECL, "def": DEF, "ref": REF}.get(a.kind)
-    rows, more, _ = ix.refs_page(s["id"], mask, a.limit, a.cursor, a.path, a.module)
-    parts = ix.ref_parts(s["id"], mask, a.path, a.module)
+    nogen = not a.generated and not a.path  # --path 로 생성 코드를 일부러 가리키면 따른다
+    rows, more, _ = ix.refs_page(s["id"], mask, a.limit, a.cursor, a.path, a.module, nogen)
+    parts = ix.ref_parts(s["id"], mask, a.path, a.module, nogen)
     total = sum(n for _, n in parts)
+    gen = sum(n for _, n in ix.ref_parts(s["id"], mask, a.path, a.module)) - total if nogen else 0
     names = ix.names({r["container"] for r in rows})
     filt = " ".join(x for x in (f"--kind {a.kind}" if a.kind else "", f"--path {a.path}" if a.path else "",
                                 f"--module {a.module}" if a.module else "") if x)
-    summary = [f"참조 {total}{part_text(parts)}" + (f" · 필터 {filt}" if filt else "")]
+    summary = [f"참조 {total}{part_text(parts)}" + (f" · 필터 {filt}" if filt else "")
+               + (f" · 생성 코드(.gen.cpp · Intermediate) {gen}개는 뺐다 — 보려면 --generated" if gen else "")]
     if not (a.path or a.module) and total:
-        mods, n_mod, approx = ix.modules(s["id"], 6)
+        mods, n_mod, approx = ix.modules(s["id"], 6, nogen)
         if mods:
             summary.append(f"사용 모듈 {n_mod}{'+' if approx else ''}: " + " · ".join(f"{m or '(모듈 없음)'} {n}" for m, n in mods)
                            + (" …" if n_mod > len(mods) else ""))
@@ -1816,17 +1851,20 @@ def cmd_query(a, root, kind):
     s, others = pick_one(ix, arg, kinds)
     if s is None:
         return 1
-    head = [f"# {fmt(s)}"] + ([f"# 같은 이름 후보 {len(others)}개 더 — A::B 로 좁힌다"] if others else [])
+    head = [f"# {fmt(s)}"] + ([others_line(s, others)] if others else [])
     lc = LineCache()
     if c == "refs":
         return refs_report(ix, s, head, a, lc)
     elif c == "callers":
-        sites = ix.caller_sites(s["id"], a.limit)
-        n_call = ix.callers_total(s["id"])
-        uses = ix.ref_parts(s["id"], REF)
+        nogen = not a.generated
+        sites = ix.caller_sites(s["id"], a.limit, nogen)
+        n_call = ix.callers_total(s["id"], nogen)
+        gen = ix.callers_total(s["id"]) - n_call if nogen else 0
+        uses = ix.ref_parts(s["id"], REF, nogen=nogen)
         lines = [f"{n:>4}× {fmt(x)}\n       {site['path']}:{site['line']}  │ {lc.text(site['abs_path'], site['line'])}"
                  for x, n, site in sites]
-        summary = f"호출자 {n_call} · 사용 참조 {sum(n for _, n in uses)}{part_text(uses)} — 사용 수 순"
+        summary = (f"호출자 {n_call} · 사용 참조 {sum(n for _, n in uses)}{part_text(uses)} — 사용 수 순"
+                   + (f" · 생성 코드 호출자 {gen}개는 뺐다 — 보려면 --generated" if gen > 0 else ""))
         tail = ([f"[잘림] 호출자 상위 {len(sites)}/{n_call} · 더 보려면 --limit N · 좁히기: refs {arg} --module <모듈> | --path <경로 조각>"]
                 if n_call > len(sites) else [])
         emit(head + [summary] + (lines or ["없음"]), a.full, tail)
@@ -2541,6 +2579,8 @@ def main():
     ap.add_argument("--cursor", default=None, help="refs: 앞 출력의 [잘림] 줄에 있는 커서로 이어 본다")
     ap.add_argument("--path", default=None, help="refs: 경로 조각으로 좁힌다")
     ap.add_argument("--module", default=None, help="refs: 모듈로 좁힌다 (Build.cs 이름)")
+    ap.add_argument("--generated", action="store_true",
+                    help="refs · callers: 생성 코드(.gen.cpp · .generated.h · Intermediate)의 참조도 보인다 (기본은 뺀다)")
     ap.add_argument("--force", action="store_true", help="optimize: 이미 스키마 2 여도 다시 쓴다")
     ap.add_argument("--depth", type=int, default=0, help="bases·derived·overrides: 따라갈 단계 (0 = 끝까지)")
     ap.add_argument("--full", action="store_true")

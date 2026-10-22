@@ -57,14 +57,16 @@ def search_routing(root, engine, home=None):
     위키 0회 · grep 714회, game-onboard 0회(2026-10-20). 그래서 스킬을 거치지 않아도 바로 쓸 수 있게 한다."""
     home = Path(home) if home else Path.home()
     idx = root / ("Library" if engine.startswith("Unity") else "Saved") / "ClaudeIndex"
-    onboard = "python ~/.claude/skills/game-onboard/scripts"
+    # 절대 경로: PowerShell 은 python 인자의 ~ 를 풀지 않는다
+    onboard = f"python {(home / '.claude' / 'skills' / 'game-onboard' / 'scripts').as_posix()}"
     wiki = home / ".jokate-wiki" / root.name
     out = []
     if (idx / "symbols.json").is_file():
         out.append(f"- 어디에 있나 (클래스 · 함수 · 애셋 · 문서) → `{onboard}/gq.py find <이름>` · 심볼 좌표 `gq.py sym <이름>`")
     if (idx / "clangd.sqlite").is_file():
-        out.append(f"- 누가 부르나 · 누가 재정의하나 · 바꾸면 어디가 영향받나 → `{onboard}/cindex.py callers <심볼>` · "
-                   "`derived <클래스>` · `impact <심볼>` (clangd 의미 인덱스, 컴파일 기준 — grep 으로 추측하지 않는다)")
+        out.append(f"- 클래스 · 함수 · 구조체 이름을 grep 하기 전에: 쓰는 곳 `{onboard}/cindex.py refs <심볼>` · "
+                   "누가 부르나 `cindex.py callers <심볼>` · 파생 `derived <클래스>` · 바꾸면 영향 `impact <심볼>` "
+                   "(clangd 의미 인덱스, 컴파일 기준 — 주석 · 문자열 · 같은 이름이 안 섞이고 생성 코드는 빠진다. grep 으로 추측하지 않는다)")
     if (wiki / "index.md").is_file():
         out.append(f"- 시스템 구조 · 기획 사양 · 결정 → 위키 `{wiki.as_posix()}/index.md` 부터 (wiki-query 스킬)")
     if not out:
