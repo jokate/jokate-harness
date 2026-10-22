@@ -376,17 +376,28 @@ INDEXED_RE = re.compile(r"Indexed (.+?) \(\d+ symbols")
 ENQUEUE_RE = re.compile(r"Enqueueing (\d+) commands for indexing")
 
 
-def run_background_index(clangd, cdb_dir, open_file, jobs=0, log_path=None, timeout=None, quiet=0.5, enqueue_wait=300):
+def low_priority_kwargs():
+    """clangd 프로세스를 낮은 우선순위로 — 에디터 · 컴파일러가 CPU 를 먼저 쓰고 색인은 남는 만큼만 쓴다.
+    스레드의 I/O 우선순위까지 낮추는 clangd 자체 옵션(--background-index-priority=low)은 너무 느려 쓰지 않는다."""
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x4000)}
+    return {"preexec_fn": lambda: os.nice(10)}
+
+
+def run_background_index(clangd, cdb_dir, open_file, jobs=0, log_path=None, timeout=None, quiet=0.5, enqueue_wait=300,
+                         low_priority=False):
     """clangd --background-index 를 LSP 로 띄워 색인이 끝날 때까지 기다리고 닫는다.
     순서: initialize(window.workDoneProgress) → initialized → didOpen(아무 파일) → 서버의 progress create 요청에 null 응답
           → $/progress 'backgroundIndexProgress' begin/report/end → shutdown/exit.
-    didOpen 이 없으면 CDB 를 읽지 않아 아무것도 색인하지 않는다 (실험실 확인). 반환: 걸린 시간·색인한 TU·큐에 넣은 수."""
+    didOpen 이 없으면 CDB 를 읽지 않아 아무것도 색인하지 않는다 (실험실 확인). 반환: 걸린 시간·색인한 TU·큐에 넣은 수.
+    low_priority: 프로세스 우선순위를 낮춘다(low_priority_kwargs)."""
     args = [str(clangd), "--background-index", "--log=info", f"--compile-commands-dir={cdb_dir}",
             "--background-index-priority=normal"]  # Windows 의 기본(low)은 스레드를 백그라운드 모드(I/O 우선순위↓)로 둔다
     if jobs:
         args.append(f"-j={jobs}")
     t0 = time.time()
-    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(cdb_dir))
+    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(cdb_dir),
+                         **(low_priority_kwargs() if low_priority else {}))
     events, indexed, state = queue.Queue(), [], {"enqueued": None, "enq_at": None, "failed": []}
     log = open(log_path, "w", encoding="utf-8", errors="replace") if log_path else None
 

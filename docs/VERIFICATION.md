@@ -634,6 +634,16 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 - MNYS(로컬 파일만, git 제외 목록): `.claude/session_start.json` 에서 gq 색인 뺌, `CLAUDE.local.md` 라우팅 절을 한 줄 안내로(백업 `~/.claude/cache/game-harness/mnys-*.bak-20261022`). 항상 글 하네스 몫 8,194 B → 6,935 B.
 - 시험: 파이썬 전부 · 모니터 mod 13. 못 한 것: 대화형 세션의 효과(다음 MNYS 세션들), 스킬 사례를 Z 로 다시 돌리지 않음(라우팅은 Y 와 같다), 과제 수가 적어 ±0.05 재현율 차이는 잡음.
 
+## 2026-10-22 (3) — 큰 프로젝트에서 느림: 배경 색인을 조용히 · 하나만
+
+- 사용자: "프로젝트가 크니까 한번 읽는데 오래 걸린다 — 다른 곳에서 쓰는데 느린 것 같다".
+- 이 PC(MNYS)에서 잰 것: 세션 시작 game_context 1.0초 · session_start 2.0초(mnys_q 1.2 · wq drift 0.7) · evidence roots 0.8초, cindex 조회 0.1~0.4초, 정답지 과제 한 질문 평균 40초(그중 모델 응답 35초 · 10.8턴). 느린 곳 없음 — 다른 PC 의 큰 프로젝트는 못 쟀다.
+- 큰 프로젝트에서 느려질 곳: 위키 하네스의 세션 시작 훅이 소스가 인덱스보다 새로우면 `cindex.py build --mode bg` 를 띄우는데, clangd 가 코어 전부 · 보통 우선순위로 돌았고(헤더 하나 바꾸면 그것을 포함한 TU 전부 재색인), 세션을 열 때마다 또 띄울 수 있었다(잠금 없음).
+- `cindex.py build --mode bg`: 기본은 조용히 — `-j` 코어 절반, clangd 프로세스 BELOW_NORMAL(POSIX nice 10). 스레드 I/O 까지 낮추는 clangd 자체 옵션(low)은 너무 느려 그대로 normal. `--fast` 면 예전처럼 전부. 프로젝트마다 `bg.lock`(pid · 시각) — 살아 있는 색인이 있으면 이번 실행은 바로 끝난다(12시간 넘은 잠금 · 죽은 pid 는 넘어간다). Windows 에서 pid 확인은 OpenProcess — `os.kill(pid, 0)` 은 Windows 에서 프로세스를 끝내므로 쓰지 않는다. `index_build.bat`(사람이 기다림)은 `index_all.py --fast`.
+- 확인: MNYS 에서 띄우니 clangd PriorityClass BelowNormal · -j 8(16코어), 그동안 두 번째 실행은 "이미 배경 색인 중 … 건너뛴다".
+- 재 보니 더 큰 낭비: 바뀐 파일 0 인데도 한 번에 약 70초 — clangd 13초, 나머지는 DB(심볼 33.7만 · 참조 214만)를 처음부터 다시 쓰기. 샤드가 하나도 바뀌지 않았으면(새로 쓴 샤드 · 지운 샤드 없음, 모든 샤드가 DB 보다 오래됨) DB 를 다시 쓰지 않고 시각만 올린다(안 올리면 세션 시작 훅이 매번 다시 띄운다) → 같은 상황 8.7초. `--force` 면 다시 쓴다. 시험 test_cindex_lock 6.
+- 남은 것: 파일 몇 개만 바뀌어도 DB 는 전체를 다시 쓴다(MNYS 약 55초, 큰 프로젝트는 그 배수). 바뀐 샤드의 파일만 갈아 끼우는 증분 적재는 요약 표(sym_stats · sym_callers · sym_modules)도 다시 계산해야 해서 따로 한다.
+
 ## 반영된 것 (누적)
 
 - `evidence.py roots` + 커밋이 적으면 게임 소스가 가장 많은 하위 저장소 안내 (게임 소스 0 인 저장소는 제외)
