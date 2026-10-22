@@ -47,12 +47,9 @@ const project = atom({ plugin: 'game-harness-monitor', key: 'project' } as const
 
 const LABELS: Record<string, string> = {
   'context.routing': '세션 라우팅 주입',
-  'handoff.inject': 'HandOff 주입',
-  'handoff.write': 'HandOff 작성',
   'stuck.warn': '매몰 경고',
   'mcp.guard': 'MCP 가드 경고',
   'mcp.call': 'MCP 호출 기록',
-  'diagram.render': '그림 렌더 (브라우저)',
 }
 
 const PREFIXES: [string, string][] = [

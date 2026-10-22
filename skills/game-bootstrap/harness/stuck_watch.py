@@ -8,7 +8,7 @@
 범위: 게임 프로젝트(UE / Unity, game_context.detect)에서만 돈다. edit 은 코드 파일(CODE_EXT)만 센다 — 문서를 고쳐 쓰는 것은 매몰이 아니다.
   (2026-10-14 기준 10일간 경고 514건 중 473건이 게임이 아닌 릴레이 작업 폴더, 나머지 대부분이 문서 반복 수정이었다.)
 상태: ~/.claude/cache/stuck/<session_id>.json
-반복이 없는 방향 이탈은 못 잡는다. 그건 사람이 [RESET] 으로 건다 (handoff.py).
+반복이 없는 방향 이탈은 못 잡는다. 그건 사람이 본다 — 멈추고 /clear 로 새로 시작한다.
 어떤 경우에도 도구 호출을 막지 않는다.
 """
 import json
@@ -101,7 +101,7 @@ def main():
     path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
     if hits:
-        msg = "[매몰 신호] " + " · ".join(hits) + ". 방향이 맞는지 확인하고, 아니면 [RESET]."
+        msg = "[매몰 신호] " + " · ".join(hits) + ". 방향이 맞는지 확인하고, 아니면 멈추고 /clear 로 새로 시작."
         out = {"systemMessage": msg,
                "hookSpecificOutput": {
                    "hookEventName": event,

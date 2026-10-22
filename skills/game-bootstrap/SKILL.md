@@ -17,7 +17,7 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 | 0 | game-bootstrap | 세팅 (이 스킬) |
 | 1 | game-onboard | 엔진·프로젝트 파악 (gq.py, ue_q.py) |
 | 1 | game-design-doc | 기획서 → 사양 표 → 구현 대응·어긋남 보고 |
-| 2 | game-architecture / game-patterns | 구현 전 구조 조사와 근거 / 패턴 카탈로그 |
+| 2 | game-architecture | 구현 전 구조 조사와 근거 · 패턴 카탈로그(references/patterns, 옛 game-patterns) |
 | 3 | game-testing | 검증 기준과 테스트 |
 | 4 | game-mcp | 에디터 MCP 운용 |
 
@@ -42,9 +42,11 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 | SessionStart | `session_start.py` | `.claude/session_start.json` (없으면 아무것도 안 함) |
 | SessionStart | `game_context.py` | 없음 — `.uproject`/Unity 프로젝트면 엔진·소스 저장소·스킬 라우팅 주입 |
 | PreToolUse `mcp__.*` | `mcp_guard.py` | `.claude/mcp_guards.json` (없으면 아무것도 안 함) |
-| PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl` |
+| PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl`. 실패는 `.claude/mcp_guards.pending.json` 에 가드 규칙 후보로 모은다 |
+| PostToolUse(+Failure) `Edit\|Write\|…\|Bash\|PowerShell` | `stuck_watch.py` | `.claude/stuck_watch.json` (임계값, 없으면 기본) — 게임 프로젝트에서 같은 코드 파일 반복 수정 · 셸 연속 실패를 경고 |
 | PostToolUse(+Failure) `Skill\|Bash\|PowerShell` | `harness_trace.py` | 없음 — game-* 스킬·하네스 조회 스크립트 호출을 `~/.claude/cache/game-harness/events.jsonl` 에 기록 |
-| Stop | `diagram_view.py` | 없음 — 게임 프로젝트에서 답변에 mermaid 블록이 있거나 이번에 저장한 구조 문서(ClaudeArch/*.md)의 HTML 이 없으면 렌더해 연다 — 요약 · 그림 먼저, 나머지는 접기 (대화창은 mermaid 를 그리지 않는다) |
+
+뺀 훅(2026-10-22, 15일 0회 동작): `handoff.py`([RESET] 인계) · `diagram_view.py`(Stop 그림 열기). `install.py` 가 등록과 파일을 지운다.
 
 훅들은 `harness_events.py`(같은 폴더)로 "어떤 기능이 동작했는가"를 남긴다. 그 로그를 모니터 mod(`mods/game-harness-monitor`)와 인덱스 웹뷰 하네스 탭이 읽는다.
 
