@@ -70,6 +70,28 @@ class DropObsolete(unittest.TestCase):
                          ["session_start.py", "game_context.py"])
         self.assertEqual(hooks["Stop"][0]["hooks"], [other])  # 하네스 것이 아닌 handoff.py 는 둔다
 
+    def test_plain_install_also_drops_the_registration(self):
+        """install.bat(--apply-settings 없음)도 등록을 지운다 — 파일만 치우면 프롬프트마다 오류가 떴다(2026-10-23)."""
+        with tempfile.TemporaryDirectory() as d:
+            claude, saved = Path(d) / ".claude", install.CLAUDE
+            (claude / "hooks").mkdir(parents=True)
+            cmd = f"python {claude / 'hooks' / 'handoff.py'}"
+            keep = {"type": "command", "command": f"python {claude / 'hooks' / 'game_context.py'}"}
+            settings = {"model": "x", "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": cmd}]}],
+                                                "SessionStart": [{"hooks": [keep]}]}}
+            (claude / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+            install.CLAUDE = claude
+            try:
+                self.assertTrue(install.drop_obsolete_settings(dry=False))
+                got = json.loads((claude / "settings.json").read_text(encoding="utf-8"))
+                self.assertEqual(got, {"model": "x", "hooks": {"SessionStart": [{"hooks": [keep]}]}})
+                self.assertTrue((claude / "settings.json.bak").is_file())
+                self.assertTrue(install.drop_obsolete_settings(dry=False))  # 두 번째는 할 일 없음
+                (claude / "settings.json").write_text("{ broken", encoding="utf-8")
+                self.assertFalse(install.drop_obsolete_settings(dry=False))  # 못 읽으면 False → 뺀 훅 파일을 둔다
+            finally:
+                install.CLAUDE = saved
+
     def test_snippet_has_no_obsolete(self):
         text = json.dumps(install.settings_snippet())
         for name in install.OBSOLETE_HOOKS:

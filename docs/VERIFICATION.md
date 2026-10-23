@@ -679,6 +679,14 @@ clangd 로그: `cannot not open file '"C:/…/X.cpp.obj.rsp"': invalid argument`
 `## 답변 길이` 를 `## 답변` 으로 합치고 첫 줄에 "한국어로만 쓴다(영어 자료를 읽은 뒤에도)." 를 넣었다(61 B). 늘 들어가는 글 하네스 몫 6,935 → 6,979 B / 7,000 B
 (제목 · "답변은 " 을 줄여 17 B 를 되찾았다). 이 PC 는 `install.py --no-tools` 로 전역 CLAUDE.md 구간을 갱신했다. 대화형 세션에서 실제로 덜 기우는지는 아직 안 봤다.
 
+## 2026-10-23 (2) — 뺀 훅 등록이 남아 프롬프트마다 오류 (`install.py`)
+
+다른 PC: `can't open file '...\.claude\hooks\handoff.py'`. 원인: `install_hooks` 는 뺀 훅 파일을 늘 `.removed` 로 치우는데,
+settings.json 의 등록을 지우는 `drop_obsolete` 는 `--apply-settings` 일 때만 돌았다 — `install.bat`(그 플래그 없음)으로 업데이트하면
+파일만 없어지고 등록이 남는다. 고침: `drop_obsolete_settings` 가 플래그와 상관없이 하네스 등록만 지우고(.bak 남김, 훅 추가는 안 함),
+settings.json 을 못 읽으면 뺀 훅 파일을 그대로 둔다. 시험: `test_hook_scope.py` `test_plain_install_also_drops_the_registration`.
+그 PC 의 즉시 해결은 지금 main 으로도 `install.bat --apply-settings`.
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음

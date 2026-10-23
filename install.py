@@ -73,7 +73,9 @@ def install_skills(a):
             shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
 
 
-def install_hooks(a):
+def install_hooks(a, drop_files=True):
+    """훅을 ~/.claude/hooks 로. 뺀 훅(OBSOLETE_HOOKS)의 파일은 drop_files 일 때만 <이름>.removed 로 —
+    settings.json 의 등록을 지우지 못했으면 파일을 둔다(등록만 남고 파일이 없으면 세션마다 오류가 뜬다)."""
     dst_root = CLAUDE / "hooks"
     dst_root.mkdir(parents=True, exist_ok=True)
     for name in HOOKS + LIBS:
@@ -90,7 +92,7 @@ def install_hooks(a):
             if dst.exists():
                 shutil.copy2(dst, str(dst) + ".bak")
             shutil.copy2(src, dst)
-    for name in OBSOLETE_HOOKS:
+    for name in OBSOLETE_HOOKS if drop_files else []:
         dst = dst_root / name
         if dst.exists():
             print(f"  x {name} (뺀 훅 — {name}.removed 로)")
@@ -232,6 +234,31 @@ def drop_obsolete(hooks):
     return removed
 
 
+def drop_obsolete_settings(dry):
+    """settings.json 에서 뺀 훅의 하네스 등록만 지운다 — --apply-settings 없이도 (훅 추가는 하지 않는다).
+    2026-10-23: install.bat(--apply-settings 없음)로 업데이트한 PC 에서 handoff.py 파일은 치웠는데 등록이 남아
+    프롬프트마다 "can't open file ...handoff.py" 가 떴다. 반환: 등록을 정리했거나 정리할 것이 없으면 True,
+    settings.json 을 읽지 못했으면 False (그때는 뺀 훅 파일도 그대로 둔다)."""
+    path = CLAUDE / "settings.json"
+    if not path.exists():
+        return True
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"  ! settings.json 을 읽지 못했다 ({e}) — 뺀 훅({', '.join(OBSOLETE_HOOKS)})의 등록을 직접 지운다.")
+        return False
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return True
+    removed = drop_obsolete(hooks)
+    if removed:
+        print("  x settings.json 에서 뺀 훅 등록:", ", ".join(removed))
+        if not dry:
+            shutil.copy2(path, str(path) + ".bak")
+            path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
 def mod_paths():
     return [str(CLAUDE / "mods" / d.name) for d in mod_dirs()]
 
@@ -304,7 +331,7 @@ def main():
     install_skills(a)
     remove_obsolete_skills(a)
     print("훅 →", CLAUDE / "hooks")
-    install_hooks(a)
+    install_hooks(a, drop_files=drop_obsolete_settings(a.dry_run))
     print("mod →", CLAUDE / "mods", "(하네스 모니터: Claude Code 함수 훅 플러그인)")
     install_mods(a)
     print("공용 규칙 →", CLAUDE / "CLAUDE.md")
