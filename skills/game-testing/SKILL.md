@@ -1,6 +1,6 @@
 ---
 name: game-testing
-description: 게임 프로젝트(UE / Unity)의 검증 기준과 테스트 문서를 정하고, 자동 테스트를 작성·실행한다. 구현 계획을 세울 때 "무엇으로 확인하나"를 먼저 정해야 할 때, "테스트 짜줘", "검증해줘", "이거 동작 확인", "테스트 문서", "QA 체크리스트", "Automation Test", "Functional Test", "Unity Test Framework", "EditMode/PlayMode 테스트", "헤드리스로 돌려" 같은 요청에 쓴다. 검증하지 않은 것을 동작한다고 쓰지 않게 하는 것이 목적이다.
+description: 게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, 테스트 문서, 자동 테스트 작성 · 헤드리스 실행(UE Automation · Unity EditMode/PlayMode), 원인 모를 버그는 재현 고리부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". 검증 안 한 것을 동작한다고 쓰지 않게 한다.
 ---
 
 # game-testing — 검증 기준을 구현보다 먼저
