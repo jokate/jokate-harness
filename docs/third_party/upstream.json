@@ -1,0 +1,34 @@
+{
+  "_description": "하네스가 빌려 온 바깥 스킬의 원본과 옮긴 곳. tools/upstream_check.py 가 설치된 플러그인(자동 업데이트)과 아래 사본을 비교한다. 원본이 바뀌면 옮긴 곳을 검토하고 --accept 로 사본을 올린다.",
+  "sources": [
+    {
+      "name": "mattpocock-skills",
+      "repo": "https://github.com/mattpocock/skills",
+      "plugin": "mattpocock-skills@claude-plugins-official",
+      "version": "1.3.1",
+      "commit": "49dd158d1076134a641b33efb035946536778336",
+      "license": "docs/third_party/mattpocock-skills-LICENSE",
+      "snapshot": "docs/third_party/mattpocock-skills",
+      "borrowed": [
+        {"upstream": "skills/engineering/tdd/SKILL.md",
+         "into": ["skills/game-testing/SKILL.md", "skills/game-testing/references/good-tests.md"],
+         "what": "테스트 위치를 먼저 정한다 · 한 번에 한 조각 · 나쁜 모양(구현에 묶임 · 동어반복 · 가로 자르기)"},
+        {"upstream": "skills/engineering/tdd/tests.md",
+         "into": ["skills/game-testing/references/good-tests.md"],
+         "what": "좋은 테스트 · 옆길로 확인하는 테스트"},
+        {"upstream": "skills/engineering/tdd/mocking.md",
+         "into": ["skills/game-testing/references/good-tests.md"],
+         "what": "목은 바깥 경계에만"},
+        {"upstream": "skills/engineering/diagnosing-bugs/SKILL.md",
+         "into": ["skills/game-testing/SKILL.md", "skills/game-testing/references/debugging.md"],
+         "what": "재현 고리 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리"},
+        {"upstream": "skills/engineering/codebase-design/SKILL.md",
+         "into": ["skills/game-architecture/SKILL.md"],
+         "what": "과설계 가드: 지우기 시험 · 구현체 하나면 가짜 경계"},
+        {"upstream": "skills/productivity/grilling/SKILL.md",
+         "into": ["skills/game-architecture/SKILL.md"],
+         "what": "질문 쓰는 법: 사실은 직접 찾는다 · 지금 답할 수 있는 질문만"}
+      ]
+    }
+  ]
+}
