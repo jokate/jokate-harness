@@ -353,6 +353,12 @@ def main():
               os.pathsep.join(mod_paths()))
     else:
         print("\nsettings.json 훅 등록 확인됨.")
+    try:  # 빌려 온 바깥 스킬의 원본이 업데이트됐는지 (docs/UPSTREAM.md) — 실패해도 설치는 끝난다
+        sys.path.insert(0, str(REPO / "tools"))
+        import upstream_check
+        print("\n" + "\n".join(upstream_check.summary(upstream_check.check())))
+    except Exception:
+        pass
     print("\n다음: 프로젝트에서 Claude Code 를 열고 /game-bootstrap")
     return 0
 

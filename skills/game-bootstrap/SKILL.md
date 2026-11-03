@@ -1,6 +1,6 @@
 ---
 name: game-bootstrap
-description: 새 게임 프로젝트(UE / Unity)에 Claude 작업 환경을 세팅한다 — 협업 규칙 CLAUDE.md, 프로젝트 인덱스 자동 갱신, MCP 가드, 하네스(훅) 점검. 사용자가 /game-bootstrap 으로 직접 부를 때만 쓴다.
+description: 새 게임 프로젝트(UE / Unity)에 Claude 작업 환경 세팅 — CLAUDE.md · 인덱스 자동 갱신 · MCP 가드 · 훅 점검. /game-bootstrap 으로만 부른다.
 disable-model-invocation: true
 argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 ---

@@ -687,6 +687,34 @@ settings.json 의 등록을 지우는 `drop_obsolete` 는 `--apply-settings` 일
 settings.json 을 못 읽으면 뺀 훅 파일을 그대로 둔다. 시험: `test_hook_scope.py` `test_plain_install_also_drops_the_registration`.
 그 PC 의 즉시 해결은 지금 main 으로도 `install.bat --apply-settings`.
 
+## 2026-10-27 — Matt Pocock 스킬에서 빌려 오기 (`docs/UPSTREAM.md`)
+
+사용자: mattpocock/skills 와 하네스가 비슷한 듯 다르니, 더 좋게 만들 부분은 빌려 와서 합치자. 그 사람의 업데이트도 계속 받고 싶다.
+- **겹침 실측:** 먼저 플러그인(`mattpocock-skills@claude-plugins-official`, 사용자 범위)을 깔고 MNYS 사본에서 겹치는 요청을 돌렸다(Sonnet 15회, $4.9).
+  - 하네스 스킬이 먼저 불렸다: game-testing 2/2, game-architecture 4/4, 버그 원인은 wiki-query 2/2.
+  - tdd 가 끼어든 것은 '테스트 먼저 버그 수정' 1/2 뿐이다(뒤에 game-testing 이 불렸다).
+  - 권한 거부 `Skill(mattpocock-skills:tdd)` 로 스킬 하나만 막을 수 있다.
+- **옮긴 것(설명 줄은 그대로, 본문 · 참고 문서만):**
+  - game-testing: 테스트 위치를 먼저 정한다, 한 번에 한 조각, 동어반복 금지(기대값은 기획서 예시에서) — `references/good-tests.md`.
+  - game-testing: 원인 모를 버그 순서 — `references/debugging.md`. 하네스에 디버깅 안내가 없었다.
+  - game-architecture: 과설계 가드에 지우기 시험과 '구현체 하나면 가짜 경계', 질문 쓰는 법에 '사실은 직접 찾는다 · 지금 답할 수 있는 질문만'.
+- **업데이트를 놓치지 않게:** 원본 사본(`docs/third_party/mattpocock-skills/`, 1.3.1 · 49dd158)과 대응표(`upstream.json`)를 두었다.
+  `tools/upstream_check.py` 가 자동 업데이트되는 설치본과 비교해 다시 볼 곳을 알리고, install.py 끝에도 한 줄 낸다. MIT 전문은 `docs/third_party/`.
+- **시험:** `test_upstream_check.py` 5개(플러그인 없음 · CRLF 무시 · 바뀜 → accept · 원본 삭제 · 저장소 대응표). 기존 시험 전부 통과.
+  하네스 몫 항상 글은 7,094 B 로 변화 없다(이미 7,000 B 를 넘어 있었다).
+- **안 본 것:** 바뀐 본문이 실제 세션에서 테스트 · 질문 모양을 바꾸는지.
+
+## 2026-10-27 (2) — 빌려 오기 2단계 · 추천 붙이기 · 설명 줄 정리
+
+사용자: 적용할 수 있는 부분은 다 적용하자. 추천은 붙이되 고르는 건 나, 설명 줄 다듬기도 이번에 같이.
+- **옮긴 것:** prototype · improve-codebase-architecture · code-review · codebase-design(DEEPENING · DESIGN-IT-TWICE) → game-architecture references 4개(`prototype` · `scan` · `interface-design` · `review`).
+  domain-modeling → game-design-doc `references/terms.md`. writing-for-agents → `docs/WRITING.md`. 원본 사본 19개 · 대응표는 `docs/UPSTREAM.md`.
+- **추천:** 선택지 표 · 질문 표 · 후보 표 · 인터페이스 비교 아래에 `추천: X — 이유`. 5절에서 멈추는 것은 그대로다. 평가 케이스 3개를 `추천\s*[:：]` 확인으로 바꿨다.
+- **설명 줄:** 6개 합 3,537 → 2,377 B, 하네스 몫 7,094 → 5,934 B(한도 7,000 B 안으로).
+  대조(MNYS 사본, Sonnet, 요청마다 1회): 전 13/14 + 2/2, 뒤 15/15. "프로토타입으로 확인"이 플러그인 prototype → game-architecture 로 돌아왔다. bootstrap 요청 1건은 사용량 한도(429)로 무효. 비용 약 $7.2.
+- **정정:** 이 PC 의 `~/.claude/skills/game-*` 는 저장소로 가는 연결 폴더(junction)라, 고친 내용은 install.bat 없이 바로 반영된다.
+- **안 본 것:** 1회 대조라 흔들림은 모른다. 새 references 4개가 실제 세션에서 끝까지 따라가지는지.
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음

@@ -1,0 +1,159 @@
+{
+  "_description": "하네스가 빌려 온 바깥 스킬의 원본과 옮긴 곳. tools/upstream_check.py 가 설치된 플러그인(자동 업데이트)과 아래 사본을 비교한다. 원본이 바뀌면 옮긴 곳을 검토하고 --accept 로 사본을 올린다.",
+  "sources": [
+    {
+      "name": "mattpocock-skills",
+      "repo": "https://github.com/mattpocock/skills",
+      "plugin": "mattpocock-skills@claude-plugins-official",
+      "version": "1.3.1",
+      "commit": "49dd158d1076134a641b33efb035946536778336",
+      "license": "docs/third_party/mattpocock-skills-LICENSE",
+      "snapshot": "docs/third_party/mattpocock-skills",
+      "borrowed": [
+        {
+          "upstream": "skills/engineering/tdd/SKILL.md",
+          "into": [
+            "skills/game-testing/SKILL.md",
+            "skills/game-testing/references/good-tests.md"
+          ],
+          "what": "테스트 위치를 먼저 정한다 · 한 번에 한 조각 · 나쁜 모양(구현에 묶임 · 동어반복 · 가로 자르기)"
+        },
+        {
+          "upstream": "skills/engineering/tdd/tests.md",
+          "into": [
+            "skills/game-testing/references/good-tests.md"
+          ],
+          "what": "좋은 테스트 · 옆길로 확인하는 테스트"
+        },
+        {
+          "upstream": "skills/engineering/tdd/mocking.md",
+          "into": [
+            "skills/game-testing/references/good-tests.md"
+          ],
+          "what": "목은 바깥 경계에만"
+        },
+        {
+          "upstream": "skills/engineering/diagnosing-bugs/SKILL.md",
+          "into": [
+            "skills/game-testing/SKILL.md",
+            "skills/game-testing/references/debugging.md"
+          ],
+          "what": "재현 고리 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리"
+        },
+        {
+          "upstream": "skills/engineering/codebase-design/SKILL.md",
+          "into": [
+            "skills/game-architecture/SKILL.md",
+            "skills/game-architecture/references/interface-design.md",
+            "skills/game-architecture/references/scan.md"
+          ],
+          "what": "과설계 가드: 지우기 시험 · 구현체 하나면 가짜 경계 · 구조 말(깊이 · 경계 · leverage · locality)"
+        },
+        {
+          "upstream": "skills/productivity/grilling/SKILL.md",
+          "into": [
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "질문 쓰는 법: 사실은 직접 찾는다 · 지금 답할 수 있는 질문만 · 질문마다 추천 답(\"예\" 면 수락)"
+        },
+        {
+          "upstream": "skills/engineering/prototype/SKILL.md",
+          "into": [
+            "skills/game-architecture/references/prototype.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "버리는 프로토타입: 질문 하나 · 버릴 표시 · 상태 보이기 · 끝나면 판정만 남김"
+        },
+        {
+          "upstream": "skills/engineering/prototype/LOGIC.md",
+          "into": [
+            "skills/game-architecture/references/prototype.md"
+          ],
+          "what": "규칙 · 상태 갈래: HTML 한 장 · 순수 모듈 · 시나리오 탭"
+        },
+        {
+          "upstream": "skills/engineering/prototype/UI.md",
+          "into": [
+            "skills/game-architecture/references/prototype.md"
+          ],
+          "what": "느낌 · 화면 갈래: 구조가 다른 변형 3개를 바꿔 가며(엔진 안 CVar 로)"
+        },
+        {
+          "upstream": "skills/engineering/improve-codebase-architecture/SKILL.md",
+          "into": [
+            "skills/game-architecture/references/scan.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "구조 점검: 범위 먼저 · 마찰 찾기 · 후보 표 · 추천 · 고른 뒤 진행"
+        },
+        {
+          "upstream": "skills/engineering/improve-codebase-architecture/HTML-REPORT.md",
+          "into": [
+            "skills/game-architecture/references/scan.md"
+          ],
+          "what": "후보마다 전 · 후 그림 (하네스는 render.py · diagram-design 으로)"
+        },
+        {
+          "upstream": "skills/engineering/codebase-design/DEEPENING.md",
+          "into": [
+            "skills/game-architecture/references/interface-design.md"
+          ],
+          "what": "의존 4종류 · 경계 규율 · 바꿔 끼우는 테스트"
+        },
+        {
+          "upstream": "skills/engineering/codebase-design/DESIGN-IT-TWICE.md",
+          "into": [
+            "skills/game-architecture/references/interface-design.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "두 번 설계: 다른 제약의 서브에이전트 3안 비교 · 추천"
+        },
+        {
+          "upstream": "skills/engineering/code-review/SKILL.md",
+          "into": [
+            "skills/game-architecture/references/review.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "구현 후 리뷰: 규칙 축 · 사양 축 서브에이전트 · 냄새 기준선"
+        },
+        {
+          "upstream": "skills/engineering/domain-modeling/SKILL.md",
+          "into": [
+            "skills/game-design-doc/references/terms.md",
+            "skills/game-design-doc/SKILL.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "용어집 지키기 · 어긋나면 바로 짚기 · 결정 기록은 세 조건일 때만"
+        },
+        {
+          "upstream": "skills/engineering/domain-modeling/GLOSSARY-FORMAT.md",
+          "into": [
+            "skills/game-design-doc/references/terms.md"
+          ],
+          "what": "용어집 항목 모양: 뜻 · 아닌 것"
+        },
+        {
+          "upstream": "skills/engineering/domain-modeling/ADR-FORMAT.md",
+          "into": [
+            "skills/game-design-doc/references/terms.md"
+          ],
+          "what": "결정 노트 모양"
+        },
+        {
+          "upstream": "skills/productivity/writing-for-agents/SKILL.md",
+          "into": [
+            "docs/WRITING.md"
+          ],
+          "what": "하네스 글쓰기: 두 짐 · 문맥 포인터 · 갈래당 촉발 하나 · 가지치기"
+        },
+        {
+          "upstream": "skills/productivity/writing-for-agents/SKILL-MECHANICS.md",
+          "into": [
+            "docs/WRITING.md"
+          ],
+          "what": "스킬 기계: 프런트매터 · 모델 호출 여부 · 라우터"
+        }
+      ]
+    }
+  ]
+}
