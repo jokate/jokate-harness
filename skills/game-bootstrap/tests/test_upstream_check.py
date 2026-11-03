@@ -74,6 +74,66 @@ class Check(unittest.TestCase):
         self.assertTrue((self.repo / "docs" / "third_party" / "p" / "skills" / "x" / "SKILL.md").is_file())
 
 
+class GitSource(unittest.TestCase):
+    """깔지 않는 원본(kind: git): --remote 일 때만 받아 비교, 네트워크가 안 되면 '확인 못 함'."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.repo = Path(self._td.name) / "repo"
+        snap = self.repo / "docs" / "third_party" / "g" / "core"
+        snap.mkdir(parents=True)
+        (snap / "a.md").write_text("a\nb\n", encoding="utf-8")
+        self.spec = self.repo / "docs" / "third_party" / "upstream.json"
+        self.spec.write_text(json.dumps({"sources": [{
+            "name": "g", "kind": "git", "repo": "https://github.com/o/g", "branch": "main", "version": "main@old",
+            "commit": "old0000", "snapshot": "docs/third_party/g",
+            "borrowed": [{"upstream": "core/a.md", "into": ["skills/game-testing/SKILL.md"], "what": "w"}]}]}),
+            encoding="utf-8")
+        self.remote = {"core/a.md": b"a\r\nb\r\n"}
+        self.calls = []
+
+    def fetch(self, repo, branch, path=None):
+        self.calls.append(path)
+        return "abcdef1234567" if path is None else self.remote.get(path)
+
+    def rows(self, remote=True, fetch=None):
+        return upstream_check.check(self.spec, home=self.repo, repo=self.repo, remote=remote, fetch=fetch or self.fetch)
+
+    def test_offline_by_default_no_network(self):
+        r = self.rows(remote=False)[0]
+        self.assertEqual((r["status"], self.calls), ("offline", []))
+        self.assertIn("--remote", upstream_check.summary([r])[0])
+
+    def test_same_ignores_line_endings(self):
+        r = self.rows()[0]
+        self.assertEqual(r["status"], "same")
+        self.assertIn("그대로", upstream_check.summary([r])[0])
+
+    def test_unreachable_is_not_same(self):
+        def down(*_a, **_k):
+            raise OSError("timed out")
+        r = self.rows(fetch=down)[0]
+        self.assertEqual(r["status"], "unreachable")
+        line = upstream_check.summary([r])[0]
+        self.assertIn("확인 못 함", line)
+        self.assertNotIn("그대로 (", line)
+
+    def test_changed_then_accept(self):
+        self.remote["core/a.md"] = b"a\nb\nc\n"
+        r = self.rows()[0]
+        self.assertEqual(r["changed"], [("core/a.md", ["skills/game-testing/SKILL.md"], "바뀜")])
+        self.assertIn("--remote", upstream_check.summary([r])[0])
+        self.assertEqual(upstream_check.accept([r], self.spec, self.repo), ["g"])
+        got = json.loads(self.spec.read_text(encoding="utf-8"))["sources"][0]
+        self.assertEqual((got["version"], got["commit"]), ("main@abcdef1", "abcdef1234567"))
+        self.assertEqual(self.rows()[0]["status"], "same")
+
+    def test_removed_upstream(self):
+        del self.remote["core/a.md"]
+        self.assertEqual(self.rows()[0]["changed"][0][2], "원본에서 사라짐")
+
+
 class RepoSpec(unittest.TestCase):
     """저장소의 대응표: 사본 · 옮긴 곳 · 라이선스가 실제로 있고, 옮긴 참고 문서는 출처를 밝힌다."""
 
@@ -89,6 +149,7 @@ class RepoSpec(unittest.TestCase):
                     if "/references/" in into:
                         text = p.read_text(encoding="utf-8")
                         self.assertIn("MIT", text, into)
+                        self.assertIn(s["name"], text, into)  # 어느 원본에서 왔는지
                         self.assertIn("docs/UPSTREAM.md", text, into)
 
 

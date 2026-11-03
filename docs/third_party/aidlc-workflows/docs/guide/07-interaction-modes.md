@@ -1,0 +1,337 @@
+# Interaction Modes
+
+AI-DLC provides three ways to interact with agents during stages, plus approval gates that keep you in control at every decision point.
+
+> **Harness note.** Gates and questions render differently per harness. Claude
+> Code uses its native question picker; Codex uses its picker when enabled.
+> Kiro, opencode, and GitHub Copilot render numbered-prose options (Copilot's
+> picker results do not fire the trusted human-presence event). The questions
+> file remains the source of truth. The *semantics* — when a gate fires, what
+> it asks, that you stay in control — are identical, since they live in the
+> engine. See [Running on other harnesses](harnesses/README.md).
+
+---
+
+## Tri-Mode Question Flow
+
+When a stage gathers your input, the agent writes its questions to a file and offers three interaction modes. You choose the one that suits you; later stages reuse that choice (see [Asked Once, Then Reused](#asked-once-then-reused)). From the run in [Getting Started](01-getting-started.md):
+
+```text
+ Answer mode
+ I've created 8 questions at
+ aidlc/spaces/default/intents/261013-inventory-rest-api/ideation/intent-capture/intent-capture-questions.md.
+ How would you like to answer them?
+ > 1. Guide me
+      Walk through each question interactively here
+   2. I'll edit the file
+      Fill in the answers in the file directly
+   3. Chat
+      Discuss freely; I'll extract the decisions from the conversation
+   4. Type something.
+   5. Chat about this
+```
+
+In a questions file the agent creates, each ordinary question names who would
+usually answer it, such as `[Product owner]` or `[Developer]`, and questions for
+the same person are kept together, unless one of them has to wait for another
+person's answer. A team can split the questions that way, and on your own you
+can see which are about what the product does and which about how it is built.
+Anyone can still answer any question. When the agent asks you one of these
+questions, in the chat or its question picker, the label comes in front of its
+text too. A question added later goes at the end with its own label. The
+confirmation, change-request and approval sections carry no label. A file that
+already existed keeps its questions as they were, unless you ask to redo the
+stage from scratch, which replaces it with a new one.
+
+### Guide Me
+
+The agent walks you through each question interactively using structured prompts. Best when you want the agent to lead the conversation and ensure nothing is missed.
+
+- Agent presents questions one at a time (or in batches)
+- You answer each question directly
+- Answers are recorded in the stage's questions file for traceability
+
+### Edit File
+
+The agent creates (or opens) the questions file and you edit it directly. Best when you already know what you want and prefer to write it down rather than answer questions.
+
+- The questions file appears in the intent's record dir with blank answer fields
+- You fill in answers at your own pace
+- The agent reads the completed file and proceeds
+
+### Chat
+
+Freeform conversation with the agent. Best for exploring ideas or when your requirements are not yet well-defined.
+
+- You discuss freely with the agent
+- The agent extracts decisions from the conversation
+- Extracted decisions are written back to the questions file as the source of truth
+
+### Switching Modes Mid-Stage
+
+You can switch between modes at any point during a stage. All three modes converge on the questions file as the canonical record of decisions. Switching does not lose progress — answers already captured remain in the file.
+
+### Asked Once, Then Reused
+
+You choose the mode once per piece of work: the first stage with questions asks,
+and later stages reuse your choice without asking again. Each of those stages
+still tells you, in one line, which mode it is using:
+
+```
+Answering the way you chose earlier: Guide me. Say if you'd rather edit the file or chat.
+```
+
+To change it, just say so ("let me edit the file this time"). The agent switches
+and later stages use your new choice. However you word your answer, the agent
+records the mode you meant, so you are not asked again because of the wording.
+
+---
+
+## Approval Gates
+
+Every stage (except the 3 Initialization stages) ends with an approval gate. This is your checkpoint to review the agent's work before the workflow advances. In Construction, the gates can come per Unit instead, and the ones you chose to let run automatically are recorded without a question (see [Phases and Stages](04-phases-and-stages.md#what-runs-in-order-and-what-runs-in-parallel)).
+
+### Standard Gate
+
+The default approval gate presents two options. From the same run:
+
+```text
+ Approval
+ Intent Capture & Framing complete. How would you like to proceed?
+ > 1. Approve
+      Continue to Feasibility & Constraints
+   2. Request Changes
+      Provide revision feedback
+   3. Type something.
+   4. Chat about this
+```
+
+The Approve line names the actual next stage the workflow will run (for example "Continue to NFR Requirements"), or "Complete workflow" on the final stage; the engine computes it, so it is always correct rather than a guess.
+
+- **Approve** reports the outcome; the engine marks the stage completed, updates
+  `aidlc-state.md`, shows a progress line, and advances to the next stage
+- **Request Changes** lets you provide specific feedback; the agent revises its work and re-presents the approval gate
+
+Answer in your own words, the way you would answer a colleague. You drive: the
+agent reads your reply and does what you said, at every question (this gate, the
+summary confirmation, a verification command, a Construction checkpoint, Plan
+Approval, and a recovery question). You never retype an option label or say the
+same thing twice:
+
+- `1`, `a` (where the options are lettered), `approved`, `looks good`, or
+  `aprove` all approve.
+- A change request is Request Changes, and your words are the feedback:
+  `rename the handler`, `no, split the tests`.
+- An approval with an instruction is both: `looks fine but rename the handler`
+  approves, the agent renames it and says so in one line ("Renamed
+  processOrder to handleOrder in 3 files"), and the work carries on.
+- An approval that also asks to stop for now approves and parks the workflow:
+  `Approve, but let's stop there for today`. `/aidlc --resume` picks it up later.
+- A question gets an answer, and your next reply decides.
+- Only a reply that is genuinely unclear (`hmm`, `not sure`) gets one short
+  question back.
+
+AI-DLC records gate, Plan Approval, checkpoint, verification-command, and
+Construction setting changes with your words beside them (`Person Reply` in
+the audit trail), as your harness passed them and trimmed. At a stage gate that
+is every message since the last decision and since the stage started, except one
+already recorded as your answer to another question, unless it is your latest: if one of
+them is over 8000 characters or no longer on record, none of them is attached
+and the row names the latest message instead, and a change request records the
+agent's `--reason`; at Plan Approval, your latest 8
+replies, each cut to 8000 characters; at a checkpoint or verification-command
+question, your replies joined in order, keeping the last 8000 characters; for a
+Construction setting you asked to change, the message that asked. The summary confirmation records the
+choice the agent read and, for a change request, what you asked to change. A
+decision needs a reply from you after the question was shown (at a stage gate,
+one since the stage started that the agent names as your answer counts too,
+such as an approval you gave at the learnings question, when you sent it after
+the stage's output was last written). The agent cannot answer for you.
+
+When you ask for changes at a stage gate, the audit trail records, as the
+revision feedback, the words your harness passed to the human-turn hook for
+your chat since the last decision, exactly as they arrived (except a message
+already recorded as your answer to another question, unless it is your latest),
+and the agent revises from what you asked for. If you picked Request Changes and then
+answered "What should change?", both are the feedback. When the agent's own summary of your request
+differs, it is kept beside your words as the `Conductor Summary`. This needs a
+harness that passes your typed prompt and chat session to the human-turn hook;
+where it does not, the feedback is what the agent reports, as before. Like the
+human turn itself, this records what the prompt seam received, not who typed
+it.
+
+The gate requires an observed human-interaction seam: typing a prompt or answering a native question picker records a human turn (a `HUMAN_TURN` event) in the audit ledger, and approve (and any clarifying-question answer) refuses unless one was recorded since the last gate resolution, and a stage gate's approval or change request needs one sent since the stage started and after the gate was shown, or the message the agent names as your answer (for an approval, one you sent after the stage's output was last written: an earlier one did not see what you approve). This proves presence and ordering, not authorship of the later caller-supplied decision text; some harnesses expose no trusted prompt/widget content. On a harness whose picker does not record a human turn, type a short message once (for example "approve") so one is on record.
+
+The human-turn hook is activated only through the dispatcher's hook route;
+it does not authenticate who launched the dispatcher. Hooks and tool calls run
+as the same user, and no harness gives a hook an identity a same-user process
+cannot copy. The runtime-integrity check refuses recognized tool-call routes
+to the hook and its records as defense in depth. The harness's permission model
+and your review of what the agent runs are the outer boundary.
+
+Automation that submits prompts without a person present must set
+`AIDLC_UNATTENDED=1` in the driving process. The declaration is opt-in because
+only the driver knows whether a prompt is unattended; without it, prompt-submit
+events retain interactive behavior. With it set, every harness withholds the
+authority-bearing `HUMAN_TURN`, so approval and interview gates continue to
+wait. When a person takes over, unset `AIDLC_UNATTENDED` and submit a fresh
+response. Presence-related refusal messages name the flag when it is still set.
+
+### Approval Gate Flow
+
+```mermaid
+flowchart TD
+    COMPLETE["Stage work complete"]
+    REPORT_AWAITING["Report awaiting-approval:\nengine opens gate + emits\nSTAGE_AWAITING_APPROVAL"]
+    ASK["AskUserQuestion:\nApproval Gate"]
+
+    APPROVE["Approve"]
+    CHANGES["Request Changes"]
+    ACCEPT["Accept as-is\n(escape hatch)"]
+    ADD_STAGE["Add Skipped Stage\n(Ideation/Inception only)"]
+
+    REVISION_COUNT{"Revision\ncycle >= 3?"}
+    NOTE_2ND["After 2nd revision:\nnote that escape hatch\nactivates next cycle"]
+
+    REPORT_APPROVED["Report approved with the reply:\nengine emits GATE_APPROVED,\ncompletes + routes"]
+    REPORT_REJECTED["Report rejected with feedback:\nengine emits GATE_REJECTED,\nrecords revising state"]
+    REPORT_REVISED["Report revised:\nengine re-opens gate"]
+    PROGRESS["Display progress line:\nN of M stages done"]
+    NEXT_STAGE["Proceed to next stage"]
+
+    REVISE["Apply user feedback\nto stage artifacts"]
+    RE_PRESENT["Re-present completion\nmessage"]
+
+    ADD_EXEC["Insert skipped stage into workflow\n(scope tooling records the change)"]
+
+    COMPLETE --> REPORT_AWAITING --> ASK
+    ASK --> APPROVE
+    ASK --> CHANGES
+    ASK --> ACCEPT
+    ASK --> ADD_STAGE
+
+    APPROVE --> REPORT_APPROVED --> PROGRESS --> NEXT_STAGE
+    ACCEPT --> REPORT_APPROVED
+
+    CHANGES --> REPORT_REJECTED --> REVISION_COUNT
+    REVISION_COUNT -->|"< 3"| NOTE_2ND --> REVISE --> REPORT_REVISED --> RE_PRESENT --> ASK
+    REVISION_COUNT -->|">= 3"| REVISE
+
+    ADD_STAGE --> ADD_EXEC
+
+    style COMPLETE fill:#e8f5e9,stroke:#388e3c,color:#000
+    style REPORT_AWAITING fill:#e3f2fd,stroke:#1565c0,color:#000
+    style ASK fill:#bbdefb,stroke:#1565c0,color:#000
+    style APPROVE fill:#a5d6a7,stroke:#2e7d32,color:#000
+    style CHANGES fill:#fff9c4,stroke:#f9a825,color:#000
+    style REPORT_REJECTED fill:#fff3e0,stroke:#ef6c00,color:#000
+    style REPORT_REVISED fill:#e3f2fd,stroke:#1565c0,color:#000
+    style ACCEPT fill:#ffccbc,stroke:#bf360c,color:#000
+    style ADD_STAGE fill:#e1bee7,stroke:#7b1fa2,color:#000
+    style NEXT_STAGE fill:#c8e6c9,stroke:#388e3c,color:#000
+```
+
+<!-- Text fallback: Stage work completes, report awaiting-approval opens the gate (the engine records STAGE_AWAITING_APPROVAL), and AskUserQuestion presents the approval gate. Approve: report approved with the exact choice so the engine records GATE_APPROVED, completes, and routes; show progress; proceed. Request Changes: report rejected with the exact Request Changes choice and separate feedback (the engine records GATE_REJECTED), check revision count (if <3, note escape hatch coming, revise, report revised to re-open the gate, and re-present; if >=3, Accept-as-is becomes available). Accept as-is: report approved with that exact label. Add Skipped Stage (Ideation/Inception only): recompose the plan. The report calls own the gate's audit trail; no separate log entries are added for the gate prompt or choice. -->
+
+---
+
+## The 3-Strike Revision Escape Hatch
+
+If you have requested changes 3 or more times on the same stage, a third option appears:
+
+After three rounds of **Request Changes** on the same stage, the question says which revision cycle it is and adds a third option, **Accept as-is** (described as "Approve it as it is and move on").
+
+**Accept as-is** approves the stage with its documents as they are and advances the workflow. This prevents infinite revision loops when perfect is the enemy of good.
+
+### How It Activates
+
+| Revision Cycle | What Happens |
+|----------------|-------------|
+| 1st | Standard 2-option gate |
+| 2nd | Standard 2-option gate, plus a note: "After one more revision, an 'Accept as-is' option will become available." |
+| 3rd and beyond | 3-option gate with Accept as-is |
+
+The revision count resets when you move to the next stage. AI-DLC keeps it in its record of the work, not in the chat, so stopping and resuming, or continuing in a new chat, keeps it too.
+
+---
+
+## Add Skipped Stage Option
+
+During **Ideation** and **Inception** phases, the approval gate may include a conditional option to add a previously skipped stage back into the workflow:
+
+```
+▸ How would you like to proceed?
+  (1) Approve — Continue to Scope Definition
+  (2) Request Changes — Provide revision feedback
+  (3) Add Market Research — Include Market Research which was skipped
+```
+
+This option appears only when:
+- The current stage is in Ideation or Inception
+- A stage ahead was skipped during scope routing
+- The skipped stage is relevant to the current context
+
+Selecting this option inserts the skipped stage into the workflow plan. The workflow continues normally through the added stage.
+
+---
+
+## Skipping and Navigating Stages
+
+Beyond the approval gate, you have additional navigation options:
+
+| Command | Effect |
+|---------|--------|
+| `/aidlc --stage <name>` | Jump to a specific stage (intervening stages marked `[S]`) |
+| `/aidlc --phase <name>` | Jump to the start of a phase |
+
+See [Session Management](11-session-management.md) and [CLI Commands](12-cli-commands.md) for details.
+
+---
+
+## Editing Files Yourself
+
+You can edit any artifact by hand. What happens next depends on where you are:
+
+| When you edit | What you do | What you see |
+|---|---|---|
+| Answers to a stage's questions | Choose **I'll edit the file**, fill in the `[Answer]:` lines, then tell the agent you are done | The agent reads your answers and carries on from them; when summary confirmation is on, you confirm the summary first |
+| A code plan waiting for approval | Choose **I'll edit the files**, change the plan or test instructions (or write your answer in `code-generation-questions.md`), then tell the agent you are done | Your edited plan is approved as you left it and the build starts. The agent cannot write those files while you edit. If your edit broke the plan's Testing Contract block, the agent repairs it and asks you once to build |
+| An artifact already reviewed in the stage you are on, before its gate | Edit the file, then carry on | Under Guard Policy `relaxed` or `off` (most scopes), you hear one line saying the file changed, the edit is recorded once in the audit trail as `CHANGE_ACCEPTED`, and the run continues. Under `strict`, the old review no longer covers the edited file, so it is reviewed once more, as it is now, before the gate. That extra review happens once: if you edit the file again after it, the agent stops and tells you, and you choose **Request Changes** to start the review over |
+| An artifact from a stage that is already finished | Edit the file, then carry on | Nothing re-runs by itself, and later stages read the file as you left it. See [After a stage is finished](#after-a-stage-is-finished) |
+| Between sessions | Edit the files, then resume with `/aidlc` | The same rules apply the next time the file is checked |
+
+When you are told a file changed and the run is continuing, that is the whole record: there is nothing to log by hand. See [Guard Policy](13-customization.md#guard-policy) for what `strict`, `relaxed`, and `off` do, and [Plan approval](13-customization.md#plan-approval) for the plan stop itself.
+
+### After a stage is finished
+
+An edit to a finished stage's files is not reviewed or approved again unless you ask for it:
+
+- **What warns you.** Under Guard Policy `strict`, when you edit one of the stage documents AIDLC tracks for a finished stage, the next step says once which finished stage is now behind and what to say to redo it; under `relaxed` and `off` (the default in most plans) an edit is taken as yours: the next step raises no stage as behind, and you are told once only when the file you edited was a reviewed document or a confirmed questions file. A tracked document that has gone missing is raised under every policy. `/aidlc --status` lists the stages affected downstream. Moving, renaming or copying the project folder changes none of those documents, so it brings no warning (see the [Artifacts Reference](14-artifacts-reference.md) for when it still can). The warning is advice, not a stop. A stage finished without a validation record (for example, by an older AIDLC release) gets no warning, and `/aidlc --status` does not list it.
+- **What does not.** Your application code is not tracked this way, so changing it after Code Generation raises no warning.
+- **Getting it checked again.** Jump back with `/aidlc --stage <name>` to the earliest affected stage (Code Generation for application code). That reopens it and every later stage in your plan. The files stay, so each reopened stage that finds its earlier files asks you to **Keep** them, **Modify** them, or **Redo from scratch**. Keep skips regenerating the files, not the checks: any review or approval the stage needs still happens. Choose Modify or Redo where your change should be carried through. Code Generation's review covers only the application files listed in a Unit's source manifest, so a file you added or moved by hand is not reviewed until it is listed there. When you choose Modify, name the files you added or moved and the Unit they belong to. Work without Units (for example a bugfix or refactor scope) has no source manifest, so check hand edits to application code yourself before you approve. Construction checkpoints you set to run automatically stay automatic.
+
+---
+
+## Progress Tracking
+
+After an approval that moves on to another stage, a progress line appears. From the same run:
+
+```text
+Progress: 1 of 19 stages done. Next: Feasibility & Constraints.
+```
+
+This shows:
+- Progress across the stages your plan runs after Initialization (the count you
+  were shown when the work started)
+- The name of the next stage
+
+On a shorter plan the numbers are that plan's own.
+
+---
+
+## Next Steps
+
+- [Your First Workflow](02-your-first-workflow.md) — see interaction modes in context
+- [State and Audit](10-state-and-audit.md) — how decisions are tracked
+- [Session Management](11-session-management.md) — resume, redo, jump
+- [Glossary](glossary.md) — terminology reference

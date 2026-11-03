@@ -1,5 +1,5 @@
 {
-  "_description": "하네스가 빌려 온 바깥 스킬의 원본과 옮긴 곳. tools/upstream_check.py 가 설치된 플러그인(자동 업데이트)과 아래 사본을 비교한다. 원본이 바뀌면 옮긴 곳을 검토하고 --accept 로 사본을 올린다.",
+  "_description": "하네스가 빌려 온 바깥 스킬의 원본과 옮긴 곳. tools/upstream_check.py 가 원본(kind plugin: 설치된 플러그인, kind git: --remote 로 GitHub)과 아래 사본을 비교한다. 원본이 바뀌면 옮긴 곳을 검토하고 --accept 로 사본을 올린다.",
   "sources": [
     {
       "name": "mattpocock-skills",
@@ -152,6 +152,87 @@
             "docs/WRITING.md"
           ],
           "what": "스킬 기계: 프런트매터 · 모델 호출 여부 · 라우터"
+        }
+      ]
+    },
+    {
+      "name": "aidlc-workflows",
+      "kind": "git",
+      "repo": "https://github.com/awslabs/aidlc-workflows",
+      "branch": "main",
+      "version": "main@cc22ef5",
+      "commit": "cc22ef5564b159553057962ea874d4e1b855ccad",
+      "license": "docs/third_party/aidlc-workflows-LICENSE",
+      "snapshot": "docs/third_party/aidlc-workflows",
+      "borrowed": [
+        {
+          "upstream": "core/knowledge/aidlc-architecture-reviewer-agent/reviewing.md",
+          "into": [
+            "skills/game-architecture/references/review.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "판정 형식(심각도 · 위치 · 고칠 것) · 치명 1 또는 큼 3 이상이면 다시 · 리뷰어에게 만든 쪽 생각 안 넘김 · 정한 지적 재론 안 함"
+        },
+        {
+          "upstream": "core/aidlc-common/protocols/stage-protocol-reviewer-repair.md",
+          "into": [
+            "skills/game-architecture/references/review.md",
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "고치기 2회 · 다 쓰면 남은 지적을 들고 사람에게"
+        },
+        {
+          "upstream": "core/aidlc-common/stages/construction/build-and-test.md",
+          "into": [
+            "skills/game-testing/references/when-it-fails.md",
+            "skills/game-testing/SKILL.md",
+            "skills/game-mcp/SKILL.md"
+          ],
+          "what": "실패 사다리(제자리 2회 → 원인 · 영향 → 되돌아감 → 멈춤) · 기준 낮추기는 수정이 아님 · 수정안 없으면 재시도 빼기"
+        },
+        {
+          "upstream": "core/aidlc-common/protocols/stage-protocol-loopback.md",
+          "into": [
+            "skills/game-testing/references/when-it-fails.md",
+            "skills/game-testing/references/test-doc.md"
+          ],
+          "what": "되돌아간 기록(진단 · 원인 · 고친 것 · 영향) · 3회 · 지우지 않음"
+        },
+        {
+          "upstream": "core/aidlc-common/protocols/stage-protocol-checkpoint.md",
+          "into": [
+            "skills/game-testing/references/when-it-fails.md",
+            "skills/game-testing/SKILL.md"
+          ],
+          "what": "검증 명령 하나를 정해 그대로 돌림 · 못 돌린 검사는 통과가 아님"
+        },
+        {
+          "upstream": "core/aidlc-common/protocols/stage-protocol.md",
+          "into": [
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "답 읽기: 고름 + 지시는 한 번에 · 질문만 오면 답하고 멈춤 · 있는 산출물은 그대로 / 고치기 / 새로"
+        },
+        {
+          "upstream": "docs/guide/07-interaction-modes.md",
+          "into": [
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "세 번째 수정 요청부터 '지금 것으로 진행' 갈래"
+        },
+        {
+          "upstream": "core/aidlc-common/stages/construction/code-generation.md",
+          "into": [
+            "skills/game-architecture/SKILL.md"
+          ],
+          "what": "계획 승인 — 하네스는 고른 안과 어긋날 때만 멈추는 것으로 줄임(사용자 결정 2026-11-03)"
+        },
+        {
+          "upstream": "core/aidlc-common/protocols/stage-protocol-recovery.md",
+          "into": [
+            "skills/game-design-doc/SKILL.md"
+          ],
+          "what": "어긋나는 출처는 둘 다 인용하고 고르지 않음 · 도중 자료는 근거지 이동 지시가 아님"
         }
       ]
     }
