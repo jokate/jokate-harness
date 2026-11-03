@@ -81,7 +81,7 @@
 | 크기 재기 · 시험 | `python tools/context_budget.py <프로젝트>` · `test_context_budget.py` |
 | 교훈 남기기 | `EXPERIENCE.draft.md` 확인 → `docs/experience/<이름>.md` + `INDEX.md` 한 줄 |
 | 날짜별 기록 | `docs/VERIFICATION.md` |
-| 바깥에서 빌리기 | `docs/UPSTREAM.md` 표 + `upstream.json` + `python tools/upstream_check.py [--diff \| --accept]` |
+| 바깥에서 빌리기 | `docs/UPSTREAM.md` 표 + `upstream.json` + `python tools/upstream_check.py [--remote \| --diff \| --accept]` |
 
 - 라우팅 줄 · description 을 고치면 스킬이 불리는 방식이 바뀐다. 느낌 말고 대조한다.
 - 대조 비용: 과제 약 $0.3, 스킬 사례 약 $0.5~2. 표본이 작아 재현율 ±0.05 는 잡음이다.

@@ -240,6 +240,14 @@ class DiagramDesignFigureTest(unittest.TestCase):
         self.assertEqual(render.check(NUMBERED, render.dd_figs(self.doc, exclude=html_out))["figures"], 1)
         self.assertIsNone(render.check("# 메모\n\n글\n")["figures"])  # 구조 조사 문서가 아니면 안 본다
 
+    def test_counter_review_follows_options(self):
+        md = ("# t\n\n## 한눈에\n- a\n\n## 그림\ng\n\n## 반대 검토\n| 안 |\n\n"
+              "## 선택지\n| A |\n\n## 근거\n### 신호\n")
+        out = render.summary_first(md)
+        self.assertLess(out.index("## 선택지"), out.index("## 반대 검토"))
+        self.assertLess(out.index("## 반대 검토"), out.index("## 그림"))
+        self.assertEqual(render.check(md)["extra_sections"], [])
+
     def test_question_section_is_front(self):
         md = NUMBERED.replace("## 8. 사용자 결정", "## 질문")
         head = render.summary_first(md).split("<details>")[0]
