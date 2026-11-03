@@ -23,6 +23,7 @@
 | `stage-protocol` 답 읽기 · `07-interaction-modes` | game-architecture 질문 쓰는 법 | 고름 + 지시는 한 번에 · 세 번째 수정부터 '지금 것으로 진행' · 그대로 / 고치기 / 새로 |
 | `code-generation` 계획 승인 | game-architecture 5절 2단계 | 계획이 고른 안과 어긋날 때만 멈춤(사용자 결정 2026-11-03) |
 | `stage-protocol-recovery` | game-design-doc 규칙 6 | 어긋나는 출처는 둘 다 인용 · 도중 자료는 근거지 이동 지시가 아님 |
+| 리뷰어 지식 `reviewing.md`(독립 · 반박 자세) + Matt `grilling` | game-architecture 3절 · `references/critique.md` | 반대 검토: 누가 낸 안인지 모르는 비판자 · 안마다 오류 가능성 6항목 · 질문 두 바퀴 · 끝은 가장 덜 나쁜 안(사용자 요청 2026-11-03) |
 
 - 옮긴 것은 프로토콜 · 안내 문서의 글 규칙이다. 원본 엔진(TS)이 그대로 강제하는지는 보지 않았다.
 - 옮기지 않은 것: 엔진 · 33단계 · 14 에이전트 · 승인 기록(해시 영수증) · 감사 로그 · 작업 크기 점수(composer) · 센서 · Stop 훅 이어 가기.

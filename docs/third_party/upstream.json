@@ -52,9 +52,10 @@
         {
           "upstream": "skills/productivity/grilling/SKILL.md",
           "into": [
-            "skills/game-architecture/SKILL.md"
+            "skills/game-architecture/SKILL.md",
+            "skills/game-architecture/references/critique.md"
           ],
-          "what": "질문 쓰는 법: 사실은 직접 찾는다 · 지금 답할 수 있는 질문만 · 질문마다 추천 답(\"예\" 면 수락)"
+          "what": "질문 쓰는 법: 사실은 직접 찾는다 · 지금 답할 수 있는 질문만 · 질문마다 추천 답(\"예\" 면 수락) · 반대 검토(질문으로 캐기)"
         },
         {
           "upstream": "skills/engineering/prototype/SKILL.md",
@@ -169,9 +170,10 @@
           "upstream": "core/knowledge/aidlc-architecture-reviewer-agent/reviewing.md",
           "into": [
             "skills/game-architecture/references/review.md",
-            "skills/game-architecture/SKILL.md"
+            "skills/game-architecture/SKILL.md",
+            "skills/game-architecture/references/critique.md"
           ],
-          "what": "판정 형식(심각도 · 위치 · 고칠 것) · 치명 1 또는 큼 3 이상이면 다시 · 리뷰어에게 만든 쪽 생각 안 넘김 · 정한 지적 재론 안 함"
+          "what": "판정 형식(심각도 · 위치 · 고칠 것) · 치명 1 또는 큼 3 이상이면 다시 · 리뷰어에게 만든 쪽 생각 안 넘김 · 정한 지적 재론 안 함 · 반대 검토(비판자를 만든 쪽과 떼기)"
         },
         {
           "upstream": "core/aidlc-common/protocols/stage-protocol-reviewer-repair.md",

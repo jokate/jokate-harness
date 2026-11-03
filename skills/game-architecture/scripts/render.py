@@ -177,7 +177,8 @@ def scripts(js_dir=None):
 
 # 먼저 보일 절, 이 순서로 — 제목 앞 번호와 뒤 설명은 무시하고 앞 낱말로 맞춘다("## 6. 선택지 — …" → 선택지).
 # 나머지(요청 축 · 확장 지점 · 신호 · 설계 노트 · 검증 …)는 접힌 '근거'로.
-FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("그림", "현재 구조"), ("질문", "결정", "사용자 결정", "고를 것"))
+FIG_HEADS = ("그림", "현재 구조")
+FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("반대",), FIG_HEADS, ("질문", "결정", "사용자 결정", "고를 것"))
 VISIBLE_MAX = 30  # 첫 화면(접힌 근거 위) 글 줄 수 기준 — 그림 한 장은 한 줄로 센다
 LONG = 120  # 보이는 부분에서 이보다 긴 줄은 첫 문장만 보이고 나머지는 '더보기'로 접는다
 
@@ -373,7 +374,7 @@ def embed_figs(md, figs, out_dir):
     block = "\n\n".join(tags)
     lines = md.splitlines()
     heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
-    at = next((n for n, i in enumerate(heads) if _sec_name(lines[i]).startswith(FRONT[2])), None)  # 그림 · 현재 구조
+    at = next((n for n, i in enumerate(heads) if _sec_name(lines[i]).startswith(FIG_HEADS)), None)
     if at is None:
         return md.rstrip() + f"\n\n## 그림\n\n{block}\n"
     i, end = heads[at], heads[at + 1] if at + 1 < len(heads) else len(lines)
