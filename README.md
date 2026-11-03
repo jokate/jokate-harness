@@ -23,6 +23,8 @@ tools/
   harness_probe.py    하네스 대조 시험: 같은 과제를 지금 · 수정안 두 팔로 돌려 정답 재현율 · 스킬 호출 · 비용 · 도구 사용을 비교
   context_budget.py   세션마다 항상 들어가는 글의 크기 (하네스 몫 한도 7,000 B)
 docs/experience/      대조로 뒷받침된 하네스 교훈 (목차 INDEX.md — 하네스를 고치기 전에 본다)
+docs/WRITING.md       스킬 · 안내 글을 고치기 전에 보는 글쓰기 규칙 · 점검표
+docs/UPSTREAM.md      빌려 온 바깥 스킬(Matt Pocock)과 업데이트 받는 법
 setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + (옆에 있으면) 위키 하네스 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
 rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다

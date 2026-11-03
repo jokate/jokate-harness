@@ -704,6 +704,17 @@ settings.json 을 못 읽으면 뺀 훅 파일을 그대로 둔다. 시험: `tes
   하네스 몫 항상 글은 7,094 B 로 변화 없다(이미 7,000 B 를 넘어 있었다).
 - **안 본 것:** 바뀐 본문이 실제 세션에서 테스트 · 질문 모양을 바꾸는지.
 
+## 2026-10-27 (2) — 빌려 오기 2단계 · 추천 붙이기 · 설명 줄 정리
+
+사용자: 적용할 수 있는 부분은 다 적용하자. 추천은 붙이되 고르는 건 나, 설명 줄 다듬기도 이번에 같이.
+- **옮긴 것:** prototype · improve-codebase-architecture · code-review · codebase-design(DEEPENING · DESIGN-IT-TWICE) → game-architecture references 4개(`prototype` · `scan` · `interface-design` · `review`).
+  domain-modeling → game-design-doc `references/terms.md`. writing-for-agents → `docs/WRITING.md`. 원본 사본 19개 · 대응표는 `docs/UPSTREAM.md`.
+- **추천:** 선택지 표 · 질문 표 · 후보 표 · 인터페이스 비교 아래에 `추천: X — 이유`. 5절에서 멈추는 것은 그대로다. 평가 케이스 3개를 `추천\s*[:：]` 확인으로 바꿨다.
+- **설명 줄:** 6개 합 3,537 → 2,377 B, 하네스 몫 7,094 → 5,934 B(한도 7,000 B 안으로).
+  대조(MNYS 사본, Sonnet, 요청마다 1회): 전 13/14 + 2/2, 뒤 15/15. "프로토타입으로 확인"이 플러그인 prototype → game-architecture 로 돌아왔다. bootstrap 요청 1건은 사용량 한도(429)로 무효. 비용 약 $7.2.
+- **정정:** 이 PC 의 `~/.claude/skills/game-*` 는 저장소로 가는 연결 폴더(junction)라, 고친 내용은 install.bat 없이 바로 반영된다.
+- **안 본 것:** 1회 대조라 흔들림은 모른다. 새 references 4개가 실제 세션에서 끝까지 따라가지는지.
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음

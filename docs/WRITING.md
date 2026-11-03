@@ -3,13 +3,13 @@
 > 일부를 Matt Pocock 의 skills(`writing-for-agents`, MIT, Copyright (c) 2026 Matt Pocock)에서 빌려 이 하네스에 맞게 고쳤다.
 > 라이선스: `docs/third_party/mattpocock-skills-LICENSE` · 원본 추적: `docs/UPSTREAM.md`.
 
-- 고치기 전에 연다: 스킬 · 세션 시작 안내 · 규칙 파일. 이 문서로 가는 포인터는 없다.
+- 고치기 전에 연다: 스킬 · 세션 시작 안내 · 규칙 파일. 포인터는 README 의 docs 줄과 `docs/UPSTREAM.md`.
 
 ## 1. 두 짐
 
 | 짐 | 대상 | 한도 |
 |---|---|---|
-| 문맥 | 하네스 스킬 description 합 (`game-bootstrap` 포함) | ≤ 4,000 B (지금 3,537 B) |
+| 문맥 | 하네스 스킬 description 합 (`game-bootstrap` 포함) | ≤ 4,000 B (지금 2,377 B) |
 | 문맥 | 세션 시작 안내 (가장 긴 경우) | ≤ 1,800 B |
 | 문맥 | CLAUDE.local.md 스킬 라우팅 절 | ≤ 300 B |
 | 문맥 | 하네스 몫 합계 | ≤ 7,000 B |
@@ -23,18 +23,20 @@
 - description 도 문서 이름 줄도 포인터다. 열리는 때는 대상이 아니라 낱말이 정한다 — 안 열리면 낱말부터 고친다.
 - 앞에 둔다: 동사가 끝에 오는 한국어에서는 요청에 나올 명사가 맨 앞이다.
 - 갈래마다 트리거 하나: 한 갈래의 다른 말("검증해줘" · "이거 동작 확인")은 하나만 남긴다.
-- 이름이 말하는 신원은 뺀다: `game-testing` 에 "게임 프로젝트의" 는 중복이다.
+- 신원은 맨 앞에 한 번: "게임 프로젝트(UE / Unity)" 가 다른 프로젝트 · 플러그인 스킬(`mattpocock-skills:*`)과 가른다. 두 번 쓰지 않는다.
 - 예외 — 줄이기 전에 잰다: 명령을 경로째 주는 라우팅 줄은 신원이 아니라 행동이다.
   - 위키 먼저로 바꾸며 cindex 줄을 줄이니 cindex 호출 22 → 11, Grep 28 → 41 (`docs/experience/routing-single-source.md`).
   - "코드 세부는 cindex" 를 붙이고 줄은 두니 22 · 27, 재현율 0.908 → 0.961.
 
-예시 — game-testing description (제안 · 시험 전):
+예시 — 2026-10-27 설명 줄 6개 정리 (합 3,537 → 2,377 B, 대조 전 13/14 → 뒤 15/15, `VERIFICATION.md`):
 
 ```
-지금 539 B  게임 프로젝트(UE / Unity)의 … "이거 동작 확인" … "Functional Test", "Unity Test Framework" …
-고침 307 B  테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, 테스트 문서, 자동 테스트 작성 · 헤드리스 실행(UE Automation
-            Test · Unity EditMode/PlayMode). "테스트 짜줘", "검증해줘", "QA 체크리스트". 검증 안 한 것을 동작한다고 쓰지 않게 한다.
+전  game-testing  게임 프로젝트(UE / Unity)의 … "이거 동작 확인" … "Functional Test", "Unity Test Framework" …
+뒤  game-testing  게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, … 원인 모를 버그는
+                  재현 고리부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". …
 ```
+
+- 줄일 때 새 갈래가 생기면 촉발 말을 하나 더한다: "프로토타입으로 확인" 은 없을 때 플러그인 prototype 으로 샜다.
 
 ## 3. 정보 위계
 
@@ -97,5 +99,5 @@
 5. 본문엔 모든 갈래가 쓰는 것만 있나. 나머지는 references 에 있나.
 6. 단계마다 확인할 수 있는 끝난 기준이 있나.
 7. 금지만 쓴 줄은 없나. 같은 뜻이 두 곳에 없나.
-8. description 은 한 줄이고 줄마다 사실 하나 · 120자 이하인가.
+8. description 은 한 줄인가. 본문 줄은 사실 하나 · 120자 이하인가.
 9. 결과를 `docs/experience` 나 `VERIFICATION.md` 에 남겼나.
