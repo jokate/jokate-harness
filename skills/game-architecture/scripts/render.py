@@ -189,6 +189,7 @@ DATE_TAG = re.compile(
     r"|\d{1,2}:\d{2}\s*(?:갱신|뒤|이후)")                                        # 16:34 뒤
 WORK_ID = re.compile(r"\btask_[0-9a-f]{6,}\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # 작업 · 커밋 번호
 FIVE_W = re.compile(r"^\|\s*누가\s*\|.*언제.*어디서.*무엇.*어떻게.*왜", re.M)  # 근거 육하원칙 표 머리줄
+WHY_SLOTS = ("문제", "버린 안", "대가", "뒤집는 조건")  # 추천 밑 결정 블록 (docs/READING.md)
 
 
 def _sec_name(head):
@@ -283,21 +284,24 @@ def check(md, figs=None):
             "packed_front": len(packed_front), "packed_rest": max(0, len(packed_all) - len(packed_front)),
             "date_tags": len(DATE_TAG.findall(_no_code(md))),
             "ids_front": len(WORK_ID.findall(_no_code(front))),
-            "five_w": bool(FIVE_W.search(md)) if arch else None}
+            "five_w": bool(FIVE_W.search(md)) if arch else None,
+            "why_slots": sum(bool(re.search(rf"^\s*[-*]\s*\**{s}\**\s*:", front, re.M)) for s in WHY_SLOTS)
+            if arch else None}
 
 
 def report(c):
     """check() 결과 → (한 줄, 기준 안인가)."""
     ok = (c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"] and c["figures"] != 0
           and c.get("packed_front", 0) == 0 and c.get("date_tags", 0) == 0 and c.get("ids_front", 0) == 0
-          and c.get("five_w") is not False)
+          and c.get("five_w") is not False and c.get("why_slots") in (None, len(WHY_SLOTS)))
     line = f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
     if "packed_front" in c:
         line += (f" · 몰아 쓴 줄 {c['packed_front']}개(기준 0 — 가운뎃점 {PACK_DOTS}개 · 괄호 {PACK_PARENS}개 이상,"
                  f" 근거 쪽 {c['packed_rest']}개는 참고) · 날짜 꼬리표 {c['date_tags']}개(기준 0)"
                  f" · 첫 화면 작업 · 커밋 번호 {c['ids_front']}개(기준 0)")
     if c.get("five_w") is not None:
-        line += f" · 근거 육하원칙 표 {'있음' if c['five_w'] else '없음'}(기준 있음)"
+        line += (f" · 추천의 왜 칸 {c['why_slots']}/{len(WHY_SLOTS)}(기준 {len(WHY_SLOTS)} — {', '.join(WHY_SLOTS)})"
+                 f" · 근거 육하원칙 표 {'있음' if c['five_w'] else '없음'}(기준 있음)")
     if c["figures"] is not None:
         line += f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (
             ": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"

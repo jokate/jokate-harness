@@ -178,14 +178,20 @@ class ReadabilityTest(unittest.TestCase):
         self.assertIn("근거 육하원칙 표 없음", line)
 
     def test_clean_doc_passes_with_five_w_table(self):
-        md = ("# t\n\n## 한눈에\n- 피해 입구는 한 곳이다.\n\n## 선택지\n| A | 4곳 |\n\n"
+        md = ("# t\n\n## 한눈에\n- 피해 입구는 한 곳이다.\n\n## 선택지\n| A | 4곳 |\n\n추천: A. 고르는 것은 사용자.\n"
+              "- 문제: 입구가 넷이면 판정 순서를 네 곳에서 맞춰야 한다.\n- 버린 안: B — 입구마다 순서가 달라진다.\n"
+              "- 대가: 입구 함수 하나가 커진다.\n- 뒤집는 조건: 판정 종류마다 순서가 달라야 하면 다시 본다.\n\n"
               "## 근거\n### 확인한 사실\n| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n|---|---|---|---|---|---|---|\n"
               "| 피격 판정 | 맞을 때 | YSPlaybackTask.cpp:604 | 피해 | AdmitHit 한 곳 | 입구가 넷이면 고칠 곳도 넷 | 확인 |\n"
               "- 근거 쪽 몰아 쓴 줄은 참고(가 · 나 · 다 · 라)\n")
         c = render.check(md, [1])
         self.assertTrue(c["five_w"])
-        self.assertEqual(c["packed_rest"], 1)
+        self.assertEqual((c["packed_rest"], c["why_slots"]), (1, 4))
         self.assertTrue(render.report(c)[1])  # 근거 쪽 몰아 쓴 줄 · 근거 표의 파일:줄은 통과를 막지 않는다
+        no_why = md.replace("- 대가: 입구 함수 하나가 커진다.\n", "")
+        line, ok = render.report(render.check(no_why, [1]))
+        self.assertFalse(ok)
+        self.assertIn("추천의 왜 칸 3/4", line)
 
     def test_date_tag_patterns(self):
         for s in ("[10-24]", "[18시 갱신 · 21:50]", "(사용자 결정 2026-11-03)", "16:34 뒤 이어진 길"):
