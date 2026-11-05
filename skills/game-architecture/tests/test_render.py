@@ -165,6 +165,34 @@ class ReadabilityTest(unittest.TestCase):
         long_doc = NUMBERED.replace("- 짧은 결론.", "- " + "가" * 200)
         self.assertEqual(render.check(long_doc)["long_lines"], 1)
 
+    def test_habits_counted_on_front_only(self):
+        """몰아 쓴 줄 · 작업 번호는 첫 화면만 기준, 날짜 꼬리표는 문서 전체 (2026-11-05 사용자: 구구절절 · 설계점만 본다)."""
+        md = ("# t\n\n## 한눈에\n- 입구는 AdmitHit 하나(트레이스 · 직접 · 변형 · 진입기)(팀 → 사망)\n"
+              "- task_5e5df7c8 이 정한다\n\n## 선택지\n| A | a1c2d29 |\n\n"
+              "## 근거\n### 확인한 사실\n- 근거 쪽 줄(가 · 나 · 다 · 라)(마)\n- [18시 갱신] 고친 기록\n")
+        c = render.check(md, [1])
+        self.assertEqual((c["packed_front"], c["packed_rest"], c["ids_front"], c["date_tags"]), (1, 1, 2, 1))
+        line, ok = render.report(c)
+        self.assertFalse(ok)
+        self.assertIn("몰아 쓴 줄 1개", line)
+        self.assertIn("근거 육하원칙 표 없음", line)
+
+    def test_clean_doc_passes_with_five_w_table(self):
+        md = ("# t\n\n## 한눈에\n- 피해 입구는 한 곳이다.\n\n## 선택지\n| A | 4곳 |\n\n"
+              "## 근거\n### 확인한 사실\n| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n|---|---|---|---|---|---|---|\n"
+              "| 피격 판정 | 맞을 때 | YSPlaybackTask.cpp:604 | 피해 | AdmitHit 한 곳 | 입구가 넷이면 고칠 곳도 넷 | 확인 |\n"
+              "- 근거 쪽 몰아 쓴 줄은 참고(가 · 나 · 다 · 라)\n")
+        c = render.check(md, [1])
+        self.assertTrue(c["five_w"])
+        self.assertEqual(c["packed_rest"], 1)
+        self.assertTrue(render.report(c)[1])  # 근거 쪽 몰아 쓴 줄 · 근거 표의 파일:줄은 통과를 막지 않는다
+
+    def test_date_tag_patterns(self):
+        for s in ("[10-24]", "[18시 갱신 · 21:50]", "(사용자 결정 2026-11-03)", "16:34 뒤 이어진 길"):
+            self.assertEqual(len(render.DATE_TAG.findall(s)), 1, s)
+        for s in ("값 범위 [0-1]", "[1-2] 구간", "비율 16:9", "```\n[10-24]\n```"):
+            self.assertEqual(len(render.DATE_TAG.findall(render._no_code(s))), 0, s)
+
     def test_check_flags_sections_after_evidence(self):
         self.assertEqual(render.check(NUMBERED)["extra_sections"], ["요청 축", "C 설계 노트"])
         ends = "# t\n\n## 한눈에\n- a\n\n## 선택지\n| A |\n\n## 결정할 것\n1. q\n\n## 근거\n### 신호\n"

@@ -24,6 +24,7 @@ tools/
   context_budget.py   세션마다 항상 들어가는 글의 크기 (하네스 몫 한도 7,000 B)
 docs/experience/      대조로 뒷받침된 하네스 교훈 (목차 INDEX.md — 하네스를 고치기 전에 본다)
 docs/WRITING.md       스킬 · 안내 글을 고치기 전에 보는 글쓰기 규칙 · 점검표
+docs/READING.md       사람이 읽는 답 · 문서의 규칙과 근거(선행 연구 · 측정)
 docs/UPSTREAM.md      빌려 온 바깥 스킬(Matt Pocock)과 업데이트 받는 법
 setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + (옆에 있으면) 위키 하네스 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
