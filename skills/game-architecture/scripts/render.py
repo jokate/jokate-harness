@@ -181,6 +181,15 @@ FIG_HEADS = ("그림", "현재 구조")
 FRONT = (("결론", "한눈에", "요약"), ("선택지",), ("반대",), FIG_HEADS, ("질문", "결정", "사용자 결정", "고를 것"))
 VISIBLE_MAX = 30  # 첫 화면(접힌 근거 위) 글 줄 수 기준 — 그림 한 장은 한 줄로 센다
 LONG = 120  # 보이는 부분에서 이보다 긴 줄은 첫 문장만 보이고 나머지는 '더보기'로 접는다
+# 사람이 못 읽는 버릇 세 가지 (docs/READING.md). 기준값은 docs/VERIFICATION.md 의 사용자 지적 문서 측정에서 정했다.
+PACK_DOTS, PACK_PARENS = 3, 2  # 한 줄에 가운뎃점 3개 이상 또는 괄호 2개 이상이면 사실을 몰아 쓴 줄
+DATE_TAG = re.compile(
+    r"\[[^\]\n]{0,20}?(?:\d{2}-\d{2}|\d{1,2}시|\d{1,2}:\d{2})[^\]\n]{0,20}\]"  # [10-24] · [18시 갱신 · 21:50]
+    r"|\((?:사용자 )?(?:결정|갱신|확인)[^)\n]{0,12}\d{4}-\d{2}-\d{2}\)"        # (사용자 결정 2026-11-03)
+    r"|\d{1,2}:\d{2}\s*(?:갱신|뒤|이후)")                                        # 16:34 뒤
+WORK_ID = re.compile(r"\btask_[0-9a-f]{6,}\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # 작업 · 커밋 번호
+FIVE_W = re.compile(r"^\|\s*누가\s*\|.*언제.*어디서.*무엇.*어떻게.*왜", re.M)  # 근거 육하원칙 표 머리줄
+WHY_SLOTS = ("문제", "버린 안", "대가", "뒤집는 조건")  # 추천 밑 결정 블록 (docs/READING.md)
 
 
 def _sec_name(head):
@@ -239,23 +248,60 @@ def summary_first(md):
     return "\n\n".join(out) + "\n"
 
 
+def _packed(line):
+    return line.count("·") >= PACK_DOTS or line.count("(") >= PACK_PARENS
+
+
+def _no_code(md):
+    """코드 블록(mermaid 포함)을 뺀 글 — 꼬리표 · 번호 검사용."""
+    out, fence = [], None
+    for ln in md.splitlines():
+        m = re.match(r"\s*(`{3,}|~{3,})", ln)
+        if fence:
+            fence = None if m and m.group(1).startswith(fence) else fence
+        elif m:
+            fence = m.group(1)
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def check(md, figs=None):
-    """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수 · 긴 줄 수 · 근거 밖 절 · 구조도 장 수.
-    render.py 와 Stop 훅이 출력해 모델이 고칠 근거로 쓴다. 구조 조사 문서(선택지 절이 있는 글)가 아니면 절 · 구조도는 안 본다."""
-    view = MERMAID.sub("(그림)", readable(md).split("<details>")[0])
+    """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수 · 긴 줄 · 몰아 쓴 줄 · 날짜 꼬리표 · 번호 · 근거 밖 절 · 구조도 · 육하원칙 표.
+    render.py 가 출력해 모델이 고칠 근거로 쓴다. 기준은 첫 화면만 본다(근거 쪽 몰아 쓴 줄은 수만 알린다).
+    날짜 꼬리표는 문서 어디에도 두지 않는다. 구조 조사 문서(선택지 절이 있는 글)가 아니면 절 · 구조도 · 육하원칙은 안 본다."""
+    front = readable(md).split("<details>")[0]
+    view = MERMAID.sub("(그림)", front)
     vis = [ln for ln in view.splitlines() if ln.strip()]
     long_ = [ln for ln in _prose(md, clip=False) if len(ln) > LONG]
+    packed_front = [ln for ln in _prose(front, clip=False) if _packed(ln)]
+    packed_all = [ln for ln in _prose(md, clip=False) if _packed(ln)]
     names = [_sec_name(ln) for ln in md.splitlines() if ln.startswith("## ")]
     arch = any(n.startswith("선택지") for n in names)
     extra = [n for n in names if _front_rank(n) is None and n != "근거"] if arch else []  # '근거' 에서 끝난다
     return {"visible_lines": len(vis), "long_lines": len(long_), "extra_sections": extra,
-            "figures": len(figs or []) if arch else None}
+            "figures": len(figs or []) if arch else None,
+            "packed_front": len(packed_front), "packed_rest": max(0, len(packed_all) - len(packed_front)),
+            "date_tags": len(DATE_TAG.findall(_no_code(md))),
+            "ids_front": len(WORK_ID.findall(_no_code(front))),
+            "five_w": bool(FIVE_W.search(md)) if arch else None,
+            "why_slots": sum(bool(re.search(rf"^\s*[-*]\s*\**{s}\**\s*:", front, re.M)) for s in WHY_SLOTS)
+            if arch else None}
 
 
 def report(c):
     """check() 결과 → (한 줄, 기준 안인가)."""
-    ok = c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"] and c["figures"] != 0
+    ok = (c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"] and c["figures"] != 0
+          and c.get("packed_front", 0) == 0 and c.get("date_tags", 0) == 0 and c.get("ids_front", 0) == 0
+          and c.get("five_w") is not False and c.get("why_slots") in (None, len(WHY_SLOTS)))
     line = f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
+    if "packed_front" in c:
+        line += (f" · 몰아 쓴 줄 {c['packed_front']}개(기준 0 — 가운뎃점 {PACK_DOTS}개 · 괄호 {PACK_PARENS}개 이상,"
+                 f" 근거 쪽 {c['packed_rest']}개는 참고) · 날짜 꼬리표 {c['date_tags']}개(기준 0)"
+                 f" · 첫 화면 작업 · 커밋 번호 {c['ids_front']}개(기준 0)")
+    if c.get("five_w") is not None:
+        line += (f" · 추천의 왜 칸 {c['why_slots']}/{len(WHY_SLOTS)}(기준 {len(WHY_SLOTS)} — {', '.join(WHY_SLOTS)})"
+                 f" · 근거 육하원칙 표 {'있음' if c['five_w'] else '없음'}(기준 있음)")
     if c["figures"] is not None:
         line += f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (
             ": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"

@@ -4,6 +4,7 @@
 > 라이선스: `docs/third_party/mattpocock-skills-LICENSE` · 원본 추적: `docs/UPSTREAM.md`.
 
 - 고치기 전에 연다: 스킬 · 세션 시작 안내 · 규칙 파일. 포인터는 README 의 docs 줄과 `docs/UPSTREAM.md`.
+- 사람이 읽는 답 · 문서(구조 문서 · 보고)의 규칙은 `docs/READING.md` 다. 이 문서는 에이전트가 읽는 글만 다룬다.
 
 ## 1. 두 짐
 
