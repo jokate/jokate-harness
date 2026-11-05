@@ -8,6 +8,9 @@
 
   python install.py --apply-settings  # settings.json 에 훅까지 등록 (setup.bat 이 쓰는 방식)
   python install.py --no-tools        # clangd 도구(의미 인덱스용, 약 60MB~)를 내려받지 않는다
+  python install.py --no-agy          # agy(Antigravity CLI) 플러그인을 두지 않는다
+                                      # 기본: 사용자 홈과 ~/.agy-accounts/* 의 .gemini/config/plugins/game-harness 에
+                                      # 규칙(rules/common.md + rules/agy.md)과 스킬 4개를 둔다. 훅 · MCP 는 두지 않는다
                                       # mod(하네스 모니터)는 settings.json 의 env.CLAUDE_CODE_PLUGIN_DIRS 에 폴더를 더해 켠다
 
 --apply-settings 없이는 settings.json 을 고치지 않는다. 출력된 조각을 직접 합친다.
@@ -175,6 +178,139 @@ def install_rules(a):
         dst.write_text(new, encoding="utf-8")
 
 
+# agy 는 Antigravity CLI 다. 릴레이의 Gemini 직원이 이것으로 돈다. agy 는 <홈>/.gemini/config/plugins/<이름>/ 의
+# 플러그인을 기본으로 켠다. 플러그인의 rules/AGENTS.md 는 늘 켜진 규칙이고, skills/<이름>/SKILL.md 는 스킬이다.
+AGY_PLUGIN = "game-harness"
+# agy 에 넣는 스킬. game-bootstrap 은 Claude Code 의 훅과 settings.json 을 깔아서 뺐다.
+# game-mcp 는 Claude Code 훅(mcp_guard)을 전제로 해서 뺐다.
+AGY_SKILLS = ["game-architecture", "game-design-doc", "game-onboard", "game-testing"]
+# 플러그인에 두지 않는 파일. 릴레이 가드는 계정의 hooks.json 하나로 판정한다. 플러그인 훅과 MCP 는 그 옆에서 따로 돈다.
+AGY_FORBIDDEN = ("hooks.json", "mcp_config.json")
+AGY_RULES_HEAD = "<!-- install.py 가 만든다. 고치려면 저장소의 rules/common.md 와 rules/agy.md 를 고치고 setup.bat -->"
+
+
+def is_link(p):
+    return p.is_symlink() or (hasattr(p, "is_junction") and p.is_junction())
+
+
+def drop_path(p):
+    """링크는 링크만 지운다. 폴더는 안을 지운다. 링크를 따라가 저장소를 지우지 않는다."""
+    if is_link(p):
+        try:
+            os.rmdir(p)  # 정션
+        except OSError:
+            os.unlink(p)
+    elif p.is_dir():
+        unlink_inner_links(p)
+        shutil.rmtree(p)
+    elif p.exists():
+        p.unlink()
+
+
+def unlink_inner_links(p):
+    """폴더 안의 링크를 먼저 끊는다. 링크 안으로는 내려가지 않는다."""
+    for child in list(p.iterdir()):
+        if is_link(child):
+            drop_path(child)
+        elif child.is_dir():
+            unlink_inner_links(child)
+
+
+def agy_homes(extra=None):
+    """agy 가 홈으로 쓰는 폴더. 기본은 사용자 홈과 ~/.agy-accounts/* 중 .gemini 가 있는 곳이다. extra 를 주면 그것만 쓴다."""
+    if extra:
+        return [Path(p).expanduser() for p in extra]
+    home = Path.home()
+    accounts = home / ".agy-accounts"
+    cands = [home] + (sorted(p for p in accounts.iterdir() if p.is_dir()) if accounts.is_dir() else [])
+    return [h for h in cands if (h / ".gemini").is_dir()]
+
+
+def agy_plugin_dir(home):
+    return Path(home) / ".gemini" / "config" / "plugins" / AGY_PLUGIN
+
+
+def agy_ours(root):
+    try:
+        return json.loads((root / "plugin.json").read_text(encoding="utf-8")).get("name") == AGY_PLUGIN
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def agy_rules_text():
+    """rules/common.md 뒤에 rules/agy.md 를 붙인다. 저장소 문서 경로는 절대 경로로 바꾼다."""
+    common = (REPO / "rules" / "common.md").read_text(encoding="utf-8").strip()
+    common = common.replace("하네스 docs/READING.md", str(REPO / "docs" / "READING.md"))
+    extra = REPO / "rules" / "agy.md"
+    parts = [AGY_RULES_HEAD, common] + ([extra.read_text(encoding="utf-8").strip()] if extra.is_file() else [])
+    return "\n\n".join(parts) + "\n"
+
+
+AGY_SKIP = ("__pycache__", "tests")
+
+
+def tree_digest(p):
+    """폴더 안 파일의 상대 경로와 내용. 복사본이 저장소와 같은지 본다. 없으면 None."""
+    if not p.is_dir():
+        return None
+    out = {}
+    for f in sorted(p.rglob("*")):
+        rel = f.relative_to(p)
+        if f.is_file() and not any(part in AGY_SKIP for part in rel.parts):
+            out[rel.as_posix()] = f.read_bytes()
+    return out
+
+
+def write_if_changed(path, text, dry, label):
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        print(f"    = {label}")
+        return
+    print(f"    + {label}")
+    if not dry:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+def install_agy(a, homes):
+    """규칙과 스킬을 홈마다 agy 플러그인 하나로 둔다. agy 가 없는 PC 는 건너뛴다."""
+    if not homes:
+        print("  = agy 홈 없음 (건너뜀)")
+        return
+    rules = agy_rules_text()
+    manifest = json.dumps({"name": AGY_PLUGIN}, ensure_ascii=False, indent=2) + "\n"
+    for home in homes:
+        root = agy_plugin_dir(home)
+        if root.is_dir() and any(root.iterdir()) and not agy_ours(root) and not a.force:
+            print(f"  - {root} 건너뜀 (같은 이름의 다른 플러그인, --force)")
+            continue
+        print(f"  {root}")
+        write_if_changed(root / "plugin.json", manifest, a.dry_run, "plugin.json")
+        write_if_changed(root / "rules" / "AGENTS.md", rules, a.dry_run, "rules/AGENTS.md")
+        for name in AGY_SKILLS:  # agy 는 정션으로 이은 스킬을 읽지 않는다(실측). --link 여도 복사한다
+            src, dst = REPO / "skills" / name, root / "skills" / name
+            if not is_link(dst) and tree_digest(dst) == tree_digest(src):
+                print(f"    = skills/{name}")
+                continue
+            print(f"    + skills/{name} (복사)")
+            if a.dry_run:
+                continue
+            if dst.exists() or is_link(dst):
+                drop_path(dst)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns(*AGY_SKIP))
+        skills = root / "skills"
+        for old in sorted(skills.iterdir()) if skills.is_dir() else []:
+            if old.name not in AGY_SKILLS:
+                print(f"    x skills/{old.name} (agy 에서 뺀 스킬)")
+                if not a.dry_run:
+                    drop_path(old)
+        for name in AGY_FORBIDDEN:
+            if (root / name).exists():
+                print(f"    x {name} → {name}.removed (플러그인에 두지 않는다)")
+                if not a.dry_run:
+                    (root / name).replace(root / f"{name}.removed")
+
+
 def install_tools(a):
     script = REPO / "skills" / "game-onboard" / "scripts" / "clangd_tools.py"
     if a.dry_run:
@@ -326,6 +462,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--apply-settings", action="store_true", help="settings.json 에 훅을 직접 등록한다 (백업 후, 빠진 것만)")
     ap.add_argument("--no-tools", action="store_true", help="clangd 도구를 내려받지 않는다")
+    ap.add_argument("--agy-home", action="append", metavar="폴더",
+                    help="agy 홈 폴더 (.gemini 가 든 곳, 여러 번). 주지 않으면 사용자 홈과 ~/.agy-accounts/*")
+    ap.add_argument("--no-agy", action="store_true", help="agy 플러그인을 두지 않는다")
     a = ap.parse_args()
     print("스킬 →", CLAUDE / "skills")
     install_skills(a)
@@ -336,6 +475,9 @@ def main():
     install_mods(a)
     print("공용 규칙 →", CLAUDE / "CLAUDE.md")
     install_rules(a)
+    if not a.no_agy:
+        print("agy 플러그인 →", f"<홈>/.gemini/config/plugins/{AGY_PLUGIN}", "(릴레이의 Gemini 직원이 쓰는 Antigravity CLI)")
+        install_agy(a, agy_homes(a.agy_home))
     if not a.no_tools:
         print("clangd 도구 →", Path.home() / ".claude" / "tools" / "clangd", "(의미 인덱스용, 못 찾을 때만 내려받는다)",
               flush=True)  # 하위 프로세스 출력보다 먼저 보이게

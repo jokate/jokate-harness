@@ -9,6 +9,7 @@
   ~/.claude/hooks/<훅>.py      이 저장소가 설치한 훅 파일 (harness_events.py 포함)
   ~/.claude/mods/<mod>         하네스 모니터 mod (링크는 링크만 끊는다)
   ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
+  <홈>/.gemini/config/plugins/game-harness  agy 플러그인 (사용자 홈과 ~/.agy-accounts/*. 스킬 링크는 링크만 끊는다)
   ~/.claude/cache/stuck        매몰 카운터 상태
   ~/.claude/cache/game-harness 하네스 이벤트 로그, 프로젝트별로 저장한 엔진 경로(engine_roots.json)
   --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 와
@@ -39,7 +40,8 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 sys.path.insert(0, str(REPO))
-from install import HOOKS, LIBS, OBSOLETE_HOOKS, PLUGIN_DIRS_ENV, mod_dirs, mod_paths, rules_block_span  # noqa: E402
+from install import (HOOKS, LIBS, OBSOLETE_HOOKS, PLUGIN_DIRS_ENV, agy_homes, agy_ours, agy_plugin_dir,  # noqa: E402
+                     drop_path, mod_dirs, mod_paths, rules_block_span)
 
 
 def is_link(p):
@@ -161,6 +163,20 @@ def remove_rules(dry):
             path.unlink()
 
 
+def remove_agy(dry, homes):
+    """agy 플러그인 폴더만 지운다. 스킬 링크는 링크만 끊는다. 계정의 hooks.json · mcp_config.json 은 건드리지 않는다."""
+    for home in homes:
+        root = agy_plugin_dir(home)
+        if not root.is_dir():
+            continue
+        if not agy_ours(root):
+            print(f"  = {root} 는 남긴다 (game-harness 가 만든 것이 아님)")
+            continue
+        print(f"  - {root}")
+        if not dry:
+            drop_path(root)
+
+
 def remove_tree(p, dry, note=""):
     if p.is_dir() and not is_link(p):
         print(f"  - {p}{note}")
@@ -239,6 +255,8 @@ def main():
         print("설정 →", CLAUDE / "settings.json")
         clean_settings(a.dry_run)
         remove_rules(a.dry_run)
+        print("agy 플러그인 →", "<홈>/.gemini/config/plugins/game-harness")
+        remove_agy(a.dry_run, agy_homes())
         remove_tree(CLAUDE / "cache" / "stuck", a.dry_run)
         remove_tree(CLAUDE / "cache" / "game-harness", a.dry_run, " (하네스 이벤트 로그·저장한 엔진 경로)")
         ue = CLAUDE / "cache" / "ue_index"

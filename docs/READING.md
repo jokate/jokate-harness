@@ -5,6 +5,7 @@
 
 사용자는 설계 판단만 읽는다. 그래서 답과 문서의 맨 앞에는 정한 것과 정할 것만 둔다.
 규칙 본문은 `rules/common.md`(모든 프로젝트의 전역 CLAUDE.md 에 들어간다)와 game-architecture '읽기 규칙'이다.
+agy(Antigravity CLI)에는 `rules/agy.md` 를 붙여 플러그인 규칙으로 넣는다.
 에이전트가 읽는 스킬 문서를 쓰는 법은 `docs/WRITING.md` 다.
 
 ## 문서 철학
