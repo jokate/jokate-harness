@@ -193,6 +193,55 @@ class ReadabilityTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("추천의 왜 칸 3/4", line)
 
+    def test_go_reul_geot_heading_is_checked_too(self):
+        """'선택지' 를 GUIDE 양식의 '고를 것' 으로 바꾸고 추천을 지우면 검사를 피했다 (문서 시범 1차)."""
+        md = ("# t\n\n## 결론\n- 헛 끊김은 경로 확인으로 막는다.\n\n## 고를 것\n| 안 | 방법 |\n|---|---|\n| 가 | 끊기 전 확인 |\n"
+              "| 나 | 남길 때 확인 |\n\n## 근거\n- 파일 표\n")
+        c = render.check(md)
+        self.assertIs(c["recommend"], False)
+        self.assertIsNone(c["figures"])  # 구조도 · 절 기준은 선택지 절이 있는 구조 조사 문서만
+        line, ok = render.report(c)
+        self.assertFalse(ok)
+        self.assertIn("추천 없음", line)
+        self.assertIn("근거 육하원칙 표 없음", line)
+        fixed = md.replace("\n## 근거", "\n추천: 나. 고르는 것은 사용자.\n- 문제: 끊긴 뒤에는 경로를 되돌릴 수 없다.\n"
+                                      "- 버린 안: 가 — 끊기 전마다 확인하면 매 프레임 비용이 든다.\n- 대가: 남길 때 한 번 더 읽는다.\n"
+                                      "- 뒤집는 조건: 남기는 곳이 둘 이상이 되면 다시 본다.\n\n"
+                                      "| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n|---|---|---|---|---|---|---|\n"
+                                      "| 연결 관리 | 끊길 때 | Link.cpp:40 | 경로 | 남길 때 확인 | 헛 끊김 | 확인 |\n\n## 근거")
+        self.assertTrue(render.report(render.check(fixed))[1], render.report(render.check(fixed))[0])
+
+    def test_when_cell_must_not_be_writing_time(self):
+        head = "| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n|---|---|---|---|---|---|---|\n"
+        for when, n in (("구조 검토 시점", 1), ("질문 2 검토", 1), ("공격이 맞을 때", 0), ("2026-11-05 검토", 0),
+                        ("커밋 a1c2d29 조사", 0)):
+            md = f"# t\n\n## 근거\n{head}| 판정 | {when} | A.cpp:1 | 피해 | 한 곳 | 고칠 곳 | 확인 |\n"
+            self.assertEqual(render.check(md)["vague_when"], n, when)
+        line, ok = render.report(render.check(f"# t\n\n## 근거\n{head}| 판정 | 구조 검토 시점 | A.cpp:1 | 피 | 한 곳 | 왜 | 확인 |\n"))
+        self.assertFalse(ok)
+        self.assertIn("'언제' 칸에 문서를 쓴 때를 적은 줄 1개", line)
+
+    def test_ids_inside_front_five_w_table_are_allowed(self):
+        """번호는 근거 표에 둔다. 결정 블록 밑 근거 표가 첫 화면에 있어도 번호를 세지 않는다."""
+        md = ("# t\n\n## 결정\n- 입구는 한 곳이다.\n\n| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n"
+              "|---|---|---|---|---|---|---|\n| Claude | 커밋 a1c2d29 | A.cpp:1 | 입구 | grep | 넷인지 | 확인 |\n\n"
+              "- 본문의 task_5e5df7c8 은 센다\n")
+        self.assertEqual(render.check(md)["ids_front"], 1)
+
+    def test_each_decision_block_needs_why_and_five_w(self):
+        """선택지 절 없이 '### 결정:' 블록만 써도 블록마다 왜 네 칸과 근거 표를 본다 (문서 시범 2차)."""
+        good = ("### 결정: 입구는 한 곳이다\n- 문제: 넷이면 순서를 네 곳에서 맞춘다.\n- 버린 안: B — 순서가 갈린다.\n"
+                "- 대가: 함수 하나가 커진다.\n- 뒤집는 조건: 순서가 판정마다 달라야 하면.\n\n"
+                "| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |\n|---|---|---|---|---|---|---|\n"
+                "| 판정 | 맞을 때 | A.cpp:1 | 피해 | 한 곳 | 고칠 곳 | 확인 |\n")
+        md = f"# t\n\n## 정한 것\n- 입구는 한 곳이다.\n\n## 입구\n{good}\n## 기록\n{good.replace('- 대가: 함수 하나가 커진다.' + chr(10), '')}"
+        c = render.check(md)
+        self.assertEqual((c["decisions"], c["decisions_incomplete"]), (2, 1))
+        line, ok = render.report(c)
+        self.assertFalse(ok)
+        self.assertIn("결정 블록 2개 중 칸이 빈 것 1개", line)
+        self.assertTrue(render.report(render.check(f"# t\n\n## 정한 것\n- 한 곳.\n\n## 입구\n{good}"))[1])
+
     def test_date_tag_patterns(self):
         for s in ("[10-24]", "[18시 갱신 · 21:50]", "(사용자 결정 2026-11-03)", "16:34 뒤 이어진 길"):
             self.assertEqual(len(render.DATE_TAG.findall(s)), 1, s)

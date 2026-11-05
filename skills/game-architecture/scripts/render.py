@@ -190,6 +190,11 @@ DATE_TAG = re.compile(
 WORK_ID = re.compile(r"\btask_[0-9a-f]{6,}\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # 작업 · 커밋 번호
 FIVE_W = re.compile(r"^\|\s*누가\s*\|.*언제.*어디서.*무엇.*어떻게.*왜", re.M)  # 근거 육하원칙 표 머리줄
 WHY_SLOTS = ("문제", "버린 안", "대가", "뒤집는 조건")  # 추천 밑 결정 블록 (docs/READING.md)
+CHOICE_HEADS = ("선택지", "고를 것")  # 고를 것: 릴레이 GUIDE 의 결재 양식. 이 절이 있으면 추천 · 왜 · 근거 표를 본다
+RECOMMEND = re.compile(r"^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?\**추천\**\s*(?:[:：]|[—–]\s)", re.M)
+# '언제' 칸에 문서를 쓰거나 검토한 때를 적은 줄("구조 검토 시점"). 코드가 불리는 때 · 확인한 날짜 · 커밋은 통과한다
+VAGUE_WHEN = re.compile(r"검토|작성|문서|조사")
+REAL_WHEN = re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}|\b[0-9a-f]{7,40}\b|\b(?:task|inb|run)_\w+")
 
 
 def _sec_name(head):
@@ -266,10 +271,68 @@ def _no_code(md):
     return "\n".join(out)
 
 
+def _cells(line):
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _five_w_tables(text):
+    """육하원칙 표마다 (머리줄 칸, 본문 줄의 칸들, 표가 차지한 줄 번호들)."""
+    lines, out, i = text.splitlines(), [], 0
+    while i < len(lines):
+        if not FIVE_W.match(lines[i]):
+            i += 1
+            continue
+        head, rows, idx = _cells(lines[i]), [], [i]
+        i += 1
+        while i < len(lines) and lines[i].lstrip().startswith("|"):
+            idx.append(i)
+            if not re.fullmatch(r"\s*\|[\s:|-]*", lines[i]):
+                rows.append(_cells(lines[i]))
+            i += 1
+        out.append((head, rows, idx))
+    return out
+
+
+DECISION_HEAD = re.compile(r"^(#{2,4})\s*(?:미)?결정\s*[:：]")  # docs/READING.md '결정 블록'의 머리
+
+
+def _decision_blocks(md):
+    """'### 결정: …' 블록마다 머리 아래 글. 같은 단계 이상의 다음 제목에서 끝난다."""
+    lines, out = _no_code(md).splitlines(), []
+    for i, ln in enumerate(lines):
+        m = DECISION_HEAD.match(ln)
+        if not m:
+            continue
+        j = i + 1
+        while j < len(lines) and not re.match(rf"^#{{1,{len(m.group(1))}}}\s", lines[j]):
+            j += 1
+        out.append("\n".join(lines[i + 1:j]))
+    return out
+
+
+def _block_complete(block):
+    slots = all(re.search(rf"^\s*[-*]\s*\**{s}\**\s*:", block, re.M) for s in WHY_SLOTS)
+    return slots and bool(FIVE_W.search(block))
+
+
+def _vague_when(tables):
+    n = 0
+    for head, rows, _ in tables:
+        if "언제" not in head:
+            continue
+        k = head.index("언제")
+        for row in rows:
+            cell = row[k] if k < len(row) else ""
+            if VAGUE_WHEN.search(cell) and not REAL_WHEN.search(cell):
+                n += 1
+    return n
+
+
 def check(md, figs=None):
     """읽기 점검 — 보이는 부분(접힌 근거 위) 줄 수 · 긴 줄 · 몰아 쓴 줄 · 날짜 꼬리표 · 번호 · 근거 밖 절 · 구조도 · 육하원칙 표.
     render.py 가 출력해 모델이 고칠 근거로 쓴다. 기준은 첫 화면만 본다(근거 쪽 몰아 쓴 줄은 수만 알린다).
-    날짜 꼬리표는 문서 어디에도 두지 않는다. 구조 조사 문서(선택지 절이 있는 글)가 아니면 절 · 구조도 · 육하원칙은 안 본다."""
+    날짜 꼬리표는 문서 어디에도 두지 않는다. 선택지나 고를 것 절이 있으면 추천 · 왜 칸 · 육하원칙 표를 본다.
+    절 · 구조도는 선택지 절이 있는 구조 조사 문서만 본다. 육하원칙 표의 '언제' 칸은 표가 있으면 어디서든 본다."""
     front = readable(md).split("<details>")[0]
     view = MERMAID.sub("(그림)", front)
     vis = [ln for ln in view.splitlines() if ln.strip()]
@@ -278,30 +341,46 @@ def check(md, figs=None):
     packed_all = [ln for ln in _prose(md, clip=False) if _packed(ln)]
     names = [_sec_name(ln) for ln in md.splitlines() if ln.startswith("## ")]
     arch = any(n.startswith("선택지") for n in names)
+    choice = any(n.startswith(CHOICE_HEADS) for n in names)  # 고를 것을 내는 글. 이름을 바꿔 검사를 피하지 못하게 한다
     extra = [n for n in names if _front_rank(n) is None and n != "근거"] if arch else []  # '근거' 에서 끝난다
+    in_table = {i for *_, idx in _five_w_tables(front) for i in idx}  # 번호는 근거 표에 둔다 — 첫 화면의 근거 표는 세지 않는다
+    front_text = "\n".join(ln for i, ln in enumerate(front.splitlines()) if i not in in_table)
     return {"visible_lines": len(vis), "long_lines": len(long_), "extra_sections": extra,
             "figures": len(figs or []) if arch else None,
             "packed_front": len(packed_front), "packed_rest": max(0, len(packed_all) - len(packed_front)),
             "date_tags": len(DATE_TAG.findall(_no_code(md))),
-            "ids_front": len(WORK_ID.findall(_no_code(front))),
-            "five_w": bool(FIVE_W.search(md)) if arch else None,
+            "ids_front": len(WORK_ID.findall(_no_code(front_text))),
+            "vague_when": _vague_when(_five_w_tables(md)),
+            "decisions": len(blocks := _decision_blocks(md)),
+            "decisions_incomplete": sum(not _block_complete(b) for b in blocks),
+            "five_w": bool(FIVE_W.search(md)) if choice else None,
+            "recommend": bool(RECOMMEND.search(front)) if choice else None,
             "why_slots": sum(bool(re.search(rf"^\s*[-*]\s*\**{s}\**\s*:", front, re.M)) for s in WHY_SLOTS)
-            if arch else None}
+            if choice else None}
 
 
 def report(c):
     """check() 결과 → (한 줄, 기준 안인가)."""
     ok = (c["visible_lines"] <= VISIBLE_MAX and c["long_lines"] == 0 and not c["extra_sections"] and c["figures"] != 0
           and c.get("packed_front", 0) == 0 and c.get("date_tags", 0) == 0 and c.get("ids_front", 0) == 0
-          and c.get("five_w") is not False and c.get("why_slots") in (None, len(WHY_SLOTS)))
+          and c.get("five_w") is not False and c.get("why_slots") in (None, len(WHY_SLOTS))
+          and c.get("recommend") is not False and c.get("vague_when", 0) == 0
+          and c.get("decisions_incomplete", 0) == 0)
     line = f"읽기 점검: 첫 화면 {c['visible_lines']}줄(기준 {VISIBLE_MAX} 이하) · {LONG}자 넘는 줄 {c['long_lines']}개(기준 0)"
     if "packed_front" in c:
         line += (f" · 몰아 쓴 줄 {c['packed_front']}개(기준 0 — 가운뎃점 {PACK_DOTS}개 · 괄호 {PACK_PARENS}개 이상,"
                  f" 근거 쪽 {c['packed_rest']}개는 참고) · 날짜 꼬리표 {c['date_tags']}개(기준 0)"
                  f" · 첫 화면 작업 · 커밋 번호 {c['ids_front']}개(기준 0)")
     if c.get("five_w") is not None:
-        line += (f" · 추천의 왜 칸 {c['why_slots']}/{len(WHY_SLOTS)}(기준 {len(WHY_SLOTS)} — {', '.join(WHY_SLOTS)})"
+        line += (f" · 추천 {'있음' if c.get('recommend') else '없음'}(기준 있음 — 선택지나 고를 것을 내면 추천 하나)"
+                 f" · 추천의 왜 칸 {c['why_slots']}/{len(WHY_SLOTS)}(기준 {len(WHY_SLOTS)} — {', '.join(WHY_SLOTS)})"
                  f" · 근거 육하원칙 표 {'있음' if c['five_w'] else '없음'}(기준 있음)")
+    if c.get("decisions"):
+        line += (f" · 결정 블록 {c['decisions']}개 중 칸이 빈 것 {c['decisions_incomplete']}개"
+                 f"(기준 0 — 블록마다 왜 네 칸과 육하원칙 표)")
+    if c.get("vague_when"):
+        line += (f" · 근거 표 '언제' 칸에 문서를 쓴 때를 적은 줄 {c['vague_when']}개"
+                 f"(기준 0 — 일이 일어나는 때, 또는 확인한 날짜 · 커밋)")
     if c["figures"] is not None:
         line += f" · 근거 밖 절 {len(c['extra_sections'])}개(기준 0" + (
             ": " + ", ".join(c["extra_sections"]) if c["extra_sections"] else "") + ")"
