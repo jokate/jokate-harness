@@ -776,7 +776,8 @@ settings.json 을 못 읽으면 뺀 훅 파일을 그대로 둔다. 시험: `tes
 | Claude | 설치 직후 | 계정 1 | `agy plugin list` | 스킬을 정션으로 이었을 때 | 플러그인 발견 확인 | "1 rule" 만 보였다 |
 | Claude | 그 뒤 | 계정 1 | `agy plugin list` | 스킬 하나만 복사본으로 바꿨을 때 | 정션이 원인인지 | "1 skill, 1 rule" — 정션이 원인 |
 | Claude | 넷 다 복사 뒤 | 계정 1 · 2 · 3 | `agy plugin list` | 계정 폴더를 홈으로 | 세 계정 모두 | "4 skills, 1 rule", 켜짐 |
-| Claude | 그 뒤 | 계정 1 | `agy -p`, gemini-3.8-flash-low | 규칙 '## agy 에서 쓸 때' 둘째 항목을 그대로 옮기게 | 규칙이 대화에 실리는지 | 글자 그대로 옮겼다. game- 스킬 4개를 댔다 |
+| Claude | 그 뒤 | 계정 1 | `agy -p`, gemini-3.8-flash-low | 규칙 '## agy 에서 쓸 때' 둘째 항목을 옮기고 game- 스킬을 대게 | 규칙과 스킬이 대화에 실리는지 | 스킬 4개를 댔다. 화면 출력이 깨져 글자 대조는 못 했다 |
+| Claude | 그 뒤 | 계정 2 | `agy -p`, gemini-3.8-flash-low | 같은 질문, 표준 출력 바이트를 UTF-8 로 풀어 대조 | 글자 대조 | 둘째 항목과 글자까지 같다 |
 | Claude | 설치 뒤 | 계정 1 · 2 · 3 | `hooks.json`, `mcp_config.json` 수정 시각 | 설치 전후 비교 | 릴레이 가드 파일을 안 건드렸는지 | 10-30 그대로 |
 
 - **지킨 것:** 플러그인에 `hooks.json` 과 `mcp_config.json` 을 두지 않는다. 릴레이 가드는 계정의 hooks.json 하나로 판정한다. 플러그인 훅은 그 옆에서 따로 돈다. 시험이 이것을 막는다.
