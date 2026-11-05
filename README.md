@@ -29,6 +29,7 @@ docs/UPSTREAM.md      빌려 온 바깥 스킬(Matt Pocock)과 업데이트 받�
 setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + (옆에 있으면) 위키 하네스 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
 rules/common.md       모든 프로젝트 공용 규칙 (답변 길이). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
+rules/agy.md          agy(Antigravity CLI)에만 붙는 규칙. 공용 규칙과 함께 <홈>/.gemini/config/plugins/game-harness 에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 index_build.bat       인덱스 지금 만들기: 프로젝트 좌표 → 엔진 좌표 → clangd (프로젝트 증분, 엔진은 없을 때만) → 조회용 정리
@@ -39,7 +40,8 @@ index_view.bat        인덱스 웹뷰
 
 `setup.bat` 더블클릭 (Windows) — 또는 게임 프로젝트 폴더를 `setup.bat` 위에 끌어다 놓는다. 한 번에:
 
-1. 스킬·훅·mod 를 `~/.claude` 에 설치하고 `settings.json` 에 훅과 mod(`env.CLAUDE_CODE_PLUGIN_DIRS`)를 등록한다 (원본은 `settings.json.bak`)
+1. 스킬·훅·mod 를 `~/.claude` 에 설치하고 `settings.json` 에 훅과 mod(`env.CLAUDE_CODE_PLUGIN_DIRS`)를 등록한다 (원본은 `settings.json.bak`).
+   agy(Antigravity CLI, 릴레이의 Gemini 직원)의 홈이 있으면 규칙과 스킬 4개를 agy 플러그인으로도 둔다. 홈은 사용자 홈과 `~/.agy-accounts/*` 이다. 빼려면 `install.py --no-agy`
 2. 위키 하네스([jokate-wiki](https://github.com/jokate/jokate-wiki), 비공개)가 이 폴더 옆에 있거나 `JOKATE_WIKI_DIR` 로 알려 주면 그것도 설치한다 (없으면 건너뛴다, `--no-wiki` 로 끈다).
    새 PC 에서는 같은 폴더 안에 나란히 받는다: `git clone https://github.com/jokate/jokate-harness.git game-harness` · `git clone https://github.com/jokate/jokate-wiki.git jokate-wiki`
    그림 스킬 [diagram-design](https://github.com/cathrynlavery/diagram-design)(MIT)도 옆에 받아 두면(`git clone --depth 1 https://github.com/cathrynlavery/diagram-design.git diagram-design`) 스킬로 연결한다 — game-architecture 의 구조 그림 · 위키의 보기용 그림을 그것으로 그린다. 처음 그릴 때 스타일을 한 번 묻는다

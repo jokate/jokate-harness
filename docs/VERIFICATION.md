@@ -762,6 +762,30 @@ settings.json 을 못 읽으면 뺀 훅 파일을 그대로 둔다. 시험: `tes
 - **검사 추가:** 구조 문서의 추천 밑 왜 네 칸(문제 · 버린 안 · 대가 · 뒤집는 조건). 전역 CLAUDE.md 하네스 절 539 → 1447 B, 하네스 몫 5934 → 6842 B (한도 7000).
 - **안 본 것:** 대화 답에는 기계 검사가 없다(전역 규칙만). 새 규칙으로 쓴 문서를 사용자가 실제로 더 잘 읽는지. hanlint 시험(설치 허락 필요).
 
+## 2026-11-05 (2) — agy 플러그인 (`install.py` 의 `install_agy`)
+
+결정: 릴레이의 Gemini 직원이 쓰는 agy(Antigravity CLI)에 규칙과 스킬 4개를 플러그인 하나로 둔다.
+- 문제: 문서 시범에서 Gemini 직원은 전역 CLAUDE.md 를 받지 못했다. agy 는 CLAUDE.md 를 읽지 않는다.
+- 버린 안: 스킬을 정션으로 잇기 — agy 가 정션 스킬을 읽지 않는다(아래 실측).
+- 버린 안: 전역 `~/.gemini/config/skills.json` 에 저장소 경로 등록 — 사용자 파일과 섞이고, Windows 절대 경로가 작업 폴더 기준으로 풀릴 수 있다.
+- 대가: 스킬은 복사본이다. 저장소를 고치면 `setup.bat` 을 다시 돌려야 agy 에 들어간다. 홈마다 약 4.4MB 가 든다.
+- 뒤집는 조건: agy 가 정션이나 심볼릭 링크 스킬을 읽게 되면 링크로 바꾼다.
+
+| 누가 | 언제 | 어디서 | 무엇을 | 어떻게 | 왜 | 확신 |
+|---|---|---|---|---|---|---|
+| Claude | 설치 직후 | 계정 1 | `agy plugin list` | 스킬을 정션으로 이었을 때 | 플러그인 발견 확인 | "1 rule" 만 보였다 |
+| Claude | 그 뒤 | 계정 1 | `agy plugin list` | 스킬 하나만 복사본으로 바꿨을 때 | 정션이 원인인지 | "1 skill, 1 rule" — 정션이 원인 |
+| Claude | 넷 다 복사 뒤 | 계정 1 · 2 · 3 | `agy plugin list` | 계정 폴더를 홈으로 | 세 계정 모두 | "4 skills, 1 rule", 켜짐 |
+| Claude | 그 뒤 | 계정 1 | `agy -p`, gemini-3.8-flash-low | 규칙 '## agy 에서 쓸 때' 둘째 항목을 옮기고 game- 스킬을 대게 | 규칙과 스킬이 대화에 실리는지 | 스킬 4개를 댔다. 화면 출력이 깨져 글자 대조는 못 했다 |
+| Claude | 그 뒤 | 계정 2 | `agy -p`, gemini-3.8-flash-low | 같은 질문, 표준 출력 바이트를 UTF-8 로 풀어 대조 | 글자 대조 | 둘째 항목과 글자까지 같다 |
+| Claude | 설치 뒤 | 계정 1 · 2 · 3 | `hooks.json`, `mcp_config.json` 수정 시각 | 설치 전후 비교 | 릴레이 가드 파일을 안 건드렸는지 | 10-30 그대로 |
+
+- **지킨 것:** 플러그인에 `hooks.json` 과 `mcp_config.json` 을 두지 않는다. 릴레이 가드는 계정의 hooks.json 하나로 판정한다. 플러그인 훅은 그 옆에서 따로 돈다. 시험이 이것을 막는다.
+- **뺀 스킬:** game-bootstrap 은 Claude Code 의 훅과 settings.json 을 깐다. game-mcp 는 Claude Code 훅(mcp_guard)을 전제로 한다.
+- **agy 몫 규칙:** `rules/agy.md` 를 공용 규칙 뒤에 붙인다. 지금은 세 줄이다. 저장소 맨 위의 CLAUDE.md 를 먼저 읽는다. Claude Code 전용 기능은 건너뛰고 보고에 적는다.
+- **시험:** `test_install_agy.py` 12개.
+- **안 본 것:** 릴레이를 거친 실제 직원 런에서 규칙을 지키는지. 스킬이 제때 불리는지.
+
 ## 검증 안 된 것
 
 - svn 경로 (`evidence.py`) — 작성 머신에 svn 없음
