@@ -23,6 +23,12 @@ import urllib.parse
 import webbrowser
 from pathlib import Path
 
+for _s in (sys.stdout, sys.stderr):  # 한글 Windows 콘솔(cp949)에서 읽기 점검 줄의 '—' 를 못 찍어 죽었다
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
 HERE = Path(__file__).resolve().parent
 VENDOR = HERE / "vendor"  # marked 12.0.2 · mermaid 11.17.2 (vendor/README.md)
 CDN = {"marked": "https://cdn.jsdelivr.net/npm/marked@12/marked.min.js",
