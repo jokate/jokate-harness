@@ -173,6 +173,12 @@ class MergedQueryTest(unittest.TestCase):
             frows, ftotal = mx.files(sym, 100)
             self.assertEqual(dict(frows), files, f"{label}: 파일 {sym}")
             self.assertEqual(ftotal, len(files), f"{label}: 파일 수 {sym}")
+            self.assertEqual(dict(mx.ref_files(sym, REF)), files, f"{label}: 파일 목록(--files, 사용만) {sym}")
+            every = {}
+            for r in self.truth_for(sym):
+                every[fx.rel[r[2]]] = every.get(fx.rel[r[2]], 0) + 1
+            self.assertEqual(dict(mx.ref_files(sym)), every, f"{label}: 파일 목록(--files, 전부) {sym}")
+            self.assertEqual(sum(n for _, n in mx.ref_files(sym)), mx.ref_count(sym), f"{label}: 파일별 수의 합 {sym}")
         for f in fx.funcs[:6]:
             want = {}
             for r in fx.truth:

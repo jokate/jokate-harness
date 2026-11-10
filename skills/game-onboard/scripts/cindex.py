@@ -21,6 +21,7 @@
   python cindex.py status
   python cindex.py sym <이름|A::B>          # 심볼 좌표 (선언·정의·시그니처)
   python cindex.py refs <이름> [--kind decl|def|ref] [--module M] [--path 조각] [--cursor C] [--generated]   # 총계·모듈 묶음·표본·다음 커서 (생성 코드는 기본으로 뺀다)
+  python cindex.py refs <이름> --files      # 줄 대신 참조가 있는 파일과 파일별 수 ("어느 파일이 쓰나"를 한 번에)
   python cindex.py callers <이름>           # 이 심볼을 참조하는 함수 (참조의 Container 기준)
   python cindex.py callees <이름>           # 이 함수 안에서 참조하는 함수·메서드
   python cindex.py bases <이름> · derived <이름> · overrides <이름>   # 전 단계 트리 (--depth N 으로 제한)
@@ -1421,6 +1422,24 @@ class Index:
                 args.append(module)
         return self.q(f"SELECT COUNT(*) FROM refs r{join} WHERE {' AND '.join(where)}{self._x(excl)}", args)[0][0]
 
+    def ref_files_part(self, sid, mask=None, path=None, module=None, excl=None, nogen=False):
+        """[(경로, 참조 수)] — 참조가 있는 파일마다 하나. 줄 단위 목록(refs_part)을 넘겨 보지 않고 파일만 알고 싶을 때."""
+        where, args = ["r.sym=?"], [sid]
+        if mask:
+            where.append("(r.kind & ?) != 0")
+            args.append(mask)
+        if nogen:
+            where.append(GEN_SQL)
+        if path:
+            where.append("f.rel LIKE ? ESCAPE '\\'")
+            args.append(f"%{like_escape(path)}%")
+        if module:
+            where.append("f.module = ?")
+            args.append(module)
+        rows = self.q("SELECT f.rel, f.root, COUNT(*) FROM refs r LEFT JOIN files f ON f.id=r.file "
+                      f"WHERE {' AND '.join(where)}{self._x(excl)} GROUP BY r.file", args)
+        return sorted((("[E] " if root == "engine" else "") + (rel or ""), n) for rel, root, n in rows)
+
     def callers_part(self, sid, limit, excl=None, stats_ok=False, nogen=False):
         """사용(Reference 비트) 참조를 Container 로 묶은 상위 limit 개: [(container, 수, 첫 파일 id, 첫 줄)].
         요약 표가 맞으면 그것을, 아니면 SQL 로 묶는다 — 파이썬으로 전부 가져와 세지 않는다.
@@ -1622,6 +1641,13 @@ class MultiIndex:
 
     def refs(self, sid, mask=None, limit=500):
         return self.refs_page(sid, mask, limit)[0]
+
+    def ref_files(self, sid, mask=None, path=None, module=None, nogen=False):
+        """[(경로, 참조 수)] 참조가 있는 파일 전부 — 프로젝트 몫 먼저, 그 안에서 경로 순."""
+        out = []
+        for ix, x, _ in self.parts:
+            out += ix.ref_files_part(sid, mask, path, module, x, nogen)
+        return out
 
     def ref_parts(self, sid, mask=None, path=None, module=None, nogen=False):
         """[(역할, 참조 수)] — 파일마다 주인이 하나라 더하면 총계다."""
@@ -1880,6 +1906,14 @@ def refs_report(ix, s, head, a, lc):
         if mods:
             summary.append(f"사용 모듈 {n_mod}{'+' if approx else ''}: " + " · ".join(f"{m or '(모듈 없음)'} {n}" for m, n in mods)
                            + (" …" if n_mod > len(mods) else ""))
+    if a.files:
+        files = ix.ref_files(s["id"], mask, a.path, a.module, nogen)
+        flines = [f"{n:>4}× {p}" for p, n in files]
+        top = head + summary
+        shown = len(flines) if a.full else min(len(flines), fits(flines, max(CAP - len("\n".join(top).encode("utf-8")) - 200, 600)))
+        tail = [f"[잘림] 파일 {shown}/{len(files)} · --full 로 전부 · 좁히기: --module <모듈> | --path <경로 조각>"] if shown < len(flines) else []
+        print("\n".join(top + [f"── 파일 {len(files)}개 · 프로젝트 먼저 · 경로 순 ──" if files else "참조 없음"] + flines[:shown] + tail))
+        return 0
     lines = [f"{'D' if r['kind'] & DEF else 'd' if r['kind'] & DECL else 'r'} {r['path']}:{r['line']}:{r['col']}"
              f"  in {(names.get(r['container']) or {}).get('name', '(파일 범위)')}  │ {lc.text(r['abs_path'], r['line'])}"
              for r in rows]
@@ -1889,7 +1923,7 @@ def refs_report(ix, s, head, a, lc):
     tail = []
     if rest and shown:
         tail.append(f"[잘림] {shown}/{total} · 다음: --cursor {ix.cursor_after(rows[shown - 1])} · "
-                    "좁히기: --module <모듈> | --path <경로 조각> | --kind ref|decl|def")
+                    "좁히기: --module <모듈> | --path <경로 조각> | --kind ref|decl|def · 파일 목록만: --files")
     order = "프로젝트 먼저 · 경로 순" if len(ix.parts) > 1 else "경로 순"
     print("\n".join(top + [f"── {order} · {shown}개 ──" if rows else "참조 없음"] + lines[:shown] + tail))
     return 0
@@ -2654,6 +2688,7 @@ def main():
     ap.add_argument("--cursor", default=None, help="refs: 앞 출력의 [잘림] 줄에 있는 커서로 이어 본다")
     ap.add_argument("--path", default=None, help="refs: 경로 조각으로 좁힌다")
     ap.add_argument("--module", default=None, help="refs: 모듈로 좁힌다 (Build.cs 이름)")
+    ap.add_argument("--files", action="store_true", help="refs: 줄 대신 참조가 있는 파일과 파일별 수만 (파일마다 한 줄)")
     ap.add_argument("--generated", action="store_true",
                     help="refs · callers: 생성 코드(.gen.cpp · .generated.h · Intermediate)의 참조도 보인다 (기본은 뺀다)")
     ap.add_argument("--force", action="store_true", help="optimize: 이미 스키마 2 여도 다시 쓴다 · build --mode bg: 바뀐 샤드가 없어도 DB 를 다시 쓴다")
