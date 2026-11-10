@@ -40,13 +40,12 @@ argument-hint: "[프로젝트 루트 — 생략하면 현재 폴더]"
 | 훅 | 스크립트 | 프로젝트 쪽 선언 |
 |---|---|---|
 | SessionStart | `session_start.py` | `.claude/session_start.json` (없으면 아무것도 안 함) |
-| SessionStart | `game_context.py` | 없음 — `.uproject`/Unity 프로젝트면 엔진·소스 저장소·스킬 라우팅 주입 |
+| SessionStart | `game_context.py` | 없음 — `.uproject`/Unity 프로젝트면 엔진 · 소스 저장소 · 그 프로젝트에 있는 위키와 인덱스 명령을 알린다 |
 | PreToolUse `mcp__.*` | `mcp_guard.py` | `.claude/mcp_guards.json` (없으면 아무것도 안 함) |
 | PostToolUse(+Failure) `mcp__.*` | `mcp_log.py` | 없음 — `~/.claude/mcp_logs/<폴더명>.jsonl`. 실패는 `.claude/mcp_guards.pending.json` 에 가드 규칙 후보로 모은다 |
-| PostToolUse(+Failure) `Edit\|Write\|…\|Bash\|PowerShell` | `stuck_watch.py` | `.claude/stuck_watch.json` (임계값, 없으면 기본) — 게임 프로젝트에서 같은 코드 파일 반복 수정 · 셸 연속 실패를 경고 |
 | PostToolUse(+Failure) `Skill\|Bash\|PowerShell` | `harness_trace.py` | 없음 — game-* 스킬·하네스 조회 스크립트 호출을 `~/.claude/cache/game-harness/events.jsonl` 에 기록 |
 
-뺀 훅(2026-10-22, 15일 0회 동작): `handoff.py`([RESET] 인계) · `diagram_view.py`(Stop 그림 열기). `install.py` 가 등록과 파일을 지운다.
+뺀 훅: `handoff.py`([RESET] 인계) · `diagram_view.py`(Stop 그림 열기)는 15일 0회 동작. `stuck_watch.py`(매몰 경고)는 경고 10건이 모두 정상 작업. `install.py` 가 등록과 파일을 지운다.
 
 훅들은 `harness_events.py`(같은 폴더)로 "어떤 기능이 동작했는가"를 남긴다. 그 로그를 모니터 mod(`mods/game-harness-monitor`)와 인덱스 웹뷰 하네스 탭이 읽는다.
 

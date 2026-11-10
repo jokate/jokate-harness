@@ -50,9 +50,9 @@
 }
 ```
 
-위는 최소 조각이다. `install.py` 가 출력하는 조각에는 stuck_watch · harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)도 들어 있다.
+위는 최소 조각이다. `install.py` 가 출력하는 조각에는 harness_trace(PostToolUse/PostToolUseFailure, matcher `Skill|Bash|PowerShell`, async)도 들어 있다.
 handoff(`[RESET]` 인계) · diagram_view(Stop 그림 열기)는 2026-10-07~22 에 한 번도 동작하지 않아 뺐다 — `install.py` 가 등록과 파일을 지운다(`OBSOLETE_HOOKS`).
-stuck_watch 는 게임 프로젝트(UE / Unity)에서만 돈다. stuck_watch 의 "같은 파일 N회 수정"은 코드 파일만 센다 (2026-10-16, 경고의 92% 가 게임이 아닌 작업 폴더였다).
+stuck_watch(매몰 경고)는 뺐다. 2026-10-28~11-10 의 경고 10건이 모두 정상 작업이었고, 편집 · 셸 호출마다 동기로 돌았다.
 `harness_events.py` 는 훅이 import 하는 모듈이라 `~/.claude/hooks/` 에 같이 두기만 하고 settings 에는 등록하지 않는다.
 
 `command` + `args` 형식과 `async` 는 이 설정을 만든 머신(2026-10 Claude Code)에서 동작 중인 형식이다. 다른 버전에서 안 되면

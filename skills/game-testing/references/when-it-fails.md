@@ -3,7 +3,7 @@
 > 일부를 AWS AI-DLC(`aidlc-workflows` 의 build-and-test · loopback · checkpoint 프로토콜, MIT-0)에서 빌려 게임 프로젝트에 맞게 고쳤다.
 > 라이선스: `docs/third_party/aidlc-workflows-LICENSE` · 원본 추적: `docs/UPSTREAM.md`.
 
-빌드 · 테스트 · 정해 둔 확인 항목이 하나라도 실패하면 이 순서를 밟는다. 같은 실패를 세 번째 고치려 하면 이미 4단이다 (stuck_watch 경고와 같은 신호).
+빌드 · 테스트 · 정해 둔 확인 항목이 하나라도 실패하면 이 순서를 밟는다. 같은 실패를 세 번째 고치려 하면 이미 4단이다.
 
 ## 0. 바닥 규칙
 

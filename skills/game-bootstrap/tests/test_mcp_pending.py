@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """MCP 실패 → 가드 규칙 후보 (표준 라이브러리 unittest): 같은 종류는 한 줄로 합치고, 세팅 안 된 곳에는 쓰지 않는다.
-세션 시작 안내는 후보가 있을 때만 한 줄을 더한다.
 
   python skills/game-bootstrap/tests/test_mcp_pending.py
 """
@@ -14,8 +13,6 @@ import unittest
 from pathlib import Path
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
-sys.path.insert(0, str(HARNESS))
-import game_context  # noqa: E402
 
 
 def call(data, home):
@@ -48,7 +45,6 @@ class Pending(unittest.TestCase):
         self.assertEqual([p["count"] for p in doc["pending"]], [2, 1])
         self.assertIn("<값>", doc["pending"][0]["error"])  # 이름 · 경로 · 숫자를 지워 같은 종류로 모았다
         self.assertEqual(doc["pending"][0]["tool"], "mcp__unreal__set_object_property")
-        self.assertIn("MCP 실패 2종", game_context.pending_guards(self.game)[0])
 
     def test_success_and_unset_project_write_nothing(self):
         call({"hook_event_name": "PostToolUse", "tool_name": "mcp__unreal__get_asset_info", "cwd": str(self.game),
@@ -56,7 +52,6 @@ class Pending(unittest.TestCase):
         self.assertFalse((self.game / ".claude" / "mcp_guards.pending.json").exists())
         self.fail(self.plain, "boom")
         self.assertFalse((self.plain / ".claude").exists())  # 세팅 안 된 곳에는 만들지 않는다
-        self.assertEqual(game_context.pending_guards(self.game), [])
 
 
 if __name__ == "__main__":

@@ -37,6 +37,8 @@ def description(skill_md: Path) -> str:
         return ""
     m = re.search(r"^---\s*\n(.*?)\n---", text, re.S)
     head = m.group(1) if m else ""
+    if re.search(r"^disable-model-invocation:\s*true\s*$", head, re.M):
+        return ""  # 직접 부를 때만 쓰는 스킬은 설명이 세션에 들어가지 않는다
     d = re.search(r"^description:\s*(.+)$", head, re.M)
     return d.group(1).strip() if d else ""
 

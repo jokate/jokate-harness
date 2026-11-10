@@ -1,60 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""훅 범위 시험 (표준 라이브러리 unittest): stuck_watch 가 게임 프로젝트에서만 도는가 · 뺀 훅의 등록을 지우는가.
+"""뺀 훅 시험 (표준 라이브러리 unittest): 뺀 훅의 하네스 등록만 지우는가.
 
   python skills/game-bootstrap/tests/test_hook_scope.py
 """
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-HARNESS = Path(__file__).resolve().parent.parent / "harness"
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 import install  # noqa: E402
 
 
-def run(hook, data, home):
-    env = dict(os.environ, USERPROFILE=str(home), HOME=str(home), GAME_HARNESS_NO_OPEN="1")
-    env.pop("CLAUDE_PROJECT_DIR", None)
-    r = subprocess.run([sys.executable, str(HARNESS / hook)], input=json.dumps(data).encode("utf-8"),
-                       capture_output=True, env=env, cwd=str(HARNESS))
-    return r.stdout.decode("utf-8", "replace")
-
-
-class HookScope(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        t = Path(self.tmp.name)
-        self.home, self.game, self.plain = t / "home", t / "Game", t / "relay-workspace"
-        for d in (self.home, self.game / "Source", self.plain):
-            d.mkdir(parents=True)
-        (self.game / "Game.uproject").write_text('{"EngineAssociation": "5.7"}', encoding="utf-8")
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def edits(self, root, name, n=5, session="s1"):
-        out = ""
-        for _ in range(n):
-            out = run("stuck_watch.py", {"hook_event_name": "PostToolUse", "tool_name": "Edit", "session_id": session,
-                                         "cwd": str(root), "tool_input": {"file_path": str(root / name)}}, self.home)
-        return out
-
-    def test_stuck_watch(self):
-        out = self.edits(self.game, "Source/A.cpp", session="g")                    # 게임 · 코드 → 경고
-        self.assertIn("매몰 신호", out)
-        self.assertNotIn("[RESET]", out)  # HandOff 를 뺐다 — 없는 명령을 안내하지 않는다
-        self.assertEqual(self.edits(self.game, "Docs/PLAN.md", session="d"), "")      # 게임 · 문서 → 없음
-        self.assertEqual(self.edits(self.plain, "src/a.py", session="p"), "")        # 게임 아님 → 없음
-
 
 class DropObsolete(unittest.TestCase):
-    """뺀 훅(handoff · diagram_view)의 하네스 등록만 지우고, 다른 훅과 같은 이름의 남의 훅은 둔다."""
+    """뺀 훅(handoff · diagram_view · stuck_watch)의 하네스 등록만 지우고, 다른 훅과 같은 이름의 남의 훅은 둔다."""
 
     def test_only_harness_entries_go(self):
         hooks_dir = str(Path.home() / ".claude" / "hooks")
@@ -91,6 +55,19 @@ class DropObsolete(unittest.TestCase):
                 self.assertFalse(install.drop_obsolete_settings(dry=False))  # 못 읽으면 False → 뺀 훅 파일을 둔다
             finally:
                 install.CLAUDE = saved
+
+    def test_stuck_watch_groups_go_and_neighbours_stay(self):
+        """stuck_watch 만 든 묶음은 통째로 사라지고, 같은 이벤트의 다른 훅은 남는다."""
+        hooks_dir = str(Path.home() / ".claude" / "hooks")
+        h = lambda n: {"type": "command", "command": "python", "args": [os.path.join(hooks_dir, n)]}  # noqa: E731
+        hooks = {"PostToolUse": [{"matcher": "mcp__.*", "hooks": [h("mcp_log.py")]},
+                                 {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [h("stuck_watch.py")]},
+                                 {"matcher": "Skill|Bash|PowerShell", "hooks": [h("harness_trace.py")]}],
+                 "PostToolUseFailure": [{"matcher": "Bash|PowerShell", "hooks": [h("stuck_watch.py")]}]}
+        removed = install.drop_obsolete(hooks)
+        self.assertEqual(sorted(removed), ["PostToolUse:stuck_watch.py", "PostToolUseFailure:stuck_watch.py"])
+        self.assertEqual([g["matcher"] for g in hooks["PostToolUse"]], ["mcp__.*", "Skill|Bash|PowerShell"])
+        self.assertNotIn("PostToolUseFailure", hooks)
 
     def test_snippet_has_no_obsolete(self):
         text = json.dumps(install.settings_snippet())

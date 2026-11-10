@@ -1,7 +1,7 @@
-"""SessionStart: 게임 프로젝트(UE / Unity)면 엔진·소스 저장소·스킬 라우팅을 컨텍스트에 넣는다.
+"""SessionStart: 게임 프로젝트(UE / Unity)면 엔진 · 소스 저장소 · 그 프로젝트에 있는 위키와 인덱스 명령을 컨텍스트에 넣는다.
 게임 프로젝트가 아니면 아무것도 안 한다. 어떤 경우에도 세션을 막지 않는다.
 
-CLAUDE.md 가 없는 프로젝트에서도 스킬이 걸리게 하려는 것이다 (모델의 자발적 트리거에 기대지 않는다).
+모델이 저장소만 봐서는 알 수 없는 것(인덱스가 있는지, 명령 경로)만 알린다.
 """
 import json
 import os
@@ -65,50 +65,30 @@ def keeps_gq(root):
     return any("gq.py" in " ".join(map(str, c.get("run", []))) for c in spec.get("commands", []) if isinstance(c, dict))
 
 
-def routing_lines(root, engine, home=None):
-    """스킬 라우팅과 코드 찾기 — 이 프로젝트에 있는 것만, 명령 줄 그대로. 라우팅은 여기 한 곳에만 둔다.
+def fact_lines(root, engine, home=None):
+    """이 프로젝트에 있는 위키 · 인덱스만 사실로 적는다. 명령은 경로째 준다(PowerShell 은 python 인자의 ~ 를 안 푼다).
 
-    - 스킬 이름만 알려 주면 모델이 스킬을 부르지 않고 grep 으로 간다 — MNYS 실제 세션 61개에서 clangd 0회 · 위키 0회 ·
-      grep 714회, game-onboard 0회(2026-10-20). 그래서 인덱스 명령을 경로째 준다(PowerShell 은 python 인자의 ~ 를 안 푼다).
-    - 2026-10-22 대조 시험(tools/harness_probe.py, MNYS 정답지 8과제 × 2 + 스킬 사례 5, docs/experience/routing-single-source.md):
-      CLAUDE.local.md 의 같은 라우팅 절을 빼도 스킬은 5/5 불렸다(그 절은 구조 질문을 위키로, 여기는 game-onboard 로 보내
-      서로 어긋났다). 위키 먼저로 바꾸며 cindex 줄을 줄였더니 cindex 22 → 11 · Grep 28 → 41 로 나빠졌고, 줄을 그대로 두고
-      "코드 세부는 cindex" 를 붙이니 cindex 22 · Grep 27 · 재현율 0.908 → 0.961, 비용 같음 — 그것이 이 모양이다.
-    - game-patterns 는 game-architecture 에 합쳤다(0회 불림, description 992 B). gq 는 갱신되는 프로젝트에만 권한다."""
+    스킬 고르기는 스킬 설명이 한다 — 여기서 되풀이하지 않는다. 2026-11-10 대조(Sonnet, 첫 6턴, MNYS):
+    "요청 → 스킬" 줄 3개를 빼도 스킬 호출은 구현 · 테스트 · 기획 대조 · 엔진 조회에서 그대로였다. 사용자가 구조를 직접 낸
+    요청만 0/4 로 떨어졌고, game-architecture 설명에 그 경우를 한 구절 넣자 4/4 로 돌아왔다. 인덱스 사용은 두 팔이 같았다.
+    MCP 가드 후보 수를 세션마다 알리던 줄도 뺐다(50건이 쌓이도록 검토 0회 — game-mcp 스킬이 다룬다).
+    docs/experience/model-generation-recheck.md."""
     home = Path(home) if home else Path.home()
     idx = root / ("Library" if engine.startswith("Unity") else "Saved") / "ClaudeIndex"
     onboard = f"python {(home / '.claude' / 'skills' / 'game-onboard' / 'scripts').as_posix()}"
     wiki = home / ".jokate-wiki" / root.name
-    has_wiki = (wiki / "index.md").is_file()
-    has_clangd = (idx / "clangd.sqlite").is_file()
-    out = ["스킬 — 요청을 받으면 코드를 읽기 전에 맞는 스킬을 부른다:",
-           "- 기능 추가 · 구현 · 설계 · 리팩터링 · 패턴 고르기 → game-architecture (구현 전 구조 조사 → 선택지와 근거 그림 → 사용자 선택까지 멈춤)",
-           "- 기획서 읽기 · 사양 정리 · 기획과 구현 대조 → game-design-doc · 테스트 · 검증 → game-testing · 에디터 MCP 조작 → game-mcp",
-           ("- 시스템 구조 · 동작 · 이유 질문 → 맥락은 위키 먼저(wiki-query, `" + wiki.as_posix() + "/index.md`), "
-            + ("코드 세부(어디서 쓰나 · 누가 부르나 · 바꾸면 영향)는 아래 cindex 로 확인. " if has_clangd else "")
-            + "위키에 없으면 game-onboard"
-            if has_wiki else "- 구조 · 위치 · 엔진 API 질문 → game-onboard")]
-    found = []
+    out = []
+    if (wiki / "index.md").is_file():
+        out.append(f"- 위키 `{wiki.as_posix()}/index.md`: 시스템 구조 · 동작 · 이유의 맥락이 있다. wiki-query 스킬이 읽는다.")
     if (idx / "symbols.json").is_file() and keeps_gq(root):
-        found.append(f"- 어디에 있나 → `{onboard}/gq.py find <이름>` · 심볼 좌표 `gq.py sym <이름>`")
-    if has_clangd:
-        # 이 줄을 '부르는 곳 callers · 파생 derived' 처럼 줄이면 cindex 호출이 반으로 줄었다(위 대조) — 명령을 줄 그대로 둔다
-        found.append(f"- 클래스 · 함수 · 구조체 이름을 grep 하기 전에: 쓰는 곳 `{onboard}/cindex.py refs <심볼>` · "
-                     "누가 부르나 `cindex.py callers <심볼>` · 파생 `cindex.py derived <클래스>` · 바꾸면 영향 `cindex.py impact <심볼>` "
-                     "(clangd 의미 인덱스, 컴파일 기준 — 주석 · 문자열 · 같은 이름이 안 섞이고 생성 코드는 빠진다. grep 으로 추측하지 않는다)")
-    if found:
-        out += ["코드 찾기 — grep · 파일 통째 읽기보다 인덱스 먼저 (하네스 모니터가 센다):", *found,
-                "- 문자열 · 주석 · 설정값 · 로그 → rg"]
-    return out
-
-
-def pending_guards(root):
-    """MCP 실패에서 모인 가드 규칙 후보가 있으면 한 줄(없으면 없음 — 항상 들어가는 글을 늘리지 않는다)."""
-    try:
-        n = len(json.loads((root / ".claude" / "mcp_guards.pending.json").read_text(encoding="utf-8")).get("pending") or [])
-    except (OSError, ValueError, AttributeError):
-        return []
-    return [f"MCP 실패 {n}종이 가드 규칙 후보로 쌓여 있다(.claude/mcp_guards.pending.json) — 에디터 MCP 작업 전 game-mcp 로 검토한다."] if n else []
+        out.append(f"- 좌표 인덱스: 어디에 있나 `{onboard}/gq.py find <이름>` · 심볼 좌표 `gq.py sym <이름>`")
+    if (idx / "clangd.sqlite").is_file():
+        # 명령은 줄 그대로 둔다 — 'callers · derived' 로 줄였을 때 cindex 호출이 반으로 줄었다(2026-10-22 대조)
+        out.append(f"- clangd 의미 인덱스: 쓰는 곳 `{onboard}/cindex.py refs <심볼>` · 누가 부르나 `cindex.py callers <심볼>` · "
+                   "파생 `cindex.py derived <클래스>` · 바꾸면 영향 `cindex.py impact <심볼>`. "
+                   "컴파일 기준이라 주석 · 문자열 · 같은 이름이 섞이지 않고 생성 코드는 빠진다. "
+                   "클래스 · 함수 · 구조체 이름은 grep 보다 이쪽이 정확하다. 문자열 · 주석 · 설정값 · 로그는 rg 가 맞다.")
+    return (["이 프로젝트에 있는 것:"] + out) if out else []
 
 
 def main():
@@ -123,7 +103,7 @@ def main():
     repo = source_repo(root)
     if repo:
         lines.append(repo)
-    lines += routing_lines(root, engine) + pending_guards(root)
+    lines += fact_lines(root, engine)
     is_setup = (root / ".claude" / "session_start.json").is_file() or (root / "CLAUDE.md").is_file()
     if not is_setup:
         lines.append("이 프로젝트는 세팅 전이다 (CLAUDE.md·인덱스 갱신 없음). 필요하면 사용자에게 /game-bootstrap 을 안내한다.")

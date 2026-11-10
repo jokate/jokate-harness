@@ -22,6 +22,9 @@
 - 하네스 몫 항상 글(tools/context_budget.py, MNYS): 8,194 B → 6,935 B.
 - 한계: 과제 8개 × 2회 · 스킬 사례 1회라 작은 차이(재현율 ±0.05)는 잡음이다. Z 는 X · Y 와 다른 시간에 돌았다.
 
+## 그 뒤 바뀐 것
+2026-11-10 대조에서 세션 시작 안내의 "요청 → 스킬" 줄을 뺐다. 인덱스 명령 줄은 그대로 뒀다. [model-generation-recheck](model-generation-recheck.md).
+
 ## 적용
 `game_context.routing_lines` (옛 search_routing · 라우팅 줄 대체), `claude-md-template.md` 의 스킬 라우팅 절,
 MNYS `CLAUDE.local.md` (백업 `~/.claude/cache/game-harness/mnys-CLAUDE.local.md.bak-20261022`).

@@ -28,8 +28,9 @@ docs/READING.md       사람이 읽는 답 · 문서의 규칙과 근거(선행 
 docs/UPSTREAM.md      빌려 온 바깥 스킬(Matt Pocock)과 업데이트 받는 법
 setup.bat             한 번에: 설치 + 훅 등록 + mod 등록 + (옆에 있으면) 위키 하네스 + 프로젝트 세팅 + 사용법 출력
 uninstall.bat         제거: 스킬·훅·설정 항목 (+ 프로젝트 폴더를 주면 그 세팅도)
-rules/common.md       모든 프로젝트 공용 규칙 (답변 · 문서 · C++ · C# 코드 모양). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
-rules/agy.md          agy(Antigravity CLI)에만 붙는 규칙. 공용 규칙과 함께 <홈>/.gemini/config/plugins/game-harness 에 들어간다
+rules/common.md       모든 프로젝트 공용 규칙 (답변 · 문서). 설치 때 ~/.claude/CLAUDE.md 의 표시 구간에 들어간다
+rules/code.md         C++ · C# 코드 모양 규칙. 설치 때 ~/.claude/rules/game-harness-code.md 로 들어가고, 그 파일을 다룰 때만 실린다
+rules/agy.md          agy(Antigravity CLI)에만 붙는 규칙. 공용 규칙 · 코드 규칙과 함께 <홈>/.gemini/config/plugins/game-harness 에 들어간다
 install.py / .bat    머신 설치: 스킬·훅, settings 조각 출력 (bat 는 더블클릭용)
 bootstrap.bat         프로젝트 세팅: 폴더를 끌어다 놓으면 CLAUDE.local.md + 인덱스 선언
 index_build.bat       인덱스 지금 만들기: 프로젝트 좌표 → 엔진 좌표 → clangd (프로젝트 증분, 엔진은 없을 때만) → 조회용 정리

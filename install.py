@@ -21,6 +21,7 @@ import argparse
 import filecmp
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -34,12 +35,14 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "stuck_watch.py", "harness_trace.py"]
+HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "harness_trace.py"]
 LIBS = ["harness_events.py"]  # 훅이 import 하는 모듈. settings 에는 등록하지 않는다
 # 뺀 것: 설치하면 settings.json 등록과 ~/.claude/hooks 의 파일을 지운다 (백업은 settings.json.bak · <이름>.removed).
 # handoff.py · diagram_view.py — 2026-10-07~22 에 한 번도 동작하지 않았다(이벤트 0, [RESET] 0회, 렌더 흔적 0).
 # handoff 의 UserPromptSubmit 은 프롬프트마다 돌았다. docs/VERIFICATION.md 2026-10-22 (Harness² 감사).
-OBSOLETE_HOOKS = ["handoff.py", "diagram_view.py"]
+# stuck_watch.py — 2026-10-28~11-10 경고 10건이 모두 정상 작업이었다(모델이 그대로 이어 가거나 "예상한 수정"이라 답함).
+# 편집 · 셸 호출마다 동기로 돌았다. docs/VERIFICATION.md 2026-11-10 (모델 세대 재점검).
+OBSOLETE_HOOKS = ["handoff.py", "diagram_view.py", "stuck_watch.py"]
 # 뺀 스킬: ~/.claude/skills 의 링크를 지운다. game-patterns — 0회 불림, 설명 490자가 세션마다 들어갔다. 내용은
 # game-architecture/references/patterns.md 로 옮겼다.
 OBSOLETE_SKILLS = ["game-patterns"]
@@ -178,6 +181,38 @@ def install_rules(a):
         dst.write_text(new, encoding="utf-8")
 
 
+# 파일을 다룰 때만 실리는 규칙. rules/code.md 의 paths(C++ · C# 확장자)에 맞는 파일을 읽거나 쓰면 Claude Code 가 싣는다.
+# 전역 CLAUDE.md 에 두면 코드를 안 만지는 세션에도 1.7 KB 가 들어갔다 (docs/VERIFICATION.md 2026-11-10).
+CODE_RULE = "game-harness-code.md"
+CODE_RULE_MARK = "<!-- game-harness 가 관리한다."
+
+
+def code_rule_body():
+    """rules/code.md 에서 frontmatter 와 관리 표지를 뺀 본문 — agy 는 paths 를 몰라서 본문을 늘 싣는다."""
+    text = (REPO / "rules" / "code.md").read_text(encoding="utf-8")
+    text = re.sub(r"\A---\n.*?\n---\n", "", text, flags=re.S)
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith(CODE_RULE_MARK)).strip()
+
+
+def install_code_rule(a):
+    """rules/code.md 를 ~/.claude/rules/game-harness-code.md 로. 같은 이름의 남의 파일은 건드리지 않는다."""
+    src, dst = REPO / "rules" / "code.md", CLAUDE / "rules" / CODE_RULE
+    if not src.is_file():
+        return
+    text = src.read_text(encoding="utf-8")
+    cur = dst.read_text(encoding="utf-8") if dst.is_file() else None
+    if cur == text:
+        print(f"  = rules/{CODE_RULE}")
+        return
+    if cur is not None and CODE_RULE_MARK not in cur and not a.force:
+        print(f"  - rules/{CODE_RULE} 건너뜀 (하네스가 만든 파일이 아님, --force)")
+        return
+    print(f"  + {dst} (C++ · C# 파일을 다룰 때만 실리는 코드 규칙)")
+    if not a.dry_run:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text, encoding="utf-8")
+
+
 # agy 는 Antigravity CLI 다. 릴레이의 Gemini 직원이 이것으로 돈다. agy 는 <홈>/.gemini/config/plugins/<이름>/ 의
 # 플러그인을 기본으로 켠다. 플러그인의 rules/AGENTS.md 는 늘 켜진 규칙이고, skills/<이름>/SKILL.md 는 스킬이다.
 AGY_PLUGIN = "game-harness"
@@ -186,7 +221,7 @@ AGY_PLUGIN = "game-harness"
 AGY_SKILLS = ["game-architecture", "game-design-doc", "game-onboard", "game-testing"]
 # 플러그인에 두지 않는 파일. 릴레이 가드는 계정의 hooks.json 하나로 판정한다. 플러그인 훅과 MCP 는 그 옆에서 따로 돈다.
 AGY_FORBIDDEN = ("hooks.json", "mcp_config.json")
-AGY_RULES_HEAD = "<!-- install.py 가 만든다. 고치려면 저장소의 rules/common.md 와 rules/agy.md 를 고치고 setup.bat -->"
+AGY_RULES_HEAD = "<!-- install.py 가 만든다. 고치려면 저장소의 rules/common.md · rules/code.md · rules/agy.md 를 고치고 setup.bat -->"
 
 
 def is_link(p):
@@ -238,11 +273,13 @@ def agy_ours(root):
 
 
 def agy_rules_text():
-    """rules/common.md 뒤에 rules/agy.md 를 붙인다. 저장소 문서 경로는 절대 경로로 바꾼다."""
-    common = (REPO / "rules" / "common.md").read_text(encoding="utf-8").strip()
+    """rules/common.md · rules/code.md 본문 · rules/agy.md 를 잇는다. 저장소 문서 경로는 절대 경로로 바꾼다.
+    common.md 의 코드 절은 "파일을 다룰 때 따로 실린다"는 안내라 agy 에서는 code.md 본문으로 바꾼다."""
+    common = (REPO / "rules" / "common.md").read_text(encoding="utf-8")
+    common = common.split("\n## 코드 (C++ · C#)")[0].strip()
     common = common.replace("하네스 docs/READING.md", str(REPO / "docs" / "READING.md"))
     extra = REPO / "rules" / "agy.md"
-    parts = [AGY_RULES_HEAD, common] + ([extra.read_text(encoding="utf-8").strip()] if extra.is_file() else [])
+    parts = [AGY_RULES_HEAD, common, code_rule_body()] + ([extra.read_text(encoding="utf-8").strip()] if extra.is_file() else [])
     return "\n\n".join(parts) + "\n"
 
 
@@ -331,16 +368,13 @@ def settings_snippet():
         return d
 
     mcp_log = cmd("mcp_log.py", 10, {"async": True})
-    stuck = cmd("stuck_watch.py", 5)
     trace = cmd("harness_trace.py", 10, {"async": True})
     return {"hooks": {
         "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
         "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
-                        {"matcher": "Edit|Write|NotebookEdit|Bash|PowerShell", "hooks": [stuck]},
                         {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
         "PostToolUseFailure": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
-                               {"matcher": "Bash|PowerShell", "hooks": [stuck]},
                                {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],
     }}
 
@@ -473,8 +507,9 @@ def main():
     install_hooks(a, drop_files=drop_obsolete_settings(a.dry_run))
     print("mod →", CLAUDE / "mods", "(하네스 모니터: Claude Code 함수 훅 플러그인)")
     install_mods(a)
-    print("공용 규칙 →", CLAUDE / "CLAUDE.md")
+    print("공용 규칙 →", CLAUDE / "CLAUDE.md", "· 코드 규칙 →", CLAUDE / "rules" / CODE_RULE)
     install_rules(a)
+    install_code_rule(a)
     if not a.no_agy:
         print("agy 플러그인 →", f"<홈>/.gemini/config/plugins/{AGY_PLUGIN}", "(릴레이의 Gemini 직원이 쓰는 Antigravity CLI)")
         install_agy(a, agy_homes(a.agy_home))

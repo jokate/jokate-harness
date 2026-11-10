@@ -27,7 +27,7 @@
 | 필요할 때 가져오는 맥락 | `skills/game-*` (SKILL.md + references) | 트리거될 때만 로드 |
 | 조회 도구 | `gq.py`(프로젝트), `ue_q.py`(엔진), `cindex.py`(clangd 의미 인덱스: 참조·호출·상속·오버라이드) | 통째로 읽지 않고 좌표로 |
 | 센서 | `evidence.py` (변경 이력 → hotspot·co-change) | 구조 판단의 근거를 계측 |
-| 결정론적 강제 | 훅: SessionStart 인덱스 갱신·라우팅, MCP 가드·로그 | 모델 판단에 기대지 않는 것 |
+| 결정론적 강제 | 훅: SessionStart 인덱스 갱신 · 인덱스 명령 안내, MCP 가드 · 로그 | 모델 판단에 기대지 않는 것 |
 | 평가 | `evals/run_evals.py`, 인덱스 검증(`cindex.py eval`, 웹뷰 검증 탭) | 하네스·인덱스가 의도대로 도는지 재검증 |
 | 관찰 | 하네스 이벤트 로그 → 모니터 mod(상태줄·토스트·`/harness`), 웹뷰 하네스 탭 | 어떤 기능이 지금 동작했는지 사람이 본다 |
 
@@ -99,7 +99,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 |---|---|---|
 | 스킬 목록 등록 | 세션 시작 | 검증됨 |
 | **프로젝트 규칙 파일** (CLAUDE.md / CLAUDE.local.md) | 세션 시작 | **스킬 호출의 실질적 스위치.** 있으면 9/9 케이스에서 맞는 스킬이 불렸다 |
-| 라우팅 안내 (`[game-harness]` 줄) | 세션 시작, `.uproject`/Unity 프로젝트일 때만 | 동작하지만 규칙 파일 없이는 트리거를 못 올렸다. 소스 저장소 위치 안내로 남겨 둔다 |
+| 프로젝트 안내 (`[game-harness]` 줄) | 세션 시작, `.uproject`/Unity 프로젝트일 때만 | 소스 저장소 위치와 그 프로젝트에 있는 위키 · 인덱스 명령만 알린다. 요청별 스킬 줄은 2026-11-10 에 뺐다 (스킬 설명이 한다) |
 | 프로젝트 인덱스 갱신 | 세션 시작, `.claude/session_start.json` 이 있을 때만 | 검증됨 |
 | `game-bootstrap` | 직접 호출할 때만 (`bootstrap.bat` 도 같은 일) | 설계상 |
 | MCP 가드·로그 | MCP 호출마다 | 기존부터 동작 |
@@ -149,13 +149,10 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 ### 매몰됐을 때
 
-매몰된 모델은 자기 매몰을 못 알아챈다. 그래서 감지를 세션 밖(훅)에 둔다.
+답이 이상하거나 같은 수정을 되풀이한다 싶으면 멈추고 방향을 확인한다. 방향이 틀렸으면 `/clear` 하고 새로 시작한다.
+필요한 맥락(무엇을 하려 했고 어디까지 됐나)은 한두 줄로 다시 준다.
 
-1. `[매몰 신호]` 경고가 뜨거나(같은 파일 5회 수정, 셸 명령 연속 3회 실패) 답이 이상하다 싶으면 멈추고 방향을 확인한다.
-2. 방향이 틀렸으면 `/clear` 하고 새로 시작한다 — 필요한 맥락(무엇을 하려 했고 어디까지 됐나)은 한두 줄로 다시 준다.
-
-- 임계값: `<프로젝트>/.claude/stuck_watch.json` 에 `{"edit": 8, "fail": 4}`. 0 이면 끈다.
-- 한계: 반복이 없는 방향 이탈은 카운터가 못 잡는다 — 사람이 건다.
+- 매몰 경고 훅(stuck_watch)은 뺐다. 2026-10-28~11-10 의 경고 10건이 모두 정상 작업이었다 (docs/VERIFICATION.md 2026-11-10).
 - `[RESET]` 인계(별도 모델이 handoff.md 를 쓰던 훅)는 15일 동안 한 번도 쓰이지 않아 2026-10-22 에 뺐다 (docs/experience/prune-unused.md).
 
 ## 6. 요청 템플릿
@@ -202,13 +199,12 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 | 실패 | 고칠 곳 |
 |---|---|
-| 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 그 파일의 라우팅 줄, 그다음 스킬 description 트리거 문구 |
+| 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 스킬 description 의 트리거 문구에 그 요청 꼴을 한 구절 넣는다 (2026-11-10: 한 구절로 0/4 → 4/4) |
 | 스킬은 불렸는데 절차를 건너뜀 | SKILL.md 본문 (references 는 안 읽힐 수 있다 — 핵심 규칙은 본문으로) |
 | 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 — 실패는 훅이 `.claude/mcp_guards.pending.json` 에 후보로 모은다 |
 | 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
 | 인덱스가 기대 위치를 못 찾는다 | `<프로젝트>/.claude/index_eval.json` 에 그 질의를 넣고 웹뷰 "질의 세트" 로 Acc@1·MRR 을 본다 |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
-| 매몰을 놓쳤다 / 경고가 너무 잦다 | `stuck_watch.py` 의 `SIGNALS` 에 신호 한 줄, 임계값은 프로젝트 `.claude/stuck_watch.json` |
 | 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --open`. HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
 | 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `tools/harness_probe.py` 로 지금 대 수정안 (정답지 과제가 있으면 `qa` 로 재현율까지) |
 
@@ -217,7 +213,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 ## 8. 하네스가 동작하는지 보기 — 모니터와 웹뷰
 
 하네스의 훅과 조회 스크립트는 동작할 때마다 `~/.claude/cache/game-harness/events.jsonl` 에 한 줄을 남긴다
-(기능 id 예: `context.routing`, `session_start.gq`, `skill.game-architecture`, `script.ue_q.sym`, `index.clangd`, `stuck.warn`, `mcp.call`).
+(기능 id 예: `context.routing`, `session_start.gq`, `skill.game-architecture`, `script.ue_q.sym`, `index.clangd`, `mcp.call`).
 
 **모니터 mod** (`mods/game-harness-monitor`, setup 이 켠다)
 - 상태줄: 이 세션에서 하나라도 동작한 뒤부터 `harness ● 기능 N개 · 마지막 <기능>` (실패가 있으면 `· 실패 N`).

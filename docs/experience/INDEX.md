@@ -9,4 +9,5 @@
 | [routing-commands](routing-commands.md) | 스킬 · 인덱스가 안 불린다 | 스킬 이름만 알려 주면 모델은 grep 으로 간다 — 쓸 명령을 줄 그대로 준다 |
 | [tool-output-noise](tool-output-noise.md) | 인덱스가 있는데 grep 으로 돌아간다 | 조회 결과 앞이 잡음(생성 코드 · 엔진 후보)으로 차면 모델이 도구를 버린다 — 잡음을 기본에서 뺀다 |
 | [prune-unused](prune-unused.md) | 하네스가 무거워졌다 · 기능을 더하려 한다 | 15일 0회 동작한 훅 · 스킬은 뺀다 — 항상 들어가는 글은 가장 비싸다 |
+| [model-generation-recheck](model-generation-recheck.md) | 모델이 한 세대 올랐다 · 요소가 왜 있는지 모르겠다 | 요소는 가정이다. 하나씩 빼고 두 팔로 잰다. 지시는 빼고 사실은 남긴다 |
 | [routing-single-source](routing-single-source.md) | 라우팅 줄을 고친다 · 규칙 파일이 여럿이다 | 라우팅은 세션 시작 안내 한 곳에 — 인덱스 명령 줄은 줄이지 않는다(줄이면 cindex 22 → 11) |

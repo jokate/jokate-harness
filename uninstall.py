@@ -10,7 +10,8 @@
   ~/.claude/mods/<mod>         하네스 모니터 mod (링크는 링크만 끊는다)
   ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
   <홈>/.gemini/config/plugins/game-harness  agy 플러그인 (사용자 홈과 ~/.agy-accounts/*. 스킬 링크는 링크만 끊는다)
-  ~/.claude/cache/stuck        매몰 카운터 상태
+  ~/.claude/rules/game-harness-code.md  C++ · C# 코드 규칙 (하네스가 만든 것일 때만)
+  ~/.claude/cache/stuck        매몰 카운터 상태 (뺀 훅이 남긴 것)
   ~/.claude/cache/game-harness 하네스 이벤트 로그, 프로젝트별로 저장한 엔진 경로(engine_roots.json)
   --purge 면 ~/.claude/cache/ue_index (엔진 인덱스 — 정규식·clangd, 다시 만들려면 몇 분~) 와
             ~/.claude/tools/clangd 중 setup 이 내려받은 파일 (clangd 도구, 다시 받으려면 setup.bat) 도 지운다
@@ -40,8 +41,8 @@ for _s in (sys.stdout, sys.stderr):
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
 sys.path.insert(0, str(REPO))
-from install import (HOOKS, LIBS, OBSOLETE_HOOKS, PLUGIN_DIRS_ENV, agy_homes, agy_ours, agy_plugin_dir,  # noqa: E402
-                     drop_path, mod_dirs, mod_paths, rules_block_span)
+from install import (CODE_RULE, CODE_RULE_MARK, HOOKS, LIBS, OBSOLETE_HOOKS, PLUGIN_DIRS_ENV, agy_homes,  # noqa: E402
+                     agy_ours, agy_plugin_dir, drop_path, mod_dirs, mod_paths, rules_block_span)
 
 
 def is_link(p):
@@ -146,7 +147,23 @@ def clean_settings(dry):
         path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def remove_code_rule(dry):
+    """~/.claude/rules/game-harness-code.md — 하네스가 만든 것일 때만 지운다."""
+    path = CLAUDE / "rules" / CODE_RULE
+    try:
+        ours = CODE_RULE_MARK in path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if not ours:
+        print(f"  = {path} 는 남긴다 (game-harness 가 만든 것이 아님)")
+        return
+    print(f"  - {path}")
+    if not dry:
+        path.unlink()
+
+
 def remove_rules(dry):
+    remove_code_rule(dry)
     path = CLAUDE / "CLAUDE.md"
     if not path.is_file():
         return
