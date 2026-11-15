@@ -166,6 +166,7 @@ r Source/…/X.cpp:3:48  in Tick  │ <그 줄 원문>
 | 심볼 좌표 (선언·정의·시그니처) | `cindex.py sym <이름 \| A::B>` |
 | 배경 증분 색인 (`build --mode bg`) | 기본은 조용히 — 코어 절반 · clangd 낮은 우선순위, 같은 프로젝트에 색인이 돌고 있으면 건너뛴다(`<색인 폴더>/bg.lock`). 기다릴 때는 `--fast` (index_build.bat 이 쓴다) |
 | 참조 위치 + **그 줄 원문** | `cindex.py refs <이름> [--kind decl\|def\|ref]` — 생성 코드(.gen.cpp · .generated.h · Intermediate)는 기본으로 빼고 몇 개 뺐는지 한 줄. 보려면 `--generated` (callers 도 같다) |
+| 어느 파일이 쓰나 (파일마다 한 줄 · 파일별 수) | `cindex.py refs <이름> --files` — 줄 목록을 커서로 넘기지 않고 파일만 한 번에. `--kind` · `--path` · `--module` 로 좁힌다 |
 | 부르는 쪽 (참조의 Container) + 첫 호출 줄 | `cindex.py callers <이름>` |
 | 이 함수가 부르는 함수 | `cindex.py callees <이름>` |
 | 부모 / 자식 / 재정의 — 끝까지 따라간 트리, 단계별 개수 (`--depth N` 으로 제한) | `cindex.py bases` · `derived` · `overrides <이름>` |

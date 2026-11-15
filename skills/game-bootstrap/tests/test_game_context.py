@@ -67,6 +67,17 @@ class Facts(unittest.TestCase):
         self.assertIn(f"위키 `{wiki.as_posix()}/index.md`", out)
         self.assertIn("rg", out)
 
+    def test_team_feedback_ledger_is_listed_only_when_it_has_entries(self):
+        ledger = self.root / ".claude" / "team_feedback.md"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text("# 팀 피드백\n", encoding="utf-8")
+        self.assertEqual(self.lines(), "")
+        ledger.write_text("# 팀 피드백\n\n## 2026-11-15 · 데이터 구조\n- 누가: 동료\n\n## 2026-11-20 · 세팅 방식\n", encoding="utf-8")
+        out = self.lines()
+        self.assertIn("팀 피드백 장부", out)
+        self.assertIn("2건", out)
+        self.assertIn("game-architecture", out)
+
     def test_unity_uses_library(self):
         (self.root / "Library" / "ClaudeIndex").mkdir(parents=True)
         (self.root / "Library" / "ClaudeIndex" / "symbols.json").write_text("{}", encoding="utf-8")
