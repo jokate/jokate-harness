@@ -88,6 +88,14 @@ def fact_lines(root, engine, home=None):
                    "파생 `cindex.py derived <클래스>` · 바꾸면 영향 `cindex.py impact <심볼>`. "
                    "컴파일 기준이라 주석 · 문자열 · 같은 이름이 섞이지 않고 생성 코드는 빠진다. "
                    "클래스 · 함수 · 구조체 이름은 grep 보다 이쪽이 정확하다. 문자열 · 주석 · 설정값 · 로그는 rg 가 맞다.")
+    ledger = root / ".claude" / "team_feedback.md"
+    if ledger.is_file():
+        try:
+            n = sum(1 for ln in ledger.read_text(encoding="utf-8", errors="replace").splitlines() if ln.startswith("## "))
+        except OSError:
+            n = 0
+        if n:
+            out.append(f"- 팀 피드백 장부 `{ledger.as_posix()}`: 동료에게 받은 지적 {n}건. game-architecture 스킬이 구조를 내기 전에 읽는다.")
     return (["이 프로젝트에 있는 것:"] + out) if out else []
 
 

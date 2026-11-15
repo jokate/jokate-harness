@@ -6,6 +6,7 @@
   python evidence.py coupling [--path Source] [--months 12] [--top 20] [--mermaid]
   python evidence.py focus <경로조각> [--path .] [--months 12]     # 그 파일들과 함께 바뀌어 온 파일
   python evidence.py roots [--path .]                               # 하위 저장소 목록 (중첩 저장소 찾기)
+  python evidence.py precedent <경로조각> [--path .] [--months 36] [--me <이름>]   # 같은 종류를 누가 어떻게 넣어 왔나
 
 --path 에서 위로 올라가며 가장 가까운 .git/.svn 을 쓴다. 소스가 별도 저장소(예: Source/.git)면
 루트에서 돌려도 그 이력은 안 보인다 — 먼저 roots 로 확인하라. 커밋이 적으면 출력에 경고가 붙는다.
@@ -124,18 +125,24 @@ def git_changesets(root, path, since):
 
 def svn_changesets(root, path, since):
     prefix = run(["svn", "info", "--show-item", "relative-url", str(root)], root).strip().lstrip("^")
-    xml = run(["svn", "log", "-v", "--xml", "-r", f"{{{since}}}:HEAD", path], root)
+    return parse_svn_log(run(["svn", "log", "-v", "--xml", "-r", f"{{{since}}}:HEAD", path], root), prefix)
+
+
+def parse_svn_log(xml, prefix):
+    """svn log -v --xml → 커밋 목록. added 는 그 커밋이 새로 넣은 파일(action="A")."""
     sets = []
     for e in ET.fromstring(xml).iter("logentry"):
-        files = {}
+        files, added = {}, set()
         for p in e.iter("path"):
             if p.get("kind") == "dir":
                 continue
             f = p.text or ""
             if f.startswith(prefix + "/"):
                 files[f[len(prefix) + 1:]] = None
+                if p.get("action") == "A":
+                    added.add(f[len(prefix) + 1:])
         sets.append({"rev": e.get("revision"), "date": (e.findtext("date") or "")[:10],
-                     "author": e.findtext("author") or "", "files": files})
+                     "author": e.findtext("author") or "", "files": files, "added": added})
     return sets
 
 
@@ -145,7 +152,12 @@ def load(args):
     rel = os.path.relpath(Path(args.path).resolve(), root)
     rel = "." if rel == "." else rel.replace("\\", "/")
     sets = (git_changesets if vcs == "git" else svn_changesets)(root, rel, since)
+    if args.command == "precedent" and vcs == "git":
+        added = git_added(root, rel, since)
+        for s in sets:
+            s["added"] = added.get(s["rev"], set())
     for s in sets:
+        s["added"] = {f if args.no_unit else unit(f) for f in s.get("added", ()) if not NOISE.search(f)}
         units = {}
         for f, c in s["files"].items():
             if NOISE.search(f):
@@ -285,12 +297,98 @@ def cmd_focus(args):
     return 0
 
 
+def git_added(root, path, since):
+    """{커밋: {그 커밋이 처음 넣은 파일}}."""
+    out = run(["git", "log", f"--since={since}", "--diff-filter=A", "--name-only", "--no-renames",
+               "--pretty=format:--%h", "--", path], root)
+    added, cur = {}, None
+    for line in out.splitlines():
+        if line.startswith("--"):
+            cur = added.setdefault(line[2:], set())
+        elif line.strip() and cur is not None:
+            cur.add(line.strip())
+    return added
+
+
+def me_names(vcs, root, explicit=None):
+    """내 이름 후보(소문자). --me 가 먼저, git 은 user.name · user.email, 그 밖은 로그인 이름."""
+    names = [explicit] if explicit else []
+    if not names and vcs == "git":
+        for key in ("user.name", "user.email"):
+            r = subprocess.run(["git", "config", key], cwd=str(root), capture_output=True, encoding="utf-8", errors="replace")
+            if r.returncode == 0 and r.stdout.strip():
+                names.append(r.stdout.strip())
+    if not names:
+        names = [n for n in (os.environ.get("SVN_USERNAME"), os.environ.get("USERNAME"), os.environ.get("USER")) if n]
+    return [n.lower() for n in names]
+
+
+def is_me(author, names):
+    a = (author or "").lower()
+    return bool(a) and any(n == a or n in a or a in n for n in names)
+
+
+def cmd_precedent(args):
+    """같은 종류를 이 프로젝트에서 누가 어떻게 넣어 왔나 — 넣은 커밋, 넣은 사람, 그때 같이 바뀐 곳.
+    내 시각이 아니라 프로젝트의 꼴을 기준으로 삼으려고 본다 (references/team-fit.md)."""
+    vcs, root, since, sets = load(args)
+    q = args.query.replace("\\", "/").lower()
+    mine = me_names(vcs, root, args.me)
+    sets = sets[::-1] if vcs == "git" else sets                        # 오래된 것부터 — git log 는 최근 순, svn 은 오래된 순
+    seen, cases, skipped = set(), [], 0
+    for s in sets:
+        new = sorted(u for u in s.get("added", ()) if q in u.lower() and u not in seen)
+        seen.update(u for u in s["files"] if q in u.lower())
+        if not new:
+            continue
+        if len(s["files"]) > args.max_changeset:
+            skipped += 1
+            continue
+        cases.append({"set": s, "new": new, "with": sorted(f for f in s["files"] if q not in f.lower()),
+                      "me": is_me(s["author"], mine)})
+    others = [c for c in cases if not c["me"]]
+    header(vcs, root, since, sets, f"precedent '{args.query}'")
+    print(f"\n'{args.query}' 에 걸리는 단위 {len(seen)}개 · 기간 안에 새로 들어간 커밋 {len(cases)}건 "
+          f"(다른 사람 {len(others)} · 나 {len(cases) - len(others)}) · 나로 본 이름: {', '.join(mine) or '모름'} (바꾸려면 --me <이름>)")
+    if skipped:
+        print(f"파일 {args.max_changeset}개 넘게 바꾼 커밋 {skipped}건은 뺐다 (통째 들여오기 · 일괄 정리).")
+    if not cases:
+        touched = Counter(s["author"] for s in sets if any(q in f.lower() for f in s["files"]))
+        print("\n기간 안에 새로 들어간 것이 없다. --months 를 늘리거나, 같은 종류의 기존 파일을 직접 읽어 꼴을 본다.")
+        if touched:
+            print("이 조각을 고친 사람: " + " · ".join(f"{a}{' (나)' if is_me(a, mine) else ''} {n}" for a, n in touched.most_common(6)))
+        return 0
+    print("\n### 같은 종류를 넣은 선례 (최근 순)\n\n| 언제 | 누가 | 넣은 것 | 같이 바뀐 곳 |\n|---|---|---|---|")
+    for c in cases[::-1][:args.top]:
+        s = c["set"]
+        new = ", ".join(f"`{short(u)}`" for u in c["new"][:3]) + (f" 외 {len(c['new']) - 3}" if len(c["new"]) > 3 else "")
+        co = ", ".join(f"`{short(f)}`" for f in c["with"][:4]) + (" …" if len(c["with"]) > 4 else "")
+        print(f"| {s['date']} · {s['rev']} | {s['author']}{' (나)' if c['me'] else ''} | {new} | {len(c['with'])}곳{': ' + co if co else ''} |")
+    base = others or cases
+    shape = Counter(f for c in base for f in c["with"])
+    whose = f"다른 사람 선례 {len(others)}건" if others else f"내 선례 {len(cases)}건"
+    if shape:
+        print(f"\n### 넣을 때 같이 바뀌어 온 곳 — {whose} 기준\n\n| 함께 | 비율 | 파일 |\n|---|---|---|")
+        for f, n in shape.most_common(args.top):
+            print(f"| {n} | {n / len(base):.0%} | `{f}` |")
+    who = Counter(c["set"]["author"] for c in cases)
+    print("\n넣은 사람: " + " · ".join(f"{a}{' (나)' if is_me(a, mine) else ''} {n}" for a, n in who.most_common(8)))
+    if others:
+        print("\n읽는 법: 비율이 높은 파일은 이 프로젝트에서 이 종류를 넣을 때 늘 같이 고치는 곳이다. "
+              "선례의 꼴을 따르는 안을 선택지에 넣고, 벗어나는 안은 벗어나는 이유를 적는다. 최근 선례 한두 개는 직접 열어 본다.")
+    else:
+        print("\n다른 사람이 넣은 선례가 없다. 위 선례는 전부 내 것이다 — 팀의 꼴이라고 쓰지 않는다. "
+              "같은 종류의 기존 파일을 직접 읽거나 사용자에게 팀의 방식을 묻는다.")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="변경 이력 기반 구조 근거")
-    ap.add_argument("command", choices=["hotspots", "coupling", "focus", "roots"])
+    ap.add_argument("command", choices=["hotspots", "coupling", "focus", "roots", "precedent"])
     ap.add_argument("query", nargs="?")
     ap.add_argument("--path", default=".")
-    ap.add_argument("--months", type=int, default=12)
+    ap.add_argument("--months", type=int, default=None, help="기본 12, precedent 는 36")
+    ap.add_argument("--me", default=None, help="precedent: 내 커밋 이름 (기본 git user.name · 로그인 이름)")
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--min-revs", type=int, default=5)
     ap.add_argument("--min-shared", type=int, default=5)
@@ -299,9 +397,12 @@ def main():
     ap.add_argument("--mermaid", action="store_true")
     ap.add_argument("--no-unit", action="store_true", help="C++ .h/.cpp 를 묶지 않는다")
     a = ap.parse_args()
-    if a.command == "focus" and not a.query:
-        raise SystemExit("focus 는 경로 조각이 필요하다.")
-    return {"hotspots": cmd_hotspots, "coupling": cmd_coupling, "focus": cmd_focus, "roots": cmd_roots}[a.command](a)
+    if a.command in ("focus", "precedent") and not a.query:
+        raise SystemExit(f"{a.command} 는 경로 조각이 필요하다.")
+    if a.months is None:
+        a.months = 36 if a.command == "precedent" else 12
+    return {"hotspots": cmd_hotspots, "coupling": cmd_coupling, "focus": cmd_focus, "roots": cmd_roots,
+            "precedent": cmd_precedent}[a.command](a)
 
 
 if __name__ == "__main__":
