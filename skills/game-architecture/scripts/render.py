@@ -4,6 +4,7 @@
 
   python render.py <입력.md> [-o 출력.html] [--js-dir <폴더>] [--open]
   python render.py <입력.md> --form [--project <루트>]     문서와 고르기 양식을 한 페이지로 띄운다
+  python render.py --attach <HTML…> [--project <루트>]     남이 쓴 HTML 에 문서 메모 칸을 붙인다 (--detach 로 뗀다)
 
 스크립트(marked·mermaid)는 이 폴더의 vendor/ 에 동봉돼 있다 — 설치할 것이 없고 인터넷이 없어도 그려진다.
 HTML 은 동봉 파일을 먼저 불러오고, 못 불러오면(다른 PC 로 HTML 만 옮긴 경우) CDN 으로 넘어간다.
@@ -13,6 +14,9 @@ game-architecture 가 구조 문서를 저장한 뒤 `render.py --form` 으로 �
 --form 은 문서의 '선택지' · '질문' 절을 고르기 양식으로 옮겨 문서와 한 페이지에 낸다(selection 의 decide.py 서버).
 읽는 곳(그림 · 근거)과 고르는 곳(안마다 고름 · 기각 · 피드백)이 한 탭이다. Enter 로 보내면 이 명령이 답을 찍고 끝난다.
 선택지 절이 없거나 못 읽으면 문서만 연다. 무인 실행이면 문서만 만들고 띄우지 않는다(끝 코드 4).
+
+만든 HTML 에는 문서 메모 칸(notes.html)이 붙는다. 나중에 보다가 이상한 곳을 긋거나 제목 옆 ✎ 를 눌러 적는다.
+'Claude 로 열기'는 claude-cli:// 주소로 그 프로젝트에 새 세션을 열고 요청을 채운다. '복사'는 같은 글을 클립보드에 둔다.
 """
 
 import argparse
@@ -167,14 +171,17 @@ if (window.marked) {
   decorate();
   drawMermaid();
 }
-</script></body></html>
+</script>
+__NOTES__
+</body></html>
 """
 
 
 def page(**vals):
     """PAGE 의 __이름__ 자리를 한 번에 바꾼다(바꿔 넣은 글 안의 같은 모양은 건드리지 않는다)."""
     vals.setdefault("embed", "")
-    return re.sub(r"__(TITLE|STAMP|RAW|SCRIPTS|MD|EMBED)__", lambda m: vals[m.group(1).lower()], PAGE)
+    vals.setdefault("notes", "")
+    return re.sub(r"__(TITLE|STAMP|RAW|SCRIPTS|MD|EMBED|NOTES)__", lambda m: vals[m.group(1).lower()], PAGE)
 
 
 def scripts(js_dir=None, url_for=None):
@@ -530,20 +537,97 @@ def embed_figs(md, figs, out_dir, url_for=None):
     return "\n".join(lines[:i + 1] + ["", block, ""] + lines[end:]) + "\n"
 
 
-def render_html(md, out, title, js_dir=None, full=False, src=None, url_for=None, hide=()):
+# ── 문서 메모 ──────────────────────────────────────────────────────────────
+# 문서를 나중에 보다가 이상한 곳이 보이면 그 자리에서 적어 Claude 로 보낸다(사용자 2026-11-19).
+# 그때는 떠 있는 서버도 세션도 없다. 그래서 파일로 연 HTML 안에서 돌고, claude-cli:// 주소나 클립보드로 보낸다.
+NOTES_FILE = HERE / "notes.html"
+NOTES_BLOCK = re.compile(r"<!-- gh-notes -->.*?<!-- /gh-notes -->\n?", re.S)
+NOTES_CFG = re.compile(r"const CFG = (\{.*?\});")
+LINK_MAX = 2000  # claude-cli:// 주소 길이 상한. Chromium 은 Windows 에서 2,048자 넘는 바깥 프로그램 주소를 버릴 수 있다. 넘으면 폴더만 열고 글은 붙여 넣게 한다
+ROOT_MARKS = (".claude", ".git", ".svn", "ProjectSettings")
+
+
+def project_root(folder, given=None):
+    """문서가 든 프로젝트의 루트. 못 찾으면 None. 홈 폴더(.claude 가 있다)는 프로젝트로 치지 않는다."""
+    if given:
+        return Path(given).resolve()
+    home, folder = Path.home().resolve(), Path(folder).resolve()
+    for d in (folder, *folder.parents):
+        if d == home:
+            break
+        if any((d / m).exists() for m in ROOT_MARKS) or any(d.glob("*.uproject")):
+            return d
+    return None
+
+
+def notes_block(page_path, src=None, project=None):
+    """HTML 에 실을 문서 메모 칸. src 는 고칠 원본이다(없으면 그 HTML 자신).
+    경로를 박지 않는다: 원본은 HTML 폴더 기준 상대 경로, 루트는 올라갈 폴더 수로 적는다. 폴더째 옮겨도 맞는다."""
+    try:
+        block = NOTES_FILE.read_text(encoding="utf-8").replace("\r\n", "\n").strip()
+    except OSError:
+        return ""
+    folder = Path(page_path).resolve().parent
+    root = project_root(folder, project)
+    try:
+        up = len(folder.relative_to(root).parts) if root else None
+    except ValueError:  # 문서가 그 루트 밖에 있다
+        up = None
+    rel = ""
+    if src:
+        try:
+            rel = os.path.relpath(Path(src).resolve(), folder).replace(os.sep, "/")
+        except ValueError:  # 다른 드라이브
+            rel = Path(src).resolve().as_posix()
+    cfg = json.dumps({"src": rel, "up": up, "max": LINK_MAX}, ensure_ascii=False).replace("</", "<\\/")
+    return block.replace("__GN__", cfg)
+
+
+def attach(targets, project=None, remove=False):
+    """남이 쓴 HTML(직원 보고서 · 구조도 페이지)에 문서 메모 칸을 붙이거나 뗀다. 다시 붙이면 바꿔 끼운다. 바꾼 파일 수를 돌려준다."""
+    files = []
+    for t in targets:
+        p = Path(t)
+        files += sorted(p.glob("*.html")) if p.is_dir() else [p] if p.is_file() else [Path(f) for f in sorted(glob.glob(str(t)))]
+    done = 0
+    for f in files:
+        try:
+            raw = f.read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"건너뜀: {f} ({type(e).__name__})")
+            continue
+        text = raw.replace("\r\n", "\n")
+        old = NOTES_BLOCK.search(text)
+        kept = NOTES_CFG.search(old.group(0)) if old else None
+        src = json.loads(kept.group(1)).get("src") if kept else ""  # render.py 가 만든 문서면 원본(.md)을 그대로 가리킨다
+        new = NOTES_BLOCK.sub("", text)
+        if not remove:
+            block, at = notes_block(f, f.parent / src if src else None, project), new.lower().rfind("</body>")
+            new = new[:at] + block + "\n" + new[at:] if at >= 0 else new.rstrip("\n") + "\n" + block + "\n"
+        if new != text:
+            f.write_bytes((new.replace("\n", "\r\n") if "\r\n" in raw else new).encode("utf-8"))
+            done += 1
+        print(f"{'그대로' if new == text else '뗐다' if remove else '붙였다'}: {f}")
+    if not files:
+        print("HTML 을 찾지 못했다.")
+    return done
+
+
+def render_html(md, out, title, js_dir=None, full=False, src=None, url_for=None, hide=(), project=None):
     """HTML 글. src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다.
-    url_for 를 주면 양식 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다."""
+    url_for 를 주면 양식 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다.
+    문서 메모 칸은 파일로 남는 HTML 에만 싣는다. 양식 페이지에는 기각 이유 · 답 칸이 따로 있다."""
     md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent, url_for)
     md = md if full else readable(md, hide)
     stamp = f"{Path(src).name if src else Path(out).stem} · {time.strftime('%Y-%m-%d %H:%M')}"
     return page(title=html.escape(title), stamp=html.escape(stamp), raw=html.escape(md),
                 md=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir, url_for),
-                embed=" data-embed" if url_for else "")
+                embed=" data-embed" if url_for else "", notes="" if url_for else notes_block(out, src, project))
 
 
-def render(md, out, title, js_dir=None, full=False, src=None):
+def render(md, out, title, js_dir=None, full=False, src=None, project=None):
     out = Path(out)
-    out.write_text(render_html(md, out, title, js_dir, full, src), encoding="utf-8")
+    out.write_text(render_html(md, out, title, js_dir, full, src, project=project), encoding="utf-8")
     return out
 
 
@@ -813,20 +897,30 @@ def open_file(path):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
+    ap.add_argument("more", nargs="*", help="--attach · --detach: HTML 을 더 준다(폴더 · * 도 된다)")
     ap.add_argument("-o", "--out")
     ap.add_argument("--js-dir")
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
     ap.add_argument("--full", action="store_true",
                     help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 그 밖의 글은 요약 · 그림 먼저, 나머지는 접기)")
     ap.add_argument("--form", action="store_true", help="문서와 고르기 양식을 한 페이지로 띄운다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
-    ap.add_argument("--project", default=".", help="--form: 프로젝트 루트. '남김' 표시한 결정을 그 아래 결정 장부에 적는다")
+    ap.add_argument("--project", help="프로젝트 루트. --form 은 '남김' 표시한 결정을 그 아래 결정 장부에 적는다. "
+                                      "문서 메모의 'Claude 로 열기'가 여는 폴더다(안 주면 문서 위쪽 폴더에서 찾는다)")
+    ap.add_argument("--attach", action="store_true", help="남이 쓴 HTML 에 문서 메모 칸을 붙인다(다시 붙이면 바꿔 끼운다)")
+    ap.add_argument("--detach", action="store_true", help="붙인 문서 메모 칸을 뗀다")
     ap.add_argument("--no-open", action="store_true", help="--form: 브라우저를 열지 않고 주소만 찍는다")
     ap.add_argument("--timeout", type=int, default=120, help="--form: 움직임이 없으면 닫는 시간(분)")
     a = ap.parse_args(argv)
+    project, a.project = a.project, a.project or "."
+    if a.attach or a.detach:
+        attach([a.src, *a.more], project, remove=a.detach)
+        return 0
+    if a.more:
+        ap.error("문서는 하나만 받는다")
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
-    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full, src=src)
+    out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full, src=src, project=project)
     print(out)
     print(report(check(md, dd_figs(src, exclude=out)))[0], flush=True)
     if a.form:

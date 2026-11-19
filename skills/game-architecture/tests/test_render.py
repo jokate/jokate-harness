@@ -1,5 +1,7 @@
 """render.py — 선택지 · 그림 먼저, 나머지 근거는 접는다 (2026-10-20 사용자: HTML 이 길고 난잡하다)."""
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -258,6 +260,72 @@ class ReadabilityTest(unittest.TestCase):
         ends = "# t\n\n## 한눈에\n- a\n\n## 선택지\n| A |\n\n## 결정할 것\n1. q\n\n## 근거\n### 신호\n"
         self.assertEqual(render.check(ends)["extra_sections"], [])
         self.assertEqual(render.check("# 메모\n\n## 아무 절\n글\n")["extra_sections"], [])  # 구조 조사 문서가 아니면 안 본다
+
+
+class NotesTest(unittest.TestCase):
+    """문서 메모 칸 — 나중에 보다가 그 자리에서 적어 Claude 로 보낸다."""
+
+    def project(self, tmp):
+        root = Path(tmp) / "Game"
+        (root / ".git").mkdir(parents=True)
+        (root / "Saved" / "ClaudeArch").mkdir(parents=True)
+        md = root / "Saved" / "ClaudeArch" / "입력.md"
+        md.write_text("# 입력\n\n## 한눈에\n- 하나\n", encoding="utf-8")
+        return root, md
+
+    def cfg(self, text):
+        blocks = render.NOTES_BLOCK.findall(text)
+        self.assertEqual(len(blocks), 1)
+        return json.loads(render.NOTES_CFG.search(blocks[0]).group(1))
+
+    def test_page_says_which_doc_and_where_the_project_is(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, md = self.project(tmp)
+            out = render.render(md.read_text(encoding="utf-8"), md.with_suffix(".html"), "입력", src=md)
+            text = out.read_text(encoding="utf-8")
+            self.assertEqual(self.cfg(text), {"src": "입력.md", "up": 2, "max": render.LINK_MAX})  # 경로를 박지 않는다
+            self.assertNotIn(str(root), text.split("<!-- gh-notes -->")[1])
+            self.assertLess(text.index("<!-- /gh-notes -->"), text.index("</body>"))
+            self.assertIn("@media print{.gn,.gn-add,.gn-sel{display:none!important}}", text)  # PDF 에 실리지 않는다
+
+    def test_no_project_found_means_no_folder_to_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "x.md"
+            md.write_text("# x\n", encoding="utf-8")
+            self.assertIsNone(render.project_root(tmp))
+            self.assertEqual(self.cfg(render.render_html("# x\n", md.with_suffix(".html"), "x", src=md))["up"], None)
+            self.assertEqual(render.project_root(tmp, given=tmp), Path(tmp).resolve())
+
+    def test_page_inside_the_form_has_no_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "x.md"
+            text = render.render_html("# x\n", md.with_suffix(".html"), "x", src=md, url_for=lambda p: "/a/" + p.name)
+            self.assertNotIn("gh-notes", text)  # 양식 페이지에는 기각 이유 · 답 칸이 따로 있다
+
+    def test_attach_to_someone_elses_html_and_take_it_off_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, md = self.project(tmp)
+            page = md.with_name("보고.html")
+            original = "<!doctype html>\r\n<html><body>\r\n<h2>결론</h2>\r\n</body></html>\r\n".encode("utf-8")
+            page.write_bytes(original)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(render.main([str(page), "--attach"]), 0)
+                once = page.read_bytes()
+                self.assertEqual(self.cfg(once.decode("utf-8")), {"src": "", "up": 2, "max": render.LINK_MAX})  # 고칠 것은 그 HTML 이다
+                self.assertNotIn(b"\n", once.replace(b"\r\n", b""))  # 줄 끝을 지킨다
+                render.main([str(md.parent), "--attach"])  # 폴더째 · 두 번 붙여도 하나다
+                self.assertEqual(page.read_bytes(), once)
+                render.main([str(page), "--detach"])
+            self.assertEqual(page.read_bytes(), original)
+
+    def test_attach_keeps_the_source_of_a_rendered_doc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, md = self.project(tmp)
+            out = render.render(md.read_text(encoding="utf-8"), md.with_suffix(".html"), "입력", src=md)
+            before = out.read_text(encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                render.attach([out])
+            self.assertEqual(out.read_text(encoding="utf-8"), before)  # 원본(.md)을 그대로 가리킨다
 
 
 class DiagramDesignFigureTest(unittest.TestCase):

@@ -1,0 +1,218 @@
+<!-- gh-notes -->
+<style>
+.gn,.gn-add,.gn-sel{--gb:#fff;--gs:#f3f1ec;--gf:#1d2125;--gm:#5f6b76;--gl:#d9d6cf;--ga:#bf4520;font:13.5px/1.5 "Pretendard Variable",Pretendard,"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;letter-spacing:0}
+[data-gn-dark] .gn,[data-gn-dark] .gn-add,[data-gn-dark] .gn-sel{--gb:#171b20;--gs:#1f252b;--gf:#e4e7ea;--gm:#98a2ad;--gl:#2f363e;--ga:#f0875a}
+.gn{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-end;color:var(--gf);text-align:left;word-break:keep-all}
+.gn[hidden],.gn [hidden],.gn-sel[hidden]{display:none!important}
+.gn button,.gn-add,.gn-sel{font:inherit;cursor:pointer}
+.gn-pill{border:1px solid var(--gl);background:var(--gb);color:var(--gf);border-radius:999px;padding:7px 14px;box-shadow:0 2px 10px rgba(0,0,0,.14)}
+.gn-pill:hover{border-color:var(--ga)}
+.gn-pill b{background:var(--ga);color:#fff;border-radius:999px;padding:0 7px;margin-left:6px;font-weight:600}
+.gn-panel{width:min(360px,calc(100vw - 32px));max-height:min(70vh,560px);display:flex;flex-direction:column;background:var(--gb);border:1px solid var(--gl);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.22);margin-bottom:8px;overflow:hidden}
+.gn-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--gl);font-weight:600}
+.gn-head button,.gn-list button,.gn-wipe{border:0;background:none;color:var(--gm);padding:0;font-size:12.5px}
+.gn-head button:hover,.gn-list button:hover,.gn-wipe:hover{color:var(--ga)}
+.gn-list{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1 1 auto}
+.gn-list li{padding:9px 14px;border-bottom:1px solid var(--gl)}
+.gn-list li.sent .gn-w,.gn-list li.sent .gn-t{opacity:.5}
+.gn-list button{margin:3px 12px 0 0}
+.gn-w,.gn-at{color:var(--gm);font-size:12.5px;overflow-wrap:anywhere}
+.gn-t{white-space:pre-wrap;overflow-wrap:anywhere}
+.gn-none{padding:10px 14px;color:var(--gm);font-size:12.5px}
+.gn-new{padding:10px 14px;border-bottom:1px solid var(--gl)}
+.gn-new textarea{display:block;width:100%;min-height:64px;margin-top:6px;padding:8px 10px;border:1px solid var(--gl);border-radius:8px;background:var(--gs);color:var(--gf);font:inherit;resize:vertical;box-sizing:border-box}
+.gn-new textarea:focus{outline:2px solid var(--ga);outline-offset:1px}
+.gn-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px}
+.gn-go,.gn-copy{border:1px solid var(--gl);border-radius:8px;padding:6px 12px;background:var(--gb);color:var(--gf);text-decoration:none}
+.gn-go{background:var(--ga);border-color:var(--ga);color:#fff}
+.gn-go.off,.gn-copy:disabled{opacity:.4;pointer-events:none}
+.gn-msg{flex-basis:100%;color:var(--gm);font-size:12.5px;min-height:1.5em}
+.gn-add{border:0;background:none;color:var(--gm);opacity:.4;padding:0 6px;margin-left:6px;font-weight:400;vertical-align:middle}
+.gn-add:hover,.gn-add:focus-visible{opacity:1;color:var(--ga)}
+.gn-add.gn-fig{display:block;margin:0 0 4px auto;opacity:.6;font-size:12.5px}
+.gn-sel{position:fixed;z-index:2147483001;border:1px solid var(--ga);background:var(--ga);color:#fff;border-radius:999px;padding:4px 12px;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+@media (hover:none){.gn-add{opacity:.8}}
+@media print{.gn,.gn-add,.gn-sel{display:none!important}}
+</style>
+<div class="gn" id="gh-notes" hidden>
+<div class="gn-panel" hidden>
+<div class="gn-head"><span>문서 메모</span><button type="button" class="gn-close">닫기</button></div>
+<ol class="gn-list"></ol>
+<div class="gn-none">글을 긋거나 제목 옆 ✎ 를 누르면 그 자리가 메모에 붙는다.</div>
+<div class="gn-new"><div class="gn-at"></div><textarea placeholder="무엇이 이상한가 — Enter 저장 · Shift+Enter 줄바꿈" aria-label="메모"></textarea></div>
+<div class="gn-foot"><a class="gn-go off">Claude 로 열기</a><button type="button" class="gn-copy" disabled>복사</button><button type="button" class="gn-wipe" hidden>보낸 것 지우기</button><span class="gn-msg" role="status"></span></div>
+</div>
+<button type="button" class="gn-pill">✎ 메모</button>
+</div>
+<script>
+// 문서 메모 — 보다가 이상한 곳을 그 자리에서 적어 Claude 로 보낸다. 서버가 없다: 파일로 연 문서에서 그대로 돈다.
+// 보내는 길은 둘이다. 'Claude 로 열기'는 claude-cli:// 주소로 새 터미널 세션을 열고 요청을 채운다(보내는 것은 사용자의 Enter).
+// '복사'는 같은 글을 클립보드에 둔다 — 주소가 등록되지 않은 PC · 이미 열린 세션 · 휴대폰에서 쓴다.
+(function () {
+  const CFG = __GN__;  // src: 고칠 원본(이 HTML 폴더 기준, 비면 이 HTML) · up: 프로젝트 루트까지 올라갈 폴더 수(모르면 null) · max: 주소 길이 상한
+  const html = document.documentElement;
+  if (window.top !== window || html.hasAttribute('data-embed') || window.__ghNotes) return;  // 양식 안에 실린 문서 · 두 번 붙은 문서
+  window.__ghNotes = {paths, text: n => text(n), link: n => link(n)};  // 시험에서 들여다보는 손잡이
+  const box = document.getElementById('gh-notes'), $ = s => box.querySelector(s);
+  const pill = $('.gn-pill'), panel = $('.gn-panel'), list = $('.gn-list'), at = $('.gn-at'), ta = $('textarea'),
+        go = $('.gn-go'), cp = $('.gn-copy'), wipe = $('.gn-wipe'), msg = $('.gn-msg');
+  const FIGS = 'figure,.mermaid,.ddsvg,svg', INLINE = 'a,button,summary,h1,h2,h3,h4,p,span,td,th,li', WHOLE = '문서 전체';
+  const TAIL = '질문이면 확인해 답하고, 문서가 틀렸으면 고쳐 다시 그린다. 코드는 묻고 고친다.';
+  const KEY = 'gh-notes:' + location.pathname;
+  const clip = (s, n) => { s = s.replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
+  const mine = el => !!(el && el.closest && el.closest('.gn,.gn-add,.gn-sel'));
+  const tag = n => '[' + n.w + ']' + (n.q ? ' "' + n.q + '"' : '');
+  let notes = [], cur = {w: WHOLE, q: ''}, pick = null, timer = 0;
+  try { notes = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} };
+
+  // ── 어느 문서인가: 파일로 열었을 때만 경로를 안다. 경로를 HTML 에 박지 않아 폴더째 옮겨도 맞는다.
+  function paths(loc) {
+    loc = loc || location;
+    const file = decodeURIComponent(loc.pathname.split('/').pop() || '');
+    if (loc.protocol !== 'file:') return {doc: CFG.src || file, cwd: ''};
+    let p = decodeURIComponent(loc.pathname);
+    if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1);
+    const dir = p.split('/'); dir.pop();
+    let doc = dir.slice();
+    if (/^([A-Za-z]:|\/)/.test(CFG.src || '')) doc = CFG.src.split('/');
+    else for (const s of (CFG.src || file).split('/')) { if (s === '..') doc.pop(); else if (s && s !== '.') doc.push(s); }
+    const root = CFG.up == null ? null : dir.slice(0, dir.length - CFG.up);
+    const inside = !!root && root.length > 0 && root.every((s, i) => doc[i] === s);
+    const cwd = root && !loc.host ? root.join(/^[A-Za-z]:$/.test(root[0] || '') ? '\\' : '/') : '';  // 네트워크 경로는 주소가 받지 않는다
+    return {doc: inside ? doc.slice(root.length).join('/') : doc.join('/'), cwd};
+  }
+
+  // ── 어느 자리인가: 바로 앞 제목 + 그림 번호. 어떤 HTML 이든 통한다.
+  function figs() {
+    return [...document.querySelectorAll(FIGS)].filter(f => !mine(f) && !(f.parentElement && f.parentElement.closest(FIGS))
+      && !(f.tagName.toLowerCase() === 'svg' && f.closest(INLINE)));
+  }
+  function where(node) {
+    const el = node.nodeType === 1 ? node : node.parentElement;
+    let name = '';
+    for (const h of document.querySelectorAll('h1,h2,h3,h4')) {
+      if (mine(h)) continue;
+      if (h !== el && !h.contains(el) && !(h.compareDocumentPosition(el) & 4)) break;
+      name = clip([...h.childNodes].filter(n => !mine(n)).map(n => n.textContent).join(''), 30);
+    }
+    const i = figs().findIndex(f => f === el || f.contains(el));
+    if (i >= 0) name = (name && name !== '그림' ? name + ' · ' : '') + '그림 ' + (i + 1);
+    return name || WHOLE;
+  }
+  function plus(target, fig) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'gn-add' + (fig ? ' gn-fig' : ''); b.textContent = fig ? '✎ 그림 메모' : '✎';
+    b.title = '여기에 메모'; b.setAttribute('aria-label', '여기에 메모');
+    b.onclick = e => { e.stopPropagation(); e.preventDefault(); compose(where(target), ''); };
+    return b;
+  }
+  function mark() {
+    document.querySelectorAll('h2,h3').forEach(h => { if (!mine(h) && !h.closest('summary') && !h.querySelector('.gn-add')) h.appendChild(plus(h)); });
+    figs().forEach(f => { const p = f.previousElementSibling; if (!(p && p.classList.contains('gn-add'))) f.parentNode.insertBefore(plus(f, true), f); });
+  }
+
+  // ── 보낼 글과 주소
+  const todo = () => notes.filter(n => !n.s);
+  function text(items) {
+    return '문서 메모 ' + items.length + '개 — ' + paths().doc + '\n' + items.map((n, i) => (i + 1) + '. ' + tag(n) + ' — ' + n.t).join('\n') + '\n' + TAIL;
+  }
+  function link(items) {  // 주소가 길면 브라우저가 버린다 — 그때는 폴더만 열고 글은 붙여 넣게 한다
+    const cwd = paths().cwd, head = 'claude-cli://open' + (cwd ? '?cwd=' + encodeURIComponent(cwd) : '');
+    const full = head + (cwd ? '&' : '?') + 'q=' + encodeURIComponent(text(items));
+    return full.length <= CFG.max ? {href: full, whole: true} : {href: head, whole: false};
+  }
+  function copy(s) {
+    const a = document.createElement('textarea');
+    a.value = s; a.style.cssText = 'position:fixed;left:0;top:0;opacity:0'; document.body.appendChild(a); a.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    a.remove();
+    if (ok) return;
+    const shown = () => { ta.value = s; ta.select(); say('복사하지 못했다. 칸의 글을 직접 복사한다.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).catch(shown); else shown();
+  }
+  function say(s) { msg.textContent = s; }
+  function send(note) {
+    const items = todo();
+    if (!items.length) return;
+    copy(text(items)); say(note);
+    setTimeout(() => { items.forEach(n => { n.s = 1; }); save(); draw(); }, 400);  // 누른 주소가 열린 뒤에 고친다
+  }
+
+  // ── 화면
+  function draw() {
+    const items = todo(), l = items.length ? link(items) : null;
+    pill.textContent = '✎ 메모';
+    if (items.length) { const b = document.createElement('b'); b.textContent = items.length; pill.appendChild(b); }
+    list.textContent = '';
+    notes.forEach((n, i) => {
+      const li = document.createElement('li'), w = document.createElement('div'), t = document.createElement('div'), x = document.createElement('button');
+      w.className = 'gn-w'; w.textContent = tag(n); t.className = 'gn-t'; t.textContent = n.t;
+      x.type = 'button'; x.textContent = '지우기'; x.onclick = () => { notes.splice(i, 1); save(); draw(); };
+      li.append(w, t, x);
+      if (n.s) {
+        const r = document.createElement('button');
+        li.className = 'sent'; r.type = 'button'; r.textContent = '보냄 · 되돌리기'; r.onclick = () => { delete n.s; save(); draw(); };
+        li.append(r);
+      }
+      list.appendChild(li);
+    });
+    $('.gn-none').hidden = notes.length > 0;
+    wipe.hidden = !notes.some(n => n.s);
+    go.classList.toggle('off', !l); cp.disabled = !l;
+    if (l) go.href = l.href; else go.removeAttribute('href');
+    go.dataset.whole = l && l.whole ? '1' : '';
+  }
+  function open(on) { panel.hidden = !on; if (on) { at.textContent = tag(cur); tone(); ta.focus(); } }
+  function compose(w, q) { cur = {w, q}; open(true); }
+  function tone() {  // 붙은 문서의 바탕이 어두우면 어둡게 — 남이 쓴 HTML 에도 붙으므로 바탕색을 직접 잰다
+    let dark = false;
+    for (let el = document.body; el; el = el.parentElement) {
+      const m = (getComputedStyle(el).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+      if (m.length >= 3 && (m.length === 3 || m[3] > 0)) { dark = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] < 110; break; }
+    }
+    html.toggleAttribute('data-gn-dark', dark);
+  }
+
+  pill.onclick = () => { if (panel.hidden) cur = {w: WHOLE, q: ''}; open(panel.hidden); };
+  $('.gn-close').onclick = () => open(false);
+  ta.onkeydown = e => {
+    if (e.key === 'Escape') { open(false); return; }
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;  // 한글 조합 중의 Enter 는 저장이 아니다
+    e.preventDefault();
+    const t = ta.value.trim();
+    if (!t) return;
+    notes.push({w: cur.w, q: cur.q, t}); ta.value = ''; cur = {w: WHOLE, q: ''}; at.textContent = tag(cur); say(''); save(); draw();
+  };
+  go.onclick = e => {
+    if (go.classList.contains('off')) { e.preventDefault(); return; }
+    send(go.dataset.whole ? '복사했다. Claude 창이 열리면 Enter 로 보낸다.' : '길어서 주소에 못 싣는다. 열린 Claude 창에 붙여 넣는다(Ctrl+V).');
+  };
+  cp.onclick = () => send('복사했다. Claude 에 붙여 넣는다.');
+  wipe.onclick = () => { notes = todo(); save(); draw(); };
+
+  // 글을 그으면 그 옆에 단추가 뜬다 — 그은 글이 메모의 인용이 된다
+  const sel = document.createElement('button');
+  sel.type = 'button'; sel.className = 'gn-sel'; sel.textContent = '✎ 메모'; sel.hidden = true; document.body.appendChild(sel);
+  sel.onmousedown = e => e.preventDefault();  // 그은 글이 풀리지 않게
+  sel.onclick = () => { if (pick) compose(pick.w, pick.q); sel.hidden = true; };
+  document.addEventListener('selectionchange', () => { clearTimeout(timer); timer = setTimeout(() => {
+    const s = getSelection(), t = s && !s.isCollapsed ? s.toString().trim() : '';
+    const n = t && s.rangeCount ? s.getRangeAt(0).startContainer : null, el = n && (n.nodeType === 1 ? n : n.parentElement);
+    if (!el || mine(el) || el.closest('textarea,input')) { sel.hidden = true; return; }
+    const r = s.getRangeAt(0).getBoundingClientRect();
+    pick = {w: where(n), q: clip(t, 40)};
+    sel.style.left = Math.max(8, Math.min(innerWidth - 96, r.right - 40)) + 'px';
+    sel.style.top = (r.top > 44 ? r.top - 36 : r.bottom + 8) + 'px';
+    sel.hidden = false;
+  }, 200); });
+  addEventListener('scroll', () => { sel.hidden = true; }, {passive: true});
+  // 그림 안의 글을 긋다가 놓으면 '누르면 크게'가 같이 눌린다 — 긋는 중이면 막는다
+  document.addEventListener('click', e => { const s = getSelection();
+    if (s && !s.isCollapsed && e.target.closest && e.target.closest(FIGS) && !mine(e.target)) e.stopPropagation(); }, true);
+  new MutationObserver(tone).observe(html, {attributes: true, attributeFilter: ['data-theme', 'data-scheme', 'class', 'style']});
+
+  box.hidden = false; mark(); draw(); tone();
+})();
+</script>
+<!-- /gh-notes -->
