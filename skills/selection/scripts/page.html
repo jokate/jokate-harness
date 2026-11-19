@@ -224,10 +224,10 @@ function renderDiff() {
       if (a.verdict === "no") { det.open = true; note.focus(); }
     }}, label);
     const okB = vote("ok", "확인함"), noB = vote("no", "기각");
-    const det = h("details", {class: "g", id: "g-" + g.id, open: gi === 0 || g.risk === "높음" || a.verdict === "no" || undefined},
+    const det = h("details", {class: "g", id: "g-" + g.id, open: (!g.locked && (gi === 0 || g.risk === "높음" || a.verdict === "no")) || undefined},
       h("summary", {}, g.risk ? h("span", {class: "chip r" + g.risk}, g.risk) : null, h("span", {class: "t"}, g.title),
         h("span", {class: "n"}, "+" + g.added + " −" + g.removed + " · 파일 " + g.files.length),
-        h("span", {class: "votes"}, okB, noB)));
+        g.locked ? h("span", {class: "chip"}, "확인됨") : h("span", {class: "votes"}, okB, noB)));
     const paint = () => {
       okB.classList.toggle("on", a.verdict === "ok");
       noB.classList.toggle("on", a.verdict === "no");
@@ -241,7 +241,7 @@ function renderDiff() {
       if (f.binary) det.append(h("p", {class: "sub"}, "바이너리 — 내용을 보이지 않는다"));
       f.hunks.forEach(k => det.append(h("div", {class: "hunkh"}, k.header), diffTable(k)));
     });
-    det.append(h("h3", {}, "피드백"), note);
+    if (!g.locked) det.append(h("h3", {}, "피드백"), note);
     main.append(det);
   });
 }
@@ -279,8 +279,9 @@ function progress() {
     const n = unanswered().length, r = rejected().length, k = spec.questions.filter(q => S.q[q.id].keep && S.q[q.id].choice).length;
     p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 장부 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
   } else if (spec.kind === "diff") {
-    const count = v => spec.groups.filter(g => S.g[g.id].verdict === v).length;
-    p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (spec.groups.length - count("ok") - count("no"));
+    const open = spec.groups.filter(g => !g.locked), count = v => open.filter(g => S.g[g.id].verdict === v).length;
+    p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (open.length - count("ok") - count("no"))
+      + (open.length < spec.groups.length ? " · 앞서 확인한 묶음은 묻지 않는다" : "");
   }
   else if (spec.mode === "reject") p.textContent = "기각 " + Object.values(S.r || {}).filter(a => a.reject).length + "건";
   else p.textContent = "유효 " + spec.live.length + "건 · 기각 " + spec.dead.length + "건";

@@ -48,12 +48,12 @@ class Detect(unittest.TestCase):
         self.assertEqual(doc_nudge.find_options("API. 설명\nBUG) 설명\n추천: 없음"), [])
 
     def test_prompt_pointers(self):
-        for prompt, skill in [("선입력 버퍼 시안 짜줘", "diff-proto"), ("바뀐 부분 보여줘", "diff-proto"),
+        for prompt, skill in [("이 구현 확인받자", "diff-proto"), ("바뀐 부분 보여줘", "diff-proto"),
                               ("변경점 문서로 정리해줘", "diff-proto"), ("지금까지 결정한 것 모아줘", "collect-decision"),
                               ("결정 목록 보여줘", "collect-decision"), ("저 결정 기각할래", "reject-decision"),
                               ("결정 뒤집자", "reject-decision"), ("양식으로 고를게", "selection")]:
             self.assertEqual(doc_nudge.find_pointer(prompt), skill, prompt)
-        for prompt in ["/selection 선입력", "버그 고쳐줘", "디자인 시안 좋네", "결정은 네가 해", ""]:
+        for prompt in ["/selection 선입력", "버그 고쳐줘", "프로토타입 만들어 보자", "구현해줘", "결정은 네가 해", ""]:
             self.assertIsNone(doc_nudge.find_pointer(prompt), prompt)
         self.assertIsNone(doc_nudge.find_pointer("가" * 500 + " 바뀐 부분 보여줘"))  # 붙여 넣은 긴 글의 뒤쪽
 
@@ -138,7 +138,7 @@ class Hook(unittest.TestCase):
         self.assertEqual([d for _, d in self.features()], ["계획 모드", "양식이 이미 떠 있음"])
 
     def test_prompt_pointer(self):
-        out = self.prompt("선입력 버퍼 시안 짜줘")
+        out = self.prompt("바뀐 부분 보여줘")
         self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
         self.assertIn("diff-proto/SKILL.md", out["hookSpecificOutput"]["additionalContext"])
         self.assertIsNone(self.prompt("버그 고쳐줘"))
