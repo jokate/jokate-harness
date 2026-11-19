@@ -1,8 +1,13 @@
 """render.py — 선택지 · 그림 먼저, 나머지 근거는 접는다 (2026-10-20 사용자: HTML 이 길고 난잡하다)."""
 import importlib.util
+import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -335,6 +340,161 @@ class DiagramDesignFigureTest(unittest.TestCase):
         md = NUMBERED.replace("## 8. 사용자 결정", "## 질문")
         head = render.summary_first(md).split("<details>")[0]
         self.assertIn("## 질문", head)
+
+
+FORM_DOC = """# 선입력 창 — 구조 조사
+
+## 한눈에
+- 문제: 창 길이가 세 곳에 흩어져 있다
+
+## 선택지
+| 선택지 | 다음 요청 때 고칠 곳 | 얻는 것 | 잃는 것 | 근거 |
+|---|---|---|---|---|
+| A. 국소 패치 | 3곳 | 지금 빠르다 | 다음에 또 세 곳 | 확인 |
+| **B. 버퍼가 창을 갖는다** | 1곳 | 한 곳만 고친다 | 파일 하나가 는다 | 확인 |
+
+추천: B. 고르는 것은 사용자.
+- 문제: 창 길이를 바꾸면 세 곳을 고친다
+- 버린 안: A — 다음에 또 세 곳
+- 대가: 파일 하나가 는다
+- 뒤집는 조건: 창이 하나로 줄면
+- 앞서 기각: C. 전역 설정 — 엔진 설정과 겹친다
+
+## 그림
+```mermaid
+graph LR
+  A-->B
+```
+
+## 질문
+| # | 질문 | 갈래 | 추천 | 답에 따라 바뀌는 것 |
+|---|---|---|---|---|
+| 1 | 구조: A / B 중 무엇? | A / B | B — 한 곳 | 구현 범위 전체 |
+| 2 | 창 길이는 테이블에서 읽나 | 예 / 아니오 / 모름 | 예 — 기획이 고친다 | 데이터 행 |
+| 3 | 패드 입력도 같은 창을 쓰나 | | | 입력 경로 |
+
+## 근거
+### 요청 축
+언제: 공격 중
+"""
+
+
+def http(url, body=None):
+    req = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode("utf-8"), method="GET" if body is None else "POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.code, ""
+
+
+class DocFormTest(unittest.TestCase):
+    """구조 문서의 선택지 · 추천 · 왜 · 질문을 고르기 양식으로 옮긴다 — 같은 것을 두 번 쓰지 않는다."""
+
+    def test_options_recommendation_why_and_questions_are_read(self):
+        spec, errors = render.doc_form(FORM_DOC, "선입력 창")
+        self.assertEqual(errors, [])
+        main, extra = spec["questions"]
+        self.assertEqual((main["title"], main["changes"]), ("구조: A / B 중 무엇?", "구현 범위 전체"))
+        self.assertEqual(main["options"], [
+            {"id": "A", "name": "국소 패치", "next": "3곳", "gain": "지금 빠르다", "loss": "다음에 또 세 곳"},
+            {"id": "B", "name": "버퍼가 창을 갖는다", "next": "1곳", "gain": "한 곳만 고친다", "loss": "파일 하나가 는다", "recommended": True}])
+        self.assertEqual(main["why"], {"problem": "창 길이를 바꾸면 세 곳을 고친다", "dropped": ["A — 다음에 또 세 곳"],
+                                       "cost": "파일 하나가 는다", "flip": "창이 하나로 줄면"})
+        self.assertEqual(main["dropped_before"], ["C. 전역 설정 — 엔진 설정과 겹친다"])
+        self.assertEqual(main["asks"], [{"id": "a3", "text": "패드 입력도 같은 창을 쓰나"}])   # 갈래 없는 질문은 답 적는 칸
+        self.assertEqual((extra["id"], extra["title"], extra["changes"]), ("q2", "창 길이는 테이블에서 읽나", "데이터 행"))
+        self.assertEqual(extra["options"], [{"id": "1", "name": "예", "recommended": True, "summary": "기획이 고친다"},
+                                            {"id": "2", "name": "아니오"}, {"id": "3", "name": "모름"}])
+
+    def test_heading_style_options(self):
+        spec, _ = render.doc_form(ANSWER + "\n**추천: B안** — 한 곳\n", "입력 버퍼")
+        self.assertEqual(spec["questions"][0]["options"], [{"id": "A", "name": "플래그", "summary": "다음 요청 때 3곳"},
+                                                            {"id": "B", "name": "상태", "summary": "다음 요청 때 1곳"}])  # 추천 줄이 다른 절에 있다
+
+    def test_unreadable_doc_gives_reasons(self):
+        self.assertEqual(render.doc_form("# x\n\n## 요약\n글\n", "x"), (None, ["'선택지' 절이 없다"]))
+        spec, errors = render.doc_form("# x\n\n## 선택지\n| 안 | 값 |\n|---|---|\n| API 설계 | 1 |\n| A. 하나 | 2 |\n", "x")
+        self.assertIsNone(spec)
+        self.assertIn("1개만", errors[0])
+
+    def test_embedded_doc_folds_what_the_form_shows(self):
+        head, fold = render.summary_first(FORM_DOC, render.FORM_HIDES).split("<details>", 1)
+        self.assertEqual([ln for ln in head.splitlines() if ln.startswith("## ")], ["## 한눈에", "## 그림"])
+        self.assertIn("근거 — 선택지 · 질문", fold.splitlines()[0])        # 지우지 않는다 — 접힌 근거에서 표를 볼 수 있다
+        self.assertIn("## 선택지", render.summary_first(FORM_DOC).split("<details>")[0])
+
+    def test_embedded_page_loads_its_files_from_the_form_server(self):
+        with tempfile.TemporaryDirectory() as d:
+            page = render.render_html(FORM_DOC, Path(d) / "x.html", "선입력 창", url_for=lambda p: f"/a/{Path(p).name}?t=tok")
+            self.assertIn('<html lang="ko" data-embed>', page)
+            self.assertIn('src="/a/marked.min.js?t=tok"', page)
+            self.assertNotIn("file:///", page)                           # http 페이지는 file:// 스크립트를 못 읽는다
+            plain = render.render_html(FORM_DOC, Path(d) / "x.html", "선입력 창")
+            self.assertIn('<html lang="ko">', plain)
+            self.assertIn("file:///", plain)
+
+
+class OnePageTest(unittest.TestCase):
+    """--form: 문서와 고르기 양식이 한 페이지로 뜨고, 보내면 이 명령이 답을 찍고 끝난다."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.dir = Path(self._td.name)
+        self.src = self.dir / "20261119-창.md"
+
+    def launch(self, md, answers=None, **env):
+        self.src.write_text(md, encoding="utf-8")
+        full = {**os.environ, "PYTHONIOENCODING": "utf-8", "GAME_HARNESS_DOC_NUDGE": "1", **env}
+        full = {k: v for k, v in full.items() if v is not None}
+        proc = subprocess.Popen([sys.executable, "-u", str(HERE.parent / "scripts" / "render.py"), str(self.src), "--form", "--no-open",
+                                 "--project", str(self.dir)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=full)
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+        seen = []
+        if answers is not None:
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace")
+                seen.append(line)
+                if line.startswith("양식: "):
+                    base, token = line.split()[1].split("/?t=")
+                    self.page, self.doc = http(f"{base}/?t={token}")[1], http(f"{base}/doc?t={token}")[1]
+                    self.assertEqual(http(f"{base}/submit?t={token}", {"answers": answers})[0], 204)
+                    break
+        out, _ = proc.communicate(timeout=30)
+        return proc.returncode, "".join(seen) + out.decode("utf-8", "replace")
+
+    def files(self):
+        return sorted(f.name for f in self.dir.iterdir() if f.is_file())
+
+    def test_one_page_then_the_answer_comes_back(self):
+        code, out = self.launch(FORM_DOC, {"q": {"q1": {"choice": "B", "keep": True, "note": "이름은 InputWindow"}, "q2": {"choice": "1"}}})
+        self.assertEqual(code, 0, out)
+        self.assertIn("읽기 점검:", out)
+        self.assertNotIn("점검: 질문 2", out)                             # 곁 질문에 왜 네 칸을 요구하지 않는다
+        self.assertIn('"doc": "/doc?t=', self.page)                       # 양식 페이지 한 장에 문서가 실린다
+        self.assertIn('"name": "버퍼가 창을 갖는다"', self.page)
+        self.assertIn("data-embed", self.doc)
+        self.assertIn("## 한눈에", self.doc)
+        self.assertIn("제출됨 — 선입력 창", out)
+        self.assertIn("B. 버퍼가 창을 갖는다", out)
+        self.assertIn("이름은 InputWindow", out)
+        self.assertIn("장부: D-001", out)
+        self.assertEqual(self.files(), ["20261119-창.html", "20261119-창.md"])  # 답 파일은 지우고 문서는 남긴다
+
+    def test_unattended_run_writes_the_doc_and_serves_nothing(self):
+        code, out = self.launch(FORM_DOC, CLAUDE_CODE_SESSION_ATTENDED="0", GAME_HARNESS_DOC_NUDGE=None)
+        self.assertEqual(code, 4, out)
+        self.assertIn("무인 실행", out)
+        self.assertNotIn("양식: http", out)
+        self.assertEqual(self.files(), ["20261119-창.html", "20261119-창.md"])
+
+    def test_doc_without_options_stays_a_plain_doc(self):
+        code, out = self.launch("# 구조 지도\n\n## 요약\n- 한 줄\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("고르기 양식을 붙이지 못했다", out)
+        self.assertIn("'선택지' 절이 없다", out)
+        self.assertNotIn("양식: http", out)
 
 
 if __name__ == "__main__":

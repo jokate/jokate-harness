@@ -19,6 +19,8 @@ h3{font-size:13px;margin:14px 0 6px;color:var(--sub);font-weight:600}
 .ctx{margin:0;padding:0;list-style:none;color:var(--sub)}
 .ctx li::before{content:"· "}
 .stats{color:var(--sub);font-size:13px;margin-top:6px}
+.docwrap{max-width:1180px;margin:14px auto 0;padding:0 20px}
+iframe.doc{display:block;width:100%;height:70vh;border:0}
 section,details.g,.ledger{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
 .sub{color:var(--sub);font-size:13.5px;margin:0 0 12px}
 .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
@@ -337,6 +339,23 @@ window.addEventListener("pagehide", () => { if (BOOT.served && !sent) navigator.
 $("top").append(...[h("h1", {}, spec.title), h("ul", {class: "ctx"}, ...(spec.context || []).map(c => h("li", {}, c))),
   spec.stats ? h("div", {class: "stats"}, spec.stats) : null,
   h("div", {class: "stats"}, h("kbd", {}, "Enter"), BOOT.served ? " 보내기 — 답이 세션으로 가고 이 탭이 닫힌다" : " 답 복사 — 대화창에 붙여 넣는다")].filter(Boolean));
+/* ── 딸린 문서 — 읽는 곳과 고르는 곳을 한 탭에 둔다 ── */
+if (BOOT.doc) {
+  const frame = h("iframe", {class: "doc", src: BOOT.doc, title: "문서"});
+  frame.addEventListener("load", () => {
+    try {
+      const doc = frame.contentDocument, fit = () => { frame.style.height = Math.ceil(doc.body.getBoundingClientRect().height) + "px"; };
+      new ResizeObserver(fit).observe(doc.body);
+      fit();
+      doc.addEventListener("keydown", e => {  // 문서를 누른 채 Enter 를 쳐도 보낸다
+        if (e.key !== "Enter" || e.isComposing || sent || ["SUMMARY", "BUTTON", "A"].includes(e.target.tagName)) return;
+        e.preventDefault();
+        trySubmit();
+      });
+    } catch (e) {}
+  });
+  $("top").after(h("div", {class: "docwrap"}, frame));
+}
 ({selection: renderSelection, diff: initDiff, ledger: renderLedger})[spec.kind]();
 progress();
 status(BOOT.served ? "바꾸면 바로 저장된다" : "서버 없이 연 파일 — Enter 로 답을 복사한다");

@@ -3,11 +3,16 @@
 """Markdown(+Mermaid) → 단일 HTML. SVN 처럼 .md 를 렌더하지 않는 환경이나, Mermaid 를 그리지 않는 Claude Code 대화창 대신 브라우저로 연다.
 
   python render.py <입력.md> [-o 출력.html] [--js-dir <폴더>] [--open]
+  python render.py <입력.md> --form [--project <루트>]     문서와 고르기 양식을 한 페이지로 띄운다
 
 스크립트(marked·mermaid)는 이 폴더의 vendor/ 에 동봉돼 있다 — 설치할 것이 없고 인터넷이 없어도 그려진다.
 HTML 은 동봉 파일을 먼저 불러오고, 못 불러오면(다른 PC 로 HTML 만 옮긴 경우) CDN 으로 넘어간다.
 --js-dir 를 주면 그 폴더의 marked.min.js, mermaid.min.js 만 쓴다. 어느 쪽도 못 불러오면 원문을 그대로 보인다.
-game-architecture 가 구조 문서를 저장한 뒤 `render.py --open` 으로 쓴다.
+game-architecture 가 구조 문서를 저장한 뒤 `render.py --form` 으로 쓴다.
+
+--form 은 문서의 '선택지' · '질문' 절을 고르기 양식으로 옮겨 문서와 한 페이지에 낸다(selection 의 decide.py 서버).
+읽는 곳(그림 · 근거)과 고르는 곳(안마다 고름 · 기각 · 피드백)이 한 탭이다. Enter 로 보내면 이 명령이 답을 찍고 끝난다.
+선택지 절이 없거나 못 읽으면 문서만 연다. 무인 실행이면 문서만 만들고 띄우지 않는다(끝 코드 4).
 """
 
 import argparse
@@ -39,7 +44,7 @@ CDN = {"marked": "https://cdn.jsdelivr.net/npm/marked@12/marked.min.js",
 # 오른쪽 위 버튼으로 자동 → 밝게 → 어둡게(브라우저에 기억). Mermaid 는 테마에 맞춰 다시 그리고,
 # diagram-design 구조도(iframe)는 어두울 때 색을 뒤집어 맞춘다. 사용자: "딱딱하지 않게 예쁘게 · 다크 모드"(2026-10-20).
 PAGE = """<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ko"__EMBED__><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <script>try{var t=localStorage.getItem('gh-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -89,6 +94,9 @@ details.more{display:inline} details.more>summary{display:inline;list-style:none
 details.more>summary::-webkit-details-marker{display:none} details.more[open]>summary{display:none}
 #raw{white-space:pre-wrap} .note{color:var(--mute);font-size:13px}
 @media (max-width:640px){.wrap{padding:22px 16px 56px} h1{font-size:24px} section.card{padding:16px 18px}}
+html[data-embed]{--bg:#f6f7f9}
+@media (prefers-color-scheme:dark){html[data-embed]:not([data-theme=light]){--bg:#14171d}}
+[data-embed] .top,[data-embed] h1{display:none} [data-embed] .wrap{max-width:none;padding:0}
 @media print{.theme{display:none} section.card,details.fold{break-inside:avoid;box-shadow:none}}
 </style></head><body><div class="wrap">
 <div class="top"><span class="eyebrow">__STAMP__</span><button class="theme" id="theme" type="button" aria-label="화면 테마 바꾸기">테마: 자동</button></div>
@@ -165,16 +173,19 @@ if (window.marked) {
 
 def page(**vals):
     """PAGE 의 __이름__ 자리를 한 번에 바꾼다(바꿔 넣은 글 안의 같은 모양은 건드리지 않는다)."""
-    return re.sub(r"__(TITLE|STAMP|RAW|SCRIPTS|MD)__", lambda m: vals[m.group(1).lower()], PAGE)
+    vals.setdefault("embed", "")
+    return re.sub(r"__(TITLE|STAMP|RAW|SCRIPTS|MD|EMBED)__", lambda m: vals[m.group(1).lower()], PAGE)
 
 
-def scripts(js_dir=None):
-    """<script> 태그들. --js-dir 이면 그 폴더만, 아니면 동봉 파일 → (못 불러오면) CDN."""
+def scripts(js_dir=None, url_for=None):
+    """<script> 태그들. --js-dir 이면 그 폴더만, 아니면 동봉 파일 → (못 불러오면) CDN.
+    url_for(파일) → 주소 를 주면 동봉 파일을 그 주소로 부른다 — 양식 서버가 내보낸 http 페이지는 file:// 을 못 읽는다."""
     if js_dir:
         d = Path(js_dir).resolve()
         return "".join(f'<script src="{html.escape((d / f"{k}.min.js").as_uri())}"></script>' for k in CDN)
     local = {"marked": VENDOR / "marked.min.js", "mermaid": VENDOR / "mermaid.min.js"}
-    tags = "".join(f'<script src="{html.escape(p.as_uri())}"></script>' for p in local.values() if p.is_file())
+    src = url_for or (lambda p: p.as_uri())
+    tags = "".join(f'<script src="{html.escape(src(p))}"></script>' for p in local.values() if p.is_file())
     # 동봉 파일을 못 읽었을 때만 CDN 을 붙인다 (document.write 는 파싱 중이라 다음 스크립트보다 먼저 실행된다)
     fallback = "".join(
         f"if (!window.{k}) document.write('<script src=\"{u}\"><\\/script>');" for k, u in CDN.items())
@@ -208,7 +219,9 @@ def _sec_name(head):
     return re.split(r"\s+[—–]\s+|\s+-\s+|\s*\(", t)[0].strip()
 
 
-def _front_rank(name):
+def _front_rank(name, hide=()):
+    if hide and name.startswith(tuple(hide)):
+        return None
     return next((r for r, keys in enumerate(FRONT) if name.startswith(keys)), None)
 
 
@@ -236,10 +249,10 @@ def _fold_long(text, limit=LONG):
     return "\n".join(out)
 
 
-def summary_first(md):
+def summary_first(md, hide=()):
     """game-architecture 답변이면 결론 · 선택지 · 그림 · 결정 절을 위로, 나머지 절은 접힌 <details> 하나로 내린다.
     보이는 절의 긴 줄은 첫 문장만 남기고 접는다. 긴 줄글 HTML 이 읽기 힘들다는 사용자 피드백(2026-10-20).
-    '선택지' 절이 없는 글은 그대로 둔다."""
+    '선택지' 절이 없는 글은 그대로 둔다. hide 로 시작하는 절은 위에 두지 않고 접는다(양식이 그 절을 카드로 보일 때)."""
     lines = md.splitlines()
     heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
     if not any(_sec_name(lines[i]).startswith("선택지") for i in heads):
@@ -249,8 +262,8 @@ def summary_first(md):
     for n, i in enumerate(heads):
         end = heads[n + 1] if n + 1 < len(heads) else len(lines)
         secs.append((_sec_name(lines[i]), n, "\n".join(lines[i:end]).rstrip()))
-    front = sorted((s for s in secs if _front_rank(s[0]) is not None), key=lambda s: (_front_rank(s[0]), s[1]))
-    rest = [s for s in secs if _front_rank(s[0]) is None]
+    front = sorted((s for s in secs if _front_rank(s[0], hide) is not None), key=lambda s: (_front_rank(s[0], hide), s[1]))
+    rest = [s for s in secs if _front_rank(s[0], hide) is None]
     out = ([_fold_long(pre)] if pre else []) + [_fold_long(t) for _, _, t in front]
     if rest:
         subs = lambda t: [_sec_name(ln) for ln in t.splitlines() if ln.startswith("### ")]  # noqa: E731
@@ -437,9 +450,9 @@ def diagram_first(md, keep=SUMMARY_LINES):
     return "\n\n".join(out) + "\n"
 
 
-def readable(md):
+def readable(md, hide=()):
     """기본 보기: game-architecture 답변이면 summary_first, 그 밖에 그림이 든 글이면 diagram_first."""
-    s = summary_first(md)
+    s = summary_first(md, hide)
     return s if s is not md else diagram_first(md)
 
 
@@ -486,14 +499,15 @@ def dd_svg(fig):
     return "\n".join(ln for ln in text[i:].splitlines() if ln.strip())
 
 
-def embed_figs(md, figs, out_dir):
+def embed_figs(md, figs, out_dir, url_for=None):
     """'그림' 절 맨 앞에 diagram-design 구조도를 끼워 넣는다. 그 절의 Mermaid 는 원본 코드로 접는다
-    (닫힌 <details> 안에서는 mermaid 가 크기를 못 재므로 그리지 않고 글로 둔다). '그림' 절이 없으면 새로 만든다."""
+    (닫힌 <details> 안에서는 mermaid 가 크기를 못 재므로 그리지 않고 글로 둔다). '그림' 절이 없으면 새로 만든다.
+    url_for 를 주면 구조도 파일을 그 주소로 가리킨다(양식 서버가 내보낼 때)."""
     if not figs:
         return md
     tags = []
     for p in figs:
-        rel = urllib.parse.quote(os.path.relpath(p, out_dir).replace(os.sep, "/"))
+        rel = html.escape(url_for(p)) if url_for else urllib.parse.quote(os.path.relpath(p, out_dir).replace(os.sep, "/"))
         svg = dd_svg(p)
         # SVG 를 문서에 바로 넣으면 폭에 맞춰 Before · 바뀌는 것 · After 가 한눈에 보인다. 못 꺼내면 iframe 으로
         body = f'<div class="ddsvg">{svg}</div>' if svg else \
@@ -516,16 +530,193 @@ def embed_figs(md, figs, out_dir):
     return "\n".join(lines[:i + 1] + ["", block, ""] + lines[end:]) + "\n"
 
 
+def render_html(md, out, title, js_dir=None, full=False, src=None, url_for=None, hide=()):
+    """HTML 글. src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다.
+    url_for 를 주면 양식 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다."""
+    md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent, url_for)
+    md = md if full else readable(md, hide)
+    stamp = f"{Path(src).name if src else Path(out).stem} · {time.strftime('%Y-%m-%d %H:%M')}"
+    return page(title=html.escape(title), stamp=html.escape(stamp), raw=html.escape(md),
+                md=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir, url_for),
+                embed=" data-embed" if url_for else "")
+
+
 def render(md, out, title, js_dir=None, full=False, src=None):
-    """src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다."""
-    md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent)
-    md = md if full else readable(md)
     out = Path(out)
-    stamp = f"{Path(src).name if src else out.stem} · {time.strftime('%Y-%m-%d %H:%M')}"
-    out.write_text(page(title=html.escape(title), stamp=html.escape(stamp), raw=html.escape(md),
-                        md=json.dumps(md).replace("</", "<\\/"), scripts=scripts(js_dir)),
-                   encoding="utf-8")
+    out.write_text(render_html(md, out, title, js_dir, full, src), encoding="utf-8")
     return out
+
+
+# ── 문서 → 고르기 양식 (--form) ────────────────────────────────────────────
+# 구조 문서가 이미 선택지 · 추천 · 왜 · 질문을 담고 있다. 양식을 따로 쓰게 하면 같은 것을 두 번 쓰고 두 탭이 뜬다.
+# 그래서 문서에서 읽어 양식으로 옮기고, 문서와 한 페이지에 낸다(사용자 2026-11-19: HTML 로 띄우는 것과 양식을 하나로).
+QUESTION_HEADS = ("질문",)
+FORM_HIDES = CHOICE_HEADS + QUESTION_HEADS  # 양식이 카드로 보이는 절 — 실은 문서에서는 접힌 근거로 내린다
+OPTION = re.compile(r"^([A-Z])(?:안|[.)])?(?:\s*[:—–-]\s*|\s+|$)(.*)$")
+WHY_KEYS = {"문제": "problem", "버린 안": "dropped", "대가": "cost", "뒤집는 조건": "flip"}
+WHY_LINE = re.compile(r"^\s*[-*]\s*\**(문제|버린 안|대가|뒤집는 조건)\**\s*[:：]\s*(.+)$", re.M)
+DROPPED_BEFORE = re.compile(r"^\s*[-*]?\s*\**앞서 기각(?:한 안)?\**\s*[:：]\s*(.+)$", re.M)
+EMPTY_CELL = ("", "…", "...", "-", "—")
+
+
+def _plain(text):
+    """표 칸 · 제목의 마크다운 표시를 걷는다 — 양식은 글자 그대로 보인다."""
+    t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", str(text or ""))
+    t = re.sub(r"<[^>]+>", " ", t)
+    return re.sub(r"\s+", " ", t.replace("**", "").replace("`", "")).strip()
+
+
+def _section(md, heads):
+    """이름이 heads 로 시작하는 첫 `## ` 절의 본문. 없으면 ''."""
+    lines = _no_code(md).splitlines()
+    at = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
+    for n, i in enumerate(at):
+        if _sec_name(lines[i]).startswith(heads):
+            return "\n".join(lines[i + 1:at[n + 1] if n + 1 < len(at) else len(lines)])
+    return ""
+
+
+def _tables(text):
+    """(머리줄 칸, 본문 줄의 칸들) — 절 안의 표마다."""
+    lines, out, i = text.splitlines(), [], 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith("|"):
+            i += 1
+            continue
+        block = []
+        while i < len(lines) and lines[i].lstrip().startswith("|"):
+            block.append(lines[i])
+            i += 1
+        rows = [_cells(ln) for ln in block if not re.fullmatch(r"\s*\|[\s:|-]*", ln)]
+        if len(rows) >= 2:
+            out.append(([_plain(c) for c in rows[0]], rows[1:]))
+    return out
+
+
+def _option(text):
+    m = OPTION.match(_plain(text))
+    return (m.group(1), m.group(2).strip(" —–-:") or m.group(1) + "안") if m else None
+
+
+def doc_form(md, title):
+    """구조 문서 → (고르기 양식, 못 읽은 이유들). '선택지' 절의 안 · 추천 · 왜 네 칸과 '질문' 절의 표를 옮긴다.
+    안은 표의 첫 칸("A. 국소 패치")이나 소제목("### A. 국소 패치 — …")에서 읽는다."""
+    sec = _section(md, CHOICE_HEADS)
+    if not sec.strip():
+        return None, ["'선택지' 절이 없다"]
+    options = []
+    for head, rows in _tables(sec):
+        col = lambda *keys: next((i for i, h in enumerate(head) if any(k in h for k in keys)), None)  # noqa: E731
+        slots = (("next", col("다음 요청", "고칠 곳")), ("gain", col("얻는")), ("loss", col("잃는")))
+        for row in rows:
+            got = _option(row[0]) if row else None
+            if not got or any(o["id"] == got[0] for o in options):
+                continue
+            o = {"id": got[0], "name": got[1]}
+            o.update({k: _plain(row[i]) for k, i in slots if i is not None and i < len(row) and _plain(row[i]) not in EMPTY_CELL})
+            options.append(o)
+        if options:
+            break
+    if not options:  # 소제목 꼴: "### A. 플래그 — 다음 요청 때 3곳"
+        for ln in sec.splitlines():
+            if ln.startswith("###"):
+                name, _, tail = _plain(ln.lstrip("#")).partition(" — ")
+                got = _option(name)
+                if got and not any(o["id"] == got[0] for o in options):
+                    options.append({"id": got[0], "name": got[1], **({"summary": tail.strip()} if tail.strip() else {})})
+    if len(options) < 2:
+        return None, [f"'선택지' 절에서 안을 {len(options)}개만 읽었다 — 표 첫 칸을 `A. 이름` 꼴로 쓴다"]
+    ids = [o["id"] for o in options]
+    rec = RECOMMEND.search(sec)
+    if rec:
+        line = sec[rec.end():].splitlines()[0] if sec[rec.end():] else ""
+        m = re.match(r"\s*\**\s*([A-Z])(?:안|[.)\s*:—–-]|$)", line)
+        for o in options:
+            if m and o["id"] == m.group(1):
+                o["recommended"] = True
+    why = {}
+    for key, value in WHY_LINE.findall(sec):
+        if WHY_KEYS[key] == "dropped":
+            why.setdefault("dropped", []).append(_plain(value))
+        else:
+            why.setdefault(WHY_KEYS[key], _plain(value))
+    main = {"id": "q1", "title": "어느 안으로 가나", "options": options}
+    if why:
+        main["why"] = why
+    before = [_plain(d) for d in DROPPED_BEFORE.findall(sec)]
+    if before:
+        main["dropped_before"] = before
+    questions, asks = [main], []
+    for head, rows in _tables(_section(md, QUESTION_HEADS))[:1]:
+        col = lambda key, default: next((i for i, h in enumerate(head) if key in h), default)  # noqa: E731
+        q_i, fork_i, rec_i, chg_i = col("질문", 1), col("갈래", 2), col("추천", 3), col("바뀌는", 4)
+        cell = lambda row, i: _plain(row[i]) if i < len(row) else ""  # noqa: E731
+        for n, row in enumerate(rows, 1):
+            text, changes = cell(row, q_i), cell(row, chg_i)
+            forks = [f.strip() for f in re.split(r"\s*/\s*", cell(row, fork_i)) if f.strip()]
+            if not text:
+                continue
+            if forks and all(re.fullmatch(r"([A-Z])안?", f) and f[0] in ids for f in forks):  # 구조를 묻는 행 — 선택지 카드가 답한다
+                main["title"] = text
+                if changes not in EMPTY_CELL:
+                    main["changes"] = changes
+                continue
+            if len(forks) < 2:  # 갈래 없이 묻는 것 — 답을 적는 칸으로
+                asks.append({"id": f"a{n}", "text": text})
+                continue
+            picked = cell(row, rec_i)
+            best = max((f for f in forks if picked.startswith(f)), key=len, default=None)
+            reason = picked[len(best):].strip(" —–-:") if best else ""  # 추천 칸의 이유 한 구절 — 그 갈래 카드에 보인다
+            q = {"id": f"q{len(questions) + 1}", "title": text, "options": [{"id": str(k), "name": f} for k, f in enumerate(forks, 1)]}
+            for o in q["options"]:
+                if o["name"] == best:
+                    o.update({"recommended": True}, **({"summary": reason} if reason else {}))
+            if changes not in EMPTY_CELL:
+                q["changes"] = changes
+            questions.append(q)
+    if asks:
+        main["asks"] = asks
+    return {"kind": "selection", "title": title, "questions": questions}, []
+
+
+def load_decide():
+    """selection 스킬의 양식 엔진. 설치가 반쪽이면 None — 그때는 문서만 연다."""
+    folder = HERE.parent.parent / "selection" / "scripts"
+    if not (folder / "decide.py").is_file():
+        return None
+    sys.path.insert(0, str(folder))
+    try:
+        import decide
+        return decide
+    except Exception:
+        return None
+
+
+def run_form(src, md, title, out, a):
+    """문서와 고르기 양식을 한 페이지로 띄우고 끝 코드를 돌려준다. 양식을 못 만들면 문서만 연다."""
+    decide = load_decide()
+    spec, errors = doc_form(md, title)
+    if decide and spec:
+        spec_errors, warns = decide.check_spec(spec)
+        errors = spec_errors
+        for w in warns:
+            if "왜 네 칸" in w and not w.startswith("질문 1:"):
+                continue  # 곁 질문의 추천 이유는 질문 표 추천 칸의 한 구절이 전부다 — 문서에서 고칠 것이 없다
+            print(f"점검: {w}")
+    elif not decide:
+        errors = ["selection 스킬(decide.py)이 없다 — setup.bat 을 다시 돌린다"]
+    if decide and decide.unattended():
+        print(f"띄우지 않았다 — 무인 실행이다({decide.unattended()}). 문서만 만들었다.\n"
+              "다음: 선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.")
+        return decide.UNATTENDED
+    if errors:
+        print("고르기 양식을 붙이지 못했다 — 문서만 연다:\n" + "\n".join(f"- {e}" for e in errors))
+        err = None if a.no_open else open_file(out)
+        if err:
+            print(f"열지 못했다 ({err}). 위 경로를 브라우저로 직접 연다.")
+        return 0
+    doc = lambda url_for: render_html(md, out, title, a.js_dir, src=src, url_for=url_for, hide=FORM_HIDES)  # noqa: E731
+    return decide.run_form(spec, None, Path(src).with_name(Path(src).stem + ".answers.json"), a, doc=doc)
 
 
 def open_file(path):
@@ -540,7 +731,7 @@ def open_file(path):
     return None
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
     ap.add_argument("-o", "--out")
@@ -548,13 +739,19 @@ def main():
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
     ap.add_argument("--full", action="store_true",
                     help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 그 밖의 글은 요약 · 그림 먼저, 나머지는 접기)")
-    a = ap.parse_args()
+    ap.add_argument("--form", action="store_true", help="문서와 고르기 양식을 한 페이지로 띄운다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
+    ap.add_argument("--project", default=".", help="--form: 프로젝트 루트. '남김' 표시한 결정을 그 아래 결정 장부에 적는다")
+    ap.add_argument("--no-open", action="store_true", help="--form: 브라우저를 열지 않고 주소만 찍는다")
+    ap.add_argument("--timeout", type=int, default=120, help="--form: 움직임이 없으면 닫는 시간(분)")
+    a = ap.parse_args(argv)
     src = Path(a.src)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
     out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full, src=src)
     print(out)
-    print(report(check(md, dd_figs(src, exclude=out)))[0])
+    print(report(check(md, dd_figs(src, exclude=out)))[0], flush=True)
+    if a.form:
+        return run_form(src, md, title, out, a)
     if a.open:
         err = open_file(out)
         if err:

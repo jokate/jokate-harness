@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""decide.py · diffdoc.py — 양식 점검, 서버 왕복(저장 · 보내기 · 토큰), 결정 장부(적기 · 기각), diff 묶기."""
+"""decide.py · diffdoc.py — 양식 점검, 서버 왕복(저장 · 보내기 · 토큰), 결정 장부(적기 · 기각), diff 묶기, 무인 실행 차단, 딸린 문서."""
+import argparse
 import io
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -12,7 +15,9 @@ import urllib.error
 import urllib.request
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
+os.environ["GAME_HARNESS_DOC_NUDGE"] = "1"  # 무인 실행(직원 · CI)에서 이 시험을 돌려도 양식이 뜬다. 차단은 Unattended 가 따로 본다
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import decide  # noqa: E402
 import diffdoc  # noqa: E402
@@ -130,6 +135,79 @@ class PipedForm(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("양식 파일:", out)
         self.assertEqual(left, [".html", ".json"])
+
+
+class Unattended(unittest.TestCase):
+    """무인 실행(`claude -p` · 릴레이 직원)에서는 양식을 띄우지 않는다 — 받을 사람이 없어 명령이 끝나지 않는다."""
+
+    def test_only_an_explicit_zero_blocks(self):
+        self.assertEqual(decide.unattended({}), "")                                  # 신호가 없는 판(터미널 · IDE)은 띄운다
+        self.assertEqual(decide.unattended({"CLAUDE_CODE_SESSION_ATTENDED": "1"}), "")
+        self.assertIn("ATTENDED=0", decide.unattended({"CLAUDE_CODE_SESSION_ATTENDED": "0"}))
+        self.assertEqual(decide.unattended({"CLAUDE_CODE_SESSION_ATTENDED": "0", "GAME_HARNESS_DOC_NUDGE": "1"}), "")
+        self.assertIn("NUDGE=0", decide.unattended({"CLAUDE_CODE_SESSION_ATTENDED": "1", "GAME_HARNESS_DOC_NUDGE": "0"}))
+
+    def run_cli(self, *args, stdin=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "TMP": tmp, "TEMP": tmp, "TMPDIR": tmp, "PYTHONIOENCODING": "utf-8", "CLAUDE_CODE_SESSION_ATTENDED": "0"}
+            env.pop("GAME_HARNESS_DOC_NUDGE")
+            r = subprocess.run([sys.executable, str(Path(decide.__file__)), *args, "--project", tmp], input=stdin, capture_output=True, env=env, timeout=30)
+            return r.returncode, (r.stdout + r.stderr).decode("utf-8", "replace"), sorted(f.name for f in Path(tmp).rglob("*") if f.is_file())
+
+    def test_form_is_not_served_and_leaves_nothing(self):
+        for flags in ((), ("--static",)):
+            code, out, left = self.run_cli("form", "-", *flags, stdin=json.dumps(SPEC, ensure_ascii=False).encode("utf-8"))
+            self.assertEqual(code, decide.UNATTENDED, out)
+            self.assertIn("무인 실행", out)
+            self.assertIn("다음: 선택지와 추천은 답에 글로", out)
+            self.assertNotIn("양식: http", out)
+            self.assertEqual(left, [])
+
+    def test_ledger_and_diff_pages_are_not_served(self):
+        code, out, _ = self.run_cli("collect")
+        self.assertEqual(code, decide.UNATTENDED, out)
+        args = argparse.Namespace(timeout=1, no_open=True, project=".", keep=True)
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ATTENDED": "0"}), redirect_stdout(io.StringIO()) as buf:
+            os.environ.pop("GAME_HARNESS_DOC_NUDGE")
+            code = decide.run_form({"kind": "diff", "title": "x", "groups": []}, None, "x.answers.json", args)
+        self.assertEqual(code, decide.UNATTENDED)
+        self.assertIn("변경 설명을 띄우지 않았다", buf.getvalue())
+        self.assertIn("구현 확인 안 받음", buf.getvalue())
+
+
+class DocPage(unittest.TestCase):
+    """문서가 딸린 양식: 문서와 문서가 쓰는 파일을 같은 서버가 토큰을 받고 내보낸다 — 읽는 곳과 고르는 곳이 한 탭이다."""
+
+    def test_doc_and_its_files_are_served_behind_the_token(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = Path(d) / "lib.min.js"
+            lib.write_text("window.lib = 1;", encoding="utf-8")
+            ready, result = threading.Event(), {}
+
+            def run():
+                with redirect_stdout(io.StringIO()):
+                    result["end"], _ = decide.serve(SPEC, Path(d) / "x.answers.json", 1, False,
+                                                    on_ready=lambda u: (result.update(url=u), ready.set()),
+                                                    doc=lambda url_for: f'<html><script src="{url_for(lib)}"></script>문서 본문</html>')
+            t = threading.Thread(target=run, daemon=True)
+            t.start()
+            self.assertTrue(ready.wait(5))
+            base, token = result["url"].split("/?t=")
+            self.assertIn(f'"doc": "/doc?t={token}"', http(result["url"])[1])   # 양식 페이지가 문서를 가리킨다
+            code, body = http(f"{base}/doc?t={token}")
+            self.assertEqual(code, 200)
+            self.assertIn("문서 본문", body)
+            asset = re.search(r'src="([^"]+)"', body).group(1)
+            self.assertEqual(http(base + asset), (200, "window.lib = 1;"))
+            self.assertEqual(http(base + asset.split("?")[0])[0], 403)          # 토큰 없이는 못 읽는다
+            self.assertEqual(http(f"{base}/doc")[0], 403)
+            self.assertEqual(http(f"{base}/a/9-none.js?t={token}")[0], 404)     # 문서가 가리킨 파일만 내보낸다
+            self.assertEqual(http(f"{base}/submit?t={token}", {"answers": {}})[0], 204)
+            t.join(5)
+            self.assertEqual(result["end"], "submitted")
+
+    def test_form_without_a_doc_has_no_doc_frame(self):
+        self.assertIn('"doc": null', decide.build_page(SPEC, None, "tok", True, "x.answers.json"))
 
 
 class LedgerFlow(unittest.TestCase):
