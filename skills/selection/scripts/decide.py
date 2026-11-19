@@ -10,7 +10,7 @@
   python decide.py reject [--id D-003 --reason <이유>]
 
 form 은 페이지를 메모리에서 내보낸다. HTML 파일을 남기지 않는다.
-사용자가 Enter 로 보내면 답을 표준 출력에 찍고, 고르기 양식이면 결정 장부에 적고, 양식 파일을 지우고 끝난다. 탭은 페이지가 스스로 닫는다.
+사용자가 Enter 로 보내면 답을 표준 출력에 찍고, 고르기 양식이면 '남김' 표시한 결정을 장부에 적고, 양식 파일을 지우고 끝난다. 탭은 페이지가 스스로 닫는다.
 그래서 이 명령을 백그라운드로 돌리면 사용자가 보낸 순간 답이 부른 세션으로 돌아온다.
 --static 은 서버를 못 띄울 때만 쓴다: HTML 을 양식 옆에 쓰고, 사용자가 복사한 답을 <양식>.answers.json 에 저장한 뒤 done 을 돌린다.
 
@@ -331,13 +331,14 @@ def add_decision(path, topic, choice, question="", dropped=(), note="", answers=
 
 
 def record_selection(spec, answers, path):
-    """고른 질문만 장부에 적는다. 안 고른 질문은 결정이 아니다 — 기각만 한 질문은 선택지를 다시 낼 재료다.
+    """사용자가 '장부에 남긴다' 를 표시하고 고른 질문만 적는다. 고른 것을 전부 적으면 사소한 선택이 쌓여 읽지 않는 목록이 된다.
+    안 고른 질문은 결정이 아니다 — 기각만 한 질문은 선택지를 다시 낼 재료다.
     버린 안에는 사용자가 적은 기각 이유와 앞 양식에서 기각한 안(dropped_before)이 붙는다."""
     ids = []
     for q in spec["questions"]:
         a = (answers.get("q") or {}).get(q["id"]) or {}
         label = option_label(q, a.get("choice"))
-        if label is None:
+        if label is None or not a.get("keep"):
             continue
         why = dict(rejected_options(q, a))
         dropped = [name + (f" — {why[name]}" if why.get(name) else "")
@@ -407,7 +408,7 @@ def finish(spec, answers, project, record=True):
         if ids:
             print(f"\n장부: {' · '.join(ids)} — {ledger}")
         elif record:
-            print("\n장부: 고른 안이 없어 적지 않았다")
+            print("\n장부: 남김 표시한 결정이 없어 적지 않았다")
     elif spec["kind"] == "diff":
         print(diff_summary(spec, answers))
     elif spec.get("mode") == "reject":

@@ -50,6 +50,7 @@ dd{margin:0}
 input[type=text],textarea{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 input[type=text]:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
 .row{display:flex;gap:8px;align-items:flex-start;margin:5px 0}
+.row.keep{margin-top:12px;color:var(--sub);font-size:13.5px}
 .row input[type=checkbox]{margin-top:5px;width:16px;height:16px;flex:none}
 .ask{margin:8px 0}
 .ask label{display:block;font-size:13.5px;margin-bottom:3px}
@@ -128,7 +129,7 @@ const rejectInputs = {};
 function renderSelection() {
   const main = $("main");
   spec.questions.forEach((q, qi) => {
-    const a = slot("q", q.id, {choice: null, rejects: {}, checks: [], asks: {}, note: ""});
+    const a = slot("q", q.id, {choice: null, rejects: {}, checks: [], asks: {}, note: "", keep: false});
     a.rejects = a.rejects || {};
     const sec = h("section", {id: "q-" + q.id});
     sec.append(h("h2", {}, (qi + 1) + ". " + q.title));
@@ -178,6 +179,9 @@ function renderSelection() {
       q.asks.forEach(k => sec.append(h("div", {class: "ask"}, h("label", {}, k.text), text(a.asks, k.id, "답"))));
     }
     sec.append(h("h3", {}, "피드백"), text(a, "note", "고른 안에 붙일 지시나, 선택지를 다시 낼 방향"));
+    sec.append(h("label", {class: "row keep"},
+      h("input", {type: "checkbox", checked: !!a.keep, onchange: e => { a.keep = e.target.checked; touch(); }}),
+      h("span", {}, "이 결정을 장부에 남긴다 — 되돌리기 어렵거나 나중에 다시 물을 결정만")));
     main.append(sec);
   });
   $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
@@ -272,8 +276,8 @@ function renderLedger() {
 function progress() {
   const p = $("prog");
   if (spec.kind === "selection") {
-    const n = unanswered().length, r = rejected().length;
-    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + (n ? " — 안 고른 것은 미결로 간다" : "");
+    const n = unanswered().length, r = rejected().length, k = spec.questions.filter(q => S.q[q.id].keep && S.q[q.id].choice).length;
+    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 장부 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
   } else if (spec.kind === "diff") {
     const count = v => spec.groups.filter(g => S.g[g.id].verdict === v).length;
     p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (spec.groups.length - count("ok") - count("no"));

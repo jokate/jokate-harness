@@ -6,14 +6,15 @@ disable-model-invocation: true
 
 # collect-decision — 정한 것을 모아 보인다
 
-결정 장부는 `<프로젝트>/.claude/decisions.jsonl` 이다. `/selection` 으로 고른 것은 이미 들어 있다.
+결정 장부는 `<프로젝트>/.claude/decisions.jsonl` 이다. `/selection` 에서 '장부에 남긴다' 를 표시한 결정은 이미 들어 있다.
 
 ## 순서
 
 1. 장부를 읽는다.
    `python ~/.claude/skills/selection/scripts/decide.py list --project <프로젝트 루트>`
 2. 이번 대화에서 사용자가 정했는데 장부에 없는 결정을 적는다.
-   - 적는 것: 사용자가 고른 것, 정한 방향, 하지 말라고 한 것.
+   - 적는 것: 사용자가 고른 것, 정한 방향, 하지 말라고 한 것. 그중 되돌리기 어렵거나, 맥락 없이 보면 놀랍거나, 나중에 다시 물을 것만.
+   - 적기 전에 적을 것을 한 줄씩 대화에 보인다. 사용자가 빼라는 것은 뺀다.
    - 적지 않는 것: 내가 고른 구현 세부, 아직 묻는 중인 것, 코드를 보면 아는 사실.
    - 하나씩 적는다.
      `python ~/.claude/skills/selection/scripts/decide.py add --project <루트> --topic "<주제>" --question "<무엇을 정했나>" --choice "<정한 것>" --dropped "<버린 안>" --note "<조건이나 이유>"`

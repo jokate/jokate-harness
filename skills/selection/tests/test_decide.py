@@ -104,7 +104,7 @@ class ServerRoundTrip(unittest.TestCase):
             decide.CLOSE_GRACE = old
 
 
-ANSWERS = {"q": {"q1": {"choice": "B", "rejects": {"A": "다음에 또 네 곳"}, "checks": [True, False], "asks": {"a1": "예"}, "note": "이름은 X 로"},
+ANSWERS = {"q": {"q1": {"choice": "B", "keep": True, "rejects": {"A": "다음에 또 네 곳"}, "checks": [True, False], "asks": {"a1": "예"}, "note": "이름은 X 로"},
                  "q2": {"choice": None, "rejects": {"A": "엔진 이름과 겹친다", "B": ""}, "note": "동사로 시작하게"}}}
 
 
@@ -147,7 +147,9 @@ class LedgerFlow(unittest.TestCase):
              "options": [{"id": "A", "name": "ReceiveDamage", "recommended": True}, {"id": "B", "name": "TakeHit"}]}]}
         self.assertEqual(decide.check_spec(spec)[0], [])
         with tempfile.TemporaryDirectory() as d:
-            decide.record_selection(spec, {"q": {"q": {"choice": "A"}}}, decide.ledger_path(d))
+            self.assertEqual(decide.record_selection(spec, {"q": {"q": {"choice": "A"}}}, decide.ledger_path(d)), [])   # 남김 표시가 없다
+            self.assertFalse(decide.ledger_path(d).exists())
+            decide.record_selection(spec, {"q": {"q": {"choice": "A", "keep": True}}}, decide.ledger_path(d))
             self.assertEqual(decide.load_events(decide.ledger_path(d))[0]["dropped"], ["B. TakeHit", "Hit — 엔진 이름과 겹친다"])
 
     def test_finish_records_and_cleanup_removes_form_files(self):
