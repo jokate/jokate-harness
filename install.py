@@ -35,7 +35,7 @@ for _s in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CLAUDE = Path.home() / ".claude"
-HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "harness_trace.py"]
+HOOKS = ["session_start.py", "game_context.py", "mcp_guard.py", "mcp_log.py", "harness_trace.py", "doc_nudge.py"]
 LIBS = ["harness_events.py"]  # 훅이 import 하는 모듈. settings 에는 등록하지 않는다
 # 뺀 것: 설치하면 settings.json 등록과 ~/.claude/hooks 의 파일을 지운다 (백업은 settings.json.bak · <이름>.removed).
 # handoff.py · diagram_view.py — 2026-10-07~22 에 한 번도 동작하지 않았다(이벤트 0, [RESET] 0회, 렌더 흔적 0).
@@ -376,6 +376,9 @@ def settings_snippet():
     trace = cmd("harness_trace.py", 10, {"async": True})
     return {"hooks": {
         "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
+        # 문서 양식 훅: 맞는 것이 없으면 아무것도 내지 않는다. 답의 선택지 · 프롬프트의 낱말에 걸릴 때만 한 줄 넣는다.
+        "UserPromptSubmit": [{"hooks": [cmd("doc_nudge.py", 5)]}],
+        "Stop": [{"hooks": [cmd("doc_nudge.py", 5)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],
         "PostToolUse": [{"matcher": "mcp__.*", "hooks": [mcp_log]},
                         {"matcher": "Skill|Bash|PowerShell", "hooks": [trace]}],

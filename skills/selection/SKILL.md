@@ -14,7 +14,8 @@ argument-hint: "[고를 주제]"
 
 1. 양식 JSON 을 쓴다. 꼴은 [references/form-sample.json](references/form-sample.json) 그대로다.
    - 위치: `<프로젝트>/Saved/ClaudeArch/decide/<YYYYMMDD>-<주제>.json`
-   - Unity 는 `Library/ClaudeArch/decide/`, 그 밖의 프로젝트는 `<프로젝트>/.claude/decide/`.
+   - Unity 는 `Library/ClaudeArch/decide/`.
+   - 그 밖의 프로젝트는 파일을 쓰지 않는다. 2번의 명령에서 `<양식.json>` 자리에 `-` 를 쓰고 JSON 을 표준 입력으로 준다(`.claude/` 아래에 쓰면 권한을 묻는다).
 2. 양식을 띄운다. **백그라운드로 돌린다.**
    `python ~/.claude/skills/selection/scripts/decide.py form <양식.json> --project <프로젝트 루트>`
    - 출력에 `점검:` 줄이 있으면 양식을 고쳐 다시 돌린다. `양식 오류` 면 뜨지 않는다.

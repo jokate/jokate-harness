@@ -108,6 +108,30 @@ ANSWERS = {"q": {"q1": {"choice": "B", "keep": True, "rejects": {"A": "다음에
                  "q2": {"choice": None, "rejects": {"A": "엔진 이름과 겹친다", "B": ""}, "note": "동사로 시작하게"}}}
 
 
+class PipedForm(unittest.TestCase):
+    """`form -`: 양식을 표준 입력으로 받는다 — 모델이 파일을 따로 쓰지 않는다."""
+
+    def run_piped(self, spec, *flags):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**__import__("os").environ, "TMP": tmp, "TEMP": tmp, "TMPDIR": tmp, "PYTHONIOENCODING": "utf-8"}
+            r = subprocess.run([sys.executable, str(Path(decide.__file__)), "form", "-", "--project", tmp, *flags],
+                               input=json.dumps(spec, ensure_ascii=False).encode("utf-8"), capture_output=True, env=env, timeout=30)
+            left = sorted(f.suffix for f in Path(tmp).rglob("*") if f.is_file())
+            return r.returncode, (r.stdout + r.stderr).decode("utf-8", "replace"), left
+
+    def test_bad_form_leaves_nothing(self):
+        code, out, left = self.run_piped({"kind": "selection", "title": "x", "questions": []})
+        self.assertEqual(code, 1)
+        self.assertIn("양식 오류", out)
+        self.assertEqual(left, [])
+
+    def test_good_form_is_read_from_stdin(self):
+        code, out, left = self.run_piped(SPEC, "--static")
+        self.assertEqual(code, 0, out)
+        self.assertIn("양식 파일:", out)
+        self.assertEqual(left, [".html", ".json"])
+
+
 class LedgerFlow(unittest.TestCase):
     def test_summary_shows_choice_unchecked_items_and_replies(self):
         text = decide.selection_summary(SPEC, ANSWERS)
