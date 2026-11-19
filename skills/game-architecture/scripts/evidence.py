@@ -28,6 +28,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from itertools import combinations
 from pathlib import Path
+from urllib.parse import unquote
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -129,7 +130,10 @@ def svn_changesets(root, path, since):
 
 
 def parse_svn_log(xml, prefix):
-    """svn log -v --xml → 커밋 목록. added 는 그 커밋이 새로 넣은 파일(action="A")."""
+    """svn log -v --xml → 커밋 목록. added 는 그 커밋이 새로 넣은 파일(action="A").
+    prefix 는 svn info 의 relative-url 이라 %인코딩이다(한글 · 공백). 로그 경로는 풀린 글자라 풀어서 맞춘다.
+    저장소 루트 체크아웃이면 relative-url 이 "/" 라 끝의 / 를 떼야 맞는다."""
+    prefix = unquote(prefix).rstrip("/")
     sets = []
     for e in ET.fromstring(xml).iter("logentry"):
         files, added = {}, set()
