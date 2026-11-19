@@ -22,7 +22,7 @@ disable-model-invocation: true
 3. 페이지를 띄운다. **백그라운드로 돌린다.**
    `python ~/.claude/skills/selection/scripts/decide.py collect --project <프로젝트 루트>`
    - 유효한 결정은 주제별 표로, 기각된 결정과 이유는 접힌 칸으로 나온다.
-   - 사용자가 Enter 로 닫으면 명령이 끝난다. 탭은 스스로 닫히고 파일은 남지 않는다.
+   - 사용자가 Enter 로 닫으면 명령이 끝난다. 탭은 스스로 닫히고 파일은 남지 않는다. 끝났다는 알림은 닫았다는 뜻이다.
 4. 대화에는 세 줄만 쓴다: 유효 N건 · 기각 M건, 새로 적은 것, 기각할 것이 있으면 `/reject-decision`.
 
 브라우저를 못 띄우면 `collect --print` 의 표를 대화에 낸다.
