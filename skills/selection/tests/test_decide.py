@@ -316,5 +316,93 @@ class DiffDoc(unittest.TestCase):
         self.assertEqual(diffdoc.decode(raw), "Index: 소스/효과.cpp\n+// 피해 입구\n")
 
 
+class ImplementationCycle(unittest.TestCase):
+    """구현 확인 사이클: 확인 → 기각 → 고침 → 다시 확인 → 확정. 적용되는 코드는 확인받은 코드와 같다."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        self.repo = Path(self._td.name) / "repo"
+        self.repo.mkdir()
+        self.git("init", "-q")
+        self.write({})
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+        self.story = Path(self._td.name) / "story.json"
+
+    def git(self, *args):
+        subprocess.run(["git", *args], cwd=self.repo, check=True, capture_output=True)
+
+    def write(self, changed):
+        lines = [changed.get(i, f"line {i}") for i in range(1, 31)]
+        (self.repo / "a.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+    def run_doc(self, *flags, groups=None, verdicts=None):
+        """diffdoc 을 돌린다. verdicts 를 주면 뜬 양식에 그 판정을 보내고 끝까지 기다린다. → 출력."""
+        cmd = [sys.executable, "-u", str(Path(diffdoc.__file__)), "--path", str(self.repo), "--project", str(self.repo), "--no-open", *flags]
+        if groups is not None:
+            self.story.write_text(json.dumps({"title": "선입력 창", "groups": groups}, ensure_ascii=False), encoding="utf-8")
+            cmd.insert(3, str(self.story))
+        env = {**__import__("os").environ, "PYTHONIOENCODING": "utf-8"}
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.repo, env=env)
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+        seen = []
+        if verdicts is not None:
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace")
+                seen.append(line)
+                if line.startswith("양식: "):
+                    base, token = line.split()[1].split("/?t=")
+                    self.assertEqual(http(f"{base}/submit?t={token}", {"answers": {"g": verdicts}})[0], 204)
+                    break
+        out, _ = proc.communicate(timeout=30)
+        return "".join(seen) + out.decode("utf-8", "replace")
+
+    def test_reject_fix_reshow_then_confirmed(self):
+        both = [{"title": "만료를 건너뛴다", "match": ["a.txt#1"]}, {"title": "창 길이를 버퍼가 갖는다", "match": ["a.txt#2"]}]
+        self.write({3: "new 3", 25: "hard-coded 25"})
+        out = self.run_doc(groups=both, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": "no", "note": "테이블에서 읽어라"}})
+        self.assertIn("확인 1 · 기각 1 · 미정 0", out)
+        self.assertIn("확인 누계: 조각 1/2", out)
+        self.assertIn("다음: 기각한 묶음을 피드백대로 고친다", out)
+        self.assertNotIn("구현이 확정됐다", out)
+
+        self.write({3: "new 3", 25: "from table 25"})                      # 기각 묶음만 고쳤다
+        status = self.run_doc("--status")
+        self.assertIn("조각 2개 · 확인 1개 · 남은 것 1개", status)
+        self.assertIn("- a.txt#2", status)
+        self.assertNotIn("a.txt#1", status)
+
+        again = [{"title": "창 길이를 테이블에서 읽는다", "match": ["a.txt#2"]}]
+        check = self.run_doc("--check", groups=again)
+        self.assertIn("묶은 것 1개 · 묶이지 않은 것 0개 · 앞서 확인한 것 1개", check)  # 확인한 조각이 '묶이지 않은 변경' 으로 돌아오지 않는다
+        out = self.run_doc(groups=again, verdicts={"g1": {"verdict": "ok", "note": ""}})
+        self.assertIn("확인 1 · 기각 0 · 미정 0 · 앞서 확인 1", out)
+        self.assertIn("확인 누계: 조각 2/2", out)
+        self.assertIn("다음: 구현이 확정됐다", out)
+        self.assertIn("구현이 확정됐다", self.run_doc("--status"))            # 새 프로세스(새 세션)에서도 남아 있다
+
+    def test_code_changed_after_confirmation_comes_back(self):
+        self.write({3: "new 3"})
+        out = self.run_doc(groups=[{"title": "하나", "match": ["a.txt"]}], verdicts={"g1": {"verdict": "ok", "note": ""}})
+        self.assertIn("다음: 구현이 확정됐다", out)
+        self.write({3: "new 3 polished"})                                  # 확인 뒤에 다듬었다
+        status = self.run_doc("--status")
+        self.assertIn("남은 것 1개", status)
+        self.assertIn("- a.txt#1", status)
+        self.write({3: "new 3", 25: "extra"})                              # 확인한 조각은 그대로, 새 조각이 생겼다
+        status = self.run_doc("--status")
+        self.assertIn("조각 2개 · 확인 1개 · 남은 것 1개", status)
+        self.assertIn("- a.txt#2", status)
+
+    def test_undecided_group_is_not_confirmed(self):
+        self.write({3: "new 3", 25: "new 25"})
+        both = [{"title": "하나", "match": ["a.txt#1"]}, {"title": "둘", "match": ["a.txt#2"]}]
+        out = self.run_doc(groups=both, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": None, "note": ""}})
+        self.assertIn("다음: 미정 1묶음은 확인받지 못했다", out)
+        self.assertNotIn("구현이 확정됐다", out)
+        self.assertIn("남은 것 1개", self.run_doc("--status"))
+
+
 if __name__ == "__main__":
     unittest.main()

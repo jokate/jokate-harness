@@ -13,6 +13,7 @@ git 은 추적 안 된 새 파일도 넣는다. svn 은 올리지 않은 새 파
 """
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -27,6 +28,7 @@ RISKS = ("높음", "중간", "낮음")
 BIG_FILE = 300_000   # 이보다 큰 새 파일은 내용을 넣지 않는다
 BIG_DIFF = 3000      # 줄 수가 이보다 많으면 범위를 좁히라고 알린다
 REST = "묶이지 않은 변경"
+KEPT = "앞서 확인한 변경"
 
 
 def _decode_line(raw):
@@ -167,6 +169,12 @@ def collect(args):
     return files
 
 
+def fingerprint(f, hunk):
+    """조각의 지문. 줄 번호가 밀려도 같고, 본문이 한 글자라도 바뀌면 달라진다."""
+    body = "\n".join(l[0] + l[3] for l in hunk["lines"]) if hunk else f["status"] + ("·binary" if f["binary"] else "")
+    return hashlib.sha1((f["path"] + "\n" + body).encode("utf-8", "replace")).hexdigest()[:16]
+
+
 def _selected(sel):
     """'2' · '2-4' · '1,3' → 조각 번호 집합(1부터). 비면 전부."""
     if not sel:
@@ -183,10 +191,12 @@ def _counts(hunks):
     return kinds.count("+"), kinds.count("-")
 
 
-def build(files, story):
-    """diff 와 이야기를 묶는다. → (양식, 점검 줄, 오류)."""
+def build(files, story, confirmed=frozenset()):
+    """diff 와 이야기를 묶는다. → (양식, 점검 줄, 오류).
+    confirmed 는 앞 차례에 확인받은 조각의 지문이다. 이야기가 다시 담지 않은 그 조각은 묻지 않고 접어 둔다."""
     claimed, errors, groups = {}, [], []
     units = [(fi, hi) for fi, f in enumerate(files) for hi in (range(len(f["hunks"])) if f["hunks"] else [None])]
+    fps = {(fi, hi): fingerprint(files[fi], files[fi]["hunks"][hi] if hi is not None else None) for fi, hi in units}
 
     def make(gid, info, picked):
         out = []
@@ -196,7 +206,8 @@ def build(files, story):
                         "hunks": [f["hunks"][hi] for pfi, hi in picked if pfi == fi and hi is not None]})
         added, removed = _counts([h for f in out for h in f["hunks"]])
         return {"id": gid, "title": info["title"], "why": info.get("why") or "", "look": info.get("look") or "",
-                "risk": info.get("risk") or "", "files": out, "added": added, "removed": removed}
+                "risk": info.get("risk") or "", "files": out, "added": added, "removed": removed,
+                "fps": [fps[u] for u in picked], "locked": bool(info.get("locked"))}
 
     for gi, g in enumerate(story.get("groups") or [], 1):
         name = str(g.get("title") or "").strip()
@@ -232,12 +243,15 @@ def build(files, story):
             errors.append(f"묶음 {gi} '{name}': 든 조각이 없다(앞 묶음이 다 가져갔거나 diff 에 없다)")
         else:
             errors.append(f"묶음 {gi} '{name}': match 가 없다")
-    rest = [u for u in units if u not in claimed]
+    kept = [u for u in units if u not in claimed and fps[u] in confirmed]
+    rest = [u for u in units if u not in claimed and fps[u] not in confirmed]
     if rest:
         groups.append(make("rest", {"title": REST, "why": "이야기가 설명하지 않은 조각이다."}, rest))
+    if kept:
+        groups.append(make("kept", {"title": KEPT, "why": "앞 차례에 확인했고 그 뒤로 바뀌지 않았다.", "locked": True}, kept))
     added, removed = _counts([h for f in files for h in f["hunks"]])
     stats = f"파일 {len(files)}개 · +{added} −{removed} · 조각 {len(units)}개"
-    report = f"{stats} · 묶은 것 {len(claimed)}개 · 묶이지 않은 것 {len(rest)}개"
+    report = f"{stats} · 묶은 것 {len(claimed)}개 · 묶이지 않은 것 {len(rest)}개" + (f" · 앞서 확인한 것 {len(kept)}개" if kept else "")
     if added + removed > BIG_DIFF:
         report += f"\n점검: 바뀐 줄이 {added + removed}줄이다 — --path 를 하위 폴더로 좁히거나 나눠서 낸다"
     if not story.get("groups"):
@@ -249,7 +263,8 @@ def build(files, story):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("story", help="이야기 JSON: {title, context[], groups[{title, why, look, risk, match[]}]}")
+    ap.add_argument("story", nargs="?", help="이야기 JSON: {title, context[], groups[{title, why, look, risk, match[]}]}")
+    ap.add_argument("--status", action="store_true", help="이야기 없이: 어느 조각이 확인됐고 어느 조각이 남았는지만 찍는다")
     ap.add_argument("--path", default=".", help="저장소나 그 하위 폴더. diff 를 이 아래로 좁힌다")
     ap.add_argument("--base", help="비교할 리비전 (git 기본 HEAD · svn 기본 BASE)")
     ap.add_argument("--patch", help="작업 사본 대신 읽을 통합 diff 파일")
@@ -262,6 +277,18 @@ def main(argv=None):
     ap.add_argument("--timeout", type=int, default=120)
     args = ap.parse_args(argv)
 
+    confirmed = decide.load_confirmed(args.project)
+    if args.status:
+        args.story = args.story or "-"
+        files = collect(args)
+        left = [f"- {f['path']}" + (f"#{hi + 1}" if h else "") for f in files
+                for hi, h in enumerate(f["hunks"] or [None]) if fingerprint(f, h) not in confirmed]
+        total = sum(len(f["hunks"]) or 1 for f in files)
+        print(f"조각 {total}개 · 확인 {total - len(left)}개 · 남은 것 {len(left)}개")
+        print("\n".join(left) if left else ("구현이 확정됐다 — 바뀐 조각이 전부 확인됐다." if total else "바뀐 것이 없다."))
+        return 0
+    if not args.story:
+        ap.error("이야기 JSON 이 필요하다 (확인 상태만 보려면 --status)")
     try:
         story = json.loads(Path(args.story).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -269,7 +296,7 @@ def main(argv=None):
     files = collect(args)
     if not files:
         raise SystemExit("바뀐 것이 없다.")
-    spec, report, errors = build(files, story)
+    spec, report, errors = build(files, story, confirmed)
     spec_errors, warns = decide.check_spec(spec)
     print(report)
     for w in warns:

@@ -262,14 +262,62 @@ def selection_summary(spec, answers):
 VERDICTS = {"ok": "확인함", "no": "기각"}
 
 
+KEPT_MARK = "앞서 확인"
+
+
+def diff_marks(spec, answers):
+    given = answers.get("g") or {}
+    return [KEPT_MARK if g.get("locked") else VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정")
+            for g in spec["groups"]]
+
+
 def diff_summary(spec, answers):
     given = answers.get("g") or {}
-    marks = [VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정") for g in spec["groups"]]
+    marks = diff_marks(spec, answers)
     count = marks.count
-    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}", "",
+    kept = f" · 앞서 확인 {count(KEPT_MARK)}" if count(KEPT_MARK) else ""
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}", "",
              "| 묶음 | 판정 | 피드백 |", "|---|---|---|"]
     for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
         lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
+    return "\n".join(lines)
+
+
+# ── 구현 확인 기록 ─────────────────────────────────────────────────────────
+# 변경 설명에서 '확인함' 을 받은 조각의 지문을 적어 둔다. 다음 차례에는 그 조각을 다시 묻지 않고,
+# 그 뒤로 바뀐 조각은 지문이 달라져 다시 나온다 — 적용되는 코드는 확인받은 코드와 같아야 한다.
+
+def confirmed_path(project):
+    return Path(project) / ".claude" / "diff_confirmed.json"
+
+
+def load_confirmed(project):
+    try:
+        return set(json.loads(confirmed_path(project).read_text(encoding="utf-8")).get("fps") or [])
+    except (OSError, ValueError, AttributeError):
+        return set()
+
+
+def confirm_diff(spec, answers, project):
+    """확인받은 조각을 기록하고 다음에 할 일을 돌려준다. 기록은 지금 diff 에 있는 조각만 남긴다."""
+    marks = diff_marks(spec, answers)
+    units = [fp for g in spec["groups"] for fp in g.get("fps") or []]
+    done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in ("확인함", KEPT_MARK) for fp in g.get("fps") or []})
+    path = confirmed_path(project)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"updated": today(), "title": spec.get("title", ""), "fps": done}, ensure_ascii=False, indent=1),
+                        encoding="utf-8")
+    except OSError as e:
+        return f"확인 기록을 못 썼다: {e}"
+    lines = [f"확인 누계: 조각 {len(done)}/{len(units)}"]
+    if marks.count("기각"):
+        lines.append("다음: 기각한 묶음을 피드백대로 고친다. 고친 조각만 이야기에 담아 같은 명령으로 다시 띄운다. "
+                     "확인받은 조각은 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
+    if marks.count("미정"):
+        lines.append(f"다음: 미정 {marks.count('미정')}묶음은 확인받지 못했다. 그 묶음을 다시 띄운다. 확인받은 것으로 치지 않는다.")
+    if len(done) == len(units):
+        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 조각만 다시 확인받는다.")
     return "\n".join(lines)
 
 
@@ -414,6 +462,8 @@ def finish(spec, answers, project, record=True):
             print("\n장부: 남김 표시한 결정이 없어 적지 않았다")
     elif spec["kind"] == "diff":
         print(diff_summary(spec, answers))
+        if any(g.get("fps") for g in spec["groups"]):
+            print("\n" + confirm_diff(spec, answers, project))
     elif spec.get("mode") == "reject":
         picked = [(target, a.get("reason")) for target, a in (answers.get("r") or {}).items() if a.get("reject")]
         done, skipped = reject_decisions(ledger, picked)
