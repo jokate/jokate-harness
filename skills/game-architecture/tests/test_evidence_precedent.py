@@ -102,6 +102,13 @@ class SvnLog(unittest.TestCase):
         self.assertEqual(set(sets[0]["files"]), {"Src/Effect/Effect_Freeze.cpp", "Src/Registry.cpp"})
         self.assertEqual(sets[0]["added"], {"Src/Effect/Effect_Freeze.cpp"})
 
+    def test_svn_prefix_with_korean_space_or_repo_root(self):
+        log = SVN_LOG.replace("/trunk/", "/trunk/내 게임/")
+        sets = evidence.parse_svn_log(log, "/trunk/%EB%82%B4%20%EA%B2%8C%EC%9E%84")
+        self.assertEqual(set(sets[0]["files"]), {"Src/Effect/Effect_Freeze.cpp", "Src/Registry.cpp"})
+        sets = evidence.parse_svn_log(SVN_LOG, "/")
+        self.assertEqual(set(sets[0]["files"]), {"trunk/Src/Effect/Effect_Freeze.cpp", "trunk/Src/Registry.cpp", "branches/x/Other.cpp"})
+
 
 if __name__ == "__main__":
     unittest.main()
