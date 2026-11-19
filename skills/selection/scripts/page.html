@@ -26,8 +26,18 @@ section,details.g,.ledger{background:var(--card);border:1px solid var(--line);bo
 .card:hover{border-color:var(--accent)}
 .card.on{border-color:var(--accent);background:var(--pick)}
 .card.on::after{content:"고름";position:absolute;top:10px;right:12px;font-size:12px;font-weight:700;color:var(--accent)}
-.card input[type=radio]{position:absolute;opacity:0}
-.card:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card.no{border-color:var(--bad)}
+.card.no .name{text-decoration:line-through;color:var(--sub)}
+.card.no::after{content:"기각";position:absolute;top:10px;right:12px;font-size:12px;font-weight:700;color:var(--bad)}
+.acts{display:flex;justify-content:flex-end;margin-top:10px}
+button.rej{font-size:12.5px;padding:2px 10px;color:var(--bad)}
+.why-no{margin-top:8px}
+.votes{display:flex;gap:6px}
+button.v{font-size:13px;padding:3px 10px}
+button.v.ok.on{background:var(--good);border-color:var(--good);color:#fff}
+button.v.no.on{background:var(--bad);border-color:var(--bad);color:#fff}
+details.g.no{border-color:var(--bad)}
 .chip{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:1px 7px;margin-right:6px;background:var(--code)}
 .chip.rec{background:var(--accent);color:var(--accent-ink)}
 .chip.r높음{background:var(--bad);color:#fff}.chip.r중간{background:var(--warn);color:#fff}.chip.r낮음{background:var(--good);color:#fff}
@@ -49,8 +59,6 @@ details.g>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-ite
 details.g>summary::-webkit-details-marker{display:none}
 details.g>summary .t{font-weight:700;font-size:16px;flex:1}
 details.g>summary .n{color:var(--sub);font-size:12.5px;white-space:nowrap}
-.okbox{display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap}
-.okbox input{width:17px;height:17px}
 .file{margin:14px 0 4px;font:600 13px/1.4 ui-monospace,Consolas,monospace;word-break:break-all}
 .hunkh{font:12px/1.4 ui-monospace,Consolas,monospace;color:var(--sub);background:var(--code);padding:3px 8px;border-radius:6px 6px 0 0;margin-top:8px}
 table.diff{width:100%;border-collapse:collapse;font:12.5px/1.45 ui-monospace,Consolas,"D2Coding",monospace;table-layout:fixed;border:1px solid var(--line)}
@@ -116,30 +124,47 @@ function text(obj, key, placeholder, multi) {
 }
 
 /* ── 고르기 ── */
+const rejectInputs = {};
 function renderSelection() {
   const main = $("main");
   spec.questions.forEach((q, qi) => {
-    const a = slot("q", q.id, {choice: null, other: "", checks: [], asks: {}, note: ""});
+    const a = slot("q", q.id, {choice: null, rejects: {}, checks: [], asks: {}, note: ""});
+    a.rejects = a.rejects || {};
     const sec = h("section", {id: "q-" + q.id});
     sec.append(h("h2", {}, (qi + 1) + ". " + q.title));
     if (q.changes) sec.append(h("p", {class: "sub"}, "답에 따라 바뀌는 것: " + q.changes));
     const opts = h("div", {class: "opts"});
     const cards = [];
-    const pick = id => { a.choice = id; cards.forEach(c => c.el.classList.toggle("on", c.id === id)); touch(); };
-    const card = (id, body) => {
-      const radio = h("input", {type: "radio", name: "q-" + q.id, checked: a.choice === id, onchange: () => pick(id)});
-      const el = h("label", {class: "card" + (a.choice === id ? " on" : "")}, radio, body);
-      cards.push({id, el}); opts.append(el);
+    const paint = () => cards.forEach(c => {
+      const no = c.id in a.rejects;
+      c.el.classList.toggle("on", a.choice === c.id);
+      c.el.classList.toggle("no", no);
+      c.why.style.display = no ? "" : "none";
+      c.btn.textContent = no ? "기각 취소" : "기각";
+    });
+    const pick = id => { a.choice = a.choice === id ? null : id; delete a.rejects[id]; paint(); touch(); };
+    const reject = id => {
+      if (id in a.rejects) delete a.rejects[id];
+      else { a.rejects[id] = ""; if (a.choice === id) a.choice = null; }
+      paint(); touch();
     };
-    (q.options || []).forEach(o => card(o.id, [
-      h("div", {}, h("span", {class: "chip"}, o.id), h("span", {class: "name"}, o.name), o.recommended ? h("span", {class: "chip rec", style: "margin-left:6px"}, "추천") : null),
-      o.summary ? h("p", {class: "sum"}, o.summary) : null,
-      h("dl", {}, ...[["다음 요청 때 고칠 곳", o.next], ["얻는 것", o.gain], ["잃는 것", o.loss]].filter(r => r[1]).flatMap(r => [h("dt", {}, r[0]), h("dd", {}, r[1])])),
-    ]));
-    const other = text(a, "other", "다른 안이나 보류 이유");
-    other.addEventListener("focus", () => pick("__other"));
-    card("__other", [h("div", {}, h("span", {class: "name"}, "다른 안 · 보류")), h("p", {class: "sum"}, other)]);
+    (q.options || []).forEach(o => {
+      const why = h("input", {type: "text", class: "why-no", placeholder: "기각하는 이유 — 세션으로 간다", value: a.rejects[o.id] || "",
+        onclick: e => e.stopPropagation(), oninput: e => { a.rejects[o.id] = e.target.value; touch(); }});
+      const btn = h("button", {class: "rej", onclick: e => { e.stopPropagation(); reject(o.id); if (o.id in a.rejects) why.focus(); }}, "기각");
+      const el = h("div", {class: "card", tabindex: "0", role: "button", onclick: () => pick(o.id),
+        onkeydown: e => { if (e.key === " " && e.target === el) { e.preventDefault(); pick(o.id); } }},
+        h("div", {}, h("span", {class: "chip"}, o.id), h("span", {class: "name"}, o.name), o.recommended ? h("span", {class: "chip rec", style: "margin-left:6px"}, "추천") : null),
+        o.summary ? h("p", {class: "sum"}, o.summary) : null,
+        h("dl", {}, ...[["다음 요청 때 고칠 곳", o.next], ["얻는 것", o.gain], ["잃는 것", o.loss]].filter(r => r[1]).flatMap(r => [h("dt", {}, r[0]), h("dd", {}, r[1])])),
+        h("div", {class: "acts"}, btn), why);
+      rejectInputs[q.id + "/" + o.id] = why;
+      cards.push({id: o.id, el, why, btn});
+      opts.append(el);
+    });
+    paint();
     sec.append(opts);
+    if ((q.dropped_before || []).length) sec.append(h("p", {class: "sub", style: "margin:10px 0 0"}, "앞서 기각한 안: " + q.dropped_before.join(" · ")));
     if (q.why) sec.append(h("details", {class: "why"}, h("summary", {}, "추천의 왜 — 문제 · 버린 안 · 대가 · 뒤집는 조건"),
       h("dl", {}, ...[["문제", q.why.problem], ...(q.why.dropped || []).map(d => ["버린 안", d]), ["대가", q.why.cost], ["뒤집는 조건", q.why.flip]]
         .filter(r => r[1]).flatMap(r => [h("dt", {}, r[0]), h("dd", {}, r[1])]))));
@@ -152,15 +177,13 @@ function renderSelection() {
       sec.append(h("h3", {}, "답을 적을 것"));
       q.asks.forEach(k => sec.append(h("div", {class: "ask"}, h("label", {}, k.text), text(a.asks, k.id, "답"))));
     }
-    sec.append(h("h3", {}, "메모"), text(a, "note", "고른 안에 붙일 지시 (예: 이름은 X 로)"));
+    sec.append(h("h3", {}, "피드백"), text(a, "note", "고른 안에 붙일 지시나, 선택지를 다시 낼 방향"));
     main.append(sec);
   });
-  $("btns").append(h("button", {onclick: fillRecommended}, "추천대로 채우기"), " ", h("button", {class: "go", onclick: () => trySubmit(false)}, "보내기 (Enter)"));
+  $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
 }
-function unanswered() { return spec.questions.filter(q => { const a = S.q[q.id]; return !a.choice || (a.choice === "__other" && !a.other.trim()); }); }
-function fillRecommended() {
-  unanswered().forEach(q => { const r = (q.options || []).find(o => o.recommended); if (r) document.querySelectorAll("#q-" + q.id + " input[type=radio]")[q.options.indexOf(r)].click(); });
-}
+function unanswered() { return spec.questions.filter(q => !S.q[q.id].choice); }
+function rejected() { return spec.questions.flatMap((q, i) => Object.keys(S.q[q.id].rejects || {}).map(id => ({q, n: i + 1, id}))); }
 
 /* ── 변경 설명 ── */
 function diffTable(hunk) {
@@ -187,12 +210,26 @@ function renderDiff() {
   const main = $("main");
   main.textContent = "";
   spec.groups.forEach((g, gi) => {
-    const a = slot("g", g.id, {ok: false, note: ""});
-    const box = h("input", {type: "checkbox", checked: a.ok, onchange: e => { a.ok = e.target.checked; touch(); }});
-    const det = h("details", {class: "g", id: "g-" + g.id, open: gi === 0 || g.risk === "높음" || undefined},
+    const a = slot("g", g.id, {verdict: null, note: ""});
+    const note = text(a, "note", "기각이면 무엇을 어떻게 고칠지 — 세션으로 간다");
+    note.id = "n-" + g.id;
+    const vote = (v, label) => h("button", {class: "v " + v, onclick: e => {
+      e.preventDefault(); e.stopPropagation();
+      a.verdict = a.verdict === v ? null : v;
+      paint(); touch();
+      if (a.verdict === "no") { det.open = true; note.focus(); }
+    }}, label);
+    const okB = vote("ok", "확인함"), noB = vote("no", "기각");
+    const det = h("details", {class: "g", id: "g-" + g.id, open: gi === 0 || g.risk === "높음" || a.verdict === "no" || undefined},
       h("summary", {}, g.risk ? h("span", {class: "chip r" + g.risk}, g.risk) : null, h("span", {class: "t"}, g.title),
         h("span", {class: "n"}, "+" + g.added + " −" + g.removed + " · 파일 " + g.files.length),
-        h("label", {class: "okbox", onclick: e => e.stopPropagation()}, box, "확인함")));
+        h("span", {class: "votes"}, okB, noB)));
+    const paint = () => {
+      okB.classList.toggle("on", a.verdict === "ok");
+      noB.classList.toggle("on", a.verdict === "no");
+      det.classList.toggle("no", a.verdict === "no");
+    };
+    paint();
     if (g.why) det.append(h("p", {class: "sub", style: "margin-top:10px"}, "왜: " + g.why));
     if (g.look) det.append(h("p", {class: "sub"}, "볼 것: " + g.look));
     g.files.forEach(f => {
@@ -200,14 +237,14 @@ function renderDiff() {
       if (f.binary) det.append(h("p", {class: "sub"}, "바이너리 — 내용을 보이지 않는다"));
       f.hunks.forEach(k => det.append(h("div", {class: "hunkh"}, k.header), diffTable(k)));
     });
-    det.append(h("h3", {}, "메모"), text(a, "note", "이 묶음에 대한 지적이나 질문"));
+    det.append(h("h3", {}, "피드백"), note);
     main.append(det);
   });
 }
 function initDiff() {
   renderDiff();
   $("btns").append(h("button", {onclick: e => { split = !split; e.target.textContent = split ? "한 줄로 보기" : "나란히 보기"; renderDiff(); }}, split ? "한 줄로 보기" : "나란히 보기"),
-    " ", h("button", {class: "go", onclick: () => trySubmit(false)}, "보내기 (Enter)"));
+    " ", h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
 }
 
 /* ── 결정 모음 · 기각 ── */
@@ -228,14 +265,19 @@ function renderLedger() {
   if (!spec.live.length) main.append(h("section", {}, h("p", {class: "sub", style: "margin:0"}, "유효한 결정이 없다.")));
   topics.forEach(t => main.append(h("div", {class: "ledger"}, h("h2", {}, t), table(spec.live.filter(d => d.topic === t), false))));
   if (spec.dead.length) main.append(h("details", {class: "g"}, h("summary", {}, h("span", {class: "chip dead"}, "기각"), h("span", {class: "t"}, "기각된 결정 " + spec.dead.length + "건")), table(spec.dead, true)));
-  $("btns").append(h("button", {class: "go", onclick: () => trySubmit(false)}, rej ? "기각 보내기 (Enter)" : "닫기 (Enter)"));
+  $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, rej ? "기각 보내기 (Enter)" : "닫기 (Enter)"));
 }
 
 /* ── 공통 ── */
 function progress() {
   const p = $("prog");
-  if (spec.kind === "selection") { const n = unanswered().length; p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (n ? " — 안 고른 것은 미결로 간다" : ""); }
-  else if (spec.kind === "diff") p.textContent = "확인 " + spec.groups.filter(g => S.g[g.id].ok).length + "/" + spec.groups.length;
+  if (spec.kind === "selection") {
+    const n = unanswered().length, r = rejected().length;
+    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + (n ? " — 안 고른 것은 미결로 간다" : "");
+  } else if (spec.kind === "diff") {
+    const count = v => spec.groups.filter(g => S.g[g.id].verdict === v).length;
+    p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (spec.groups.length - count("ok") - count("no"));
+  }
   else if (spec.mode === "reject") p.textContent = "기각 " + Object.values(S.r || {}).filter(a => a.reject).length + "건";
   else p.textContent = "유효 " + spec.live.length + "건 · 기각 " + spec.dead.length + "건";
 }
@@ -254,8 +296,24 @@ async function submit() {
   setTimeout(() => window.close(), 120);
   setTimeout(() => finished("보냈다. 이 탭은 닫아도 된다."), 900);
 }
-function trySubmit(fill) {
-  if (spec.kind === "selection" && fill) fillRecommended();
+function trySubmit() {
+  if (spec.kind === "selection") {
+    const bad = rejected().filter(r => !S.q[r.q.id].rejects[r.id].trim());
+    if (bad.length) {
+      const el = rejectInputs[bad[0].q.id + "/" + bad[0].id];
+      el.scrollIntoView({block: "center"}); el.focus();
+      status("기각한 이유가 필요하다: " + bad.map(b => b.n + "번 " + b.id).join(", "));
+      return;
+    }
+  }
+  if (spec.kind === "diff") {
+    const bad = spec.groups.map((g, i) => ({g, n: i + 1})).filter(x => S.g[x.g.id].verdict === "no" && !S.g[x.g.id].note.trim());
+    if (bad.length) {
+      $("g-" + bad[0].g.id).open = true; $("n-" + bad[0].g.id).focus();
+      status("기각한 묶음에 피드백이 필요하다: " + bad.map(b => b.n + "번").join(", "));
+      return;
+    }
+  }
   if (spec.kind === "ledger" && spec.mode === "reject") {
     const bad = Object.entries(S.r || {}).filter(([, a]) => a.reject && !a.reason.trim());
     if (bad.length) { $("r-" + bad[0][0]).scrollIntoView({block: "center"}); status("기각하는 이유 한 줄이 필요하다: " + bad.map(b => b[0]).join(", ")); return; }
@@ -267,14 +325,13 @@ document.addEventListener("keydown", e => {
   const tag = e.target.tagName;
   if (!e.ctrlKey && (tag === "TEXTAREA" || tag === "BUTTON" || tag === "SUMMARY")) return;
   e.preventDefault();
-  trySubmit(e.shiftKey);
+  trySubmit();
 });
 window.addEventListener("pagehide", () => { if (BOOT.served && !sent) navigator.sendBeacon("/bye?t=" + BOOT.token); });
 
 $("top").append(...[h("h1", {}, spec.title), h("ul", {class: "ctx"}, ...(spec.context || []).map(c => h("li", {}, c))),
   spec.stats ? h("div", {class: "stats"}, spec.stats) : null,
-  h("div", {class: "stats"}, h("kbd", {}, "Enter"), BOOT.served ? " 보내기 — 답이 세션으로 가고 이 탭이 닫힌다" : " 답 복사 — 대화창에 붙여 넣는다",
-    spec.kind === "selection" ? [" · ", h("kbd", {}, "Shift+Enter"), " 안 고른 질문을 추천으로 채워 보내기"] : null)].filter(Boolean));
+  h("div", {class: "stats"}, h("kbd", {}, "Enter"), BOOT.served ? " 보내기 — 답이 세션으로 가고 이 탭이 닫힌다" : " 답 복사 — 대화창에 붙여 넣는다")].filter(Boolean));
 ({selection: renderSelection, diff: initDiff, ledger: renderLedger})[spec.kind]();
 progress();
 status(BOOT.served ? "바꾸면 바로 저장된다" : "서버 없이 연 파일 — Enter 로 답을 복사한다");

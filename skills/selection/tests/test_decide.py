@@ -104,15 +104,18 @@ class ServerRoundTrip(unittest.TestCase):
             decide.CLOSE_GRACE = old
 
 
-ANSWERS = {"q": {"q1": {"choice": "B", "other": "", "checks": [True, False], "asks": {"a1": "예"}, "note": "이름은 X 로"},
-                 "q2": {"choice": None}}}
+ANSWERS = {"q": {"q1": {"choice": "B", "rejects": {"A": "다음에 또 네 곳"}, "checks": [True, False], "asks": {"a1": "예"}, "note": "이름은 X 로"},
+                 "q2": {"choice": None, "rejects": {"A": "엔진 이름과 겹친다", "B": ""}, "note": "동사로 시작하게"}}}
 
 
 class LedgerFlow(unittest.TestCase):
     def test_summary_shows_choice_unchecked_items_and_replies(self):
         text = decide.selection_summary(SPEC, ANSWERS)
         self.assertIn("| 1 | 구조는? | B. 입구 하나 | 같음 | 이름은 X 로 |", text)
-        self.assertIn("| 2 | 이름은? | 안 고름 | — |  |", text)
+        self.assertIn("| 2 | 이름은? | 안 고름 | — | 동사로 시작하게 |", text)
+        self.assertIn("- 1번 A. 국소 패치 — 다음에 또 네 곳", text)
+        self.assertIn("- 2번 A. Hit — 엔진 이름과 겹친다", text)
+        self.assertIn("- 2번 B. Damage — (이유 없음)", text)
         self.assertIn("- 1번: 기획자가 혼자 세팅하나", text)
         self.assertNotIn("선례와 같은 꼴인가", text)
         self.assertIn("- 1번 · NPC 도 받나? → 예", text)
@@ -124,7 +127,7 @@ class LedgerFlow(unittest.TestCase):
             second = decide.add_decision(ledger, "카메라", "어깨 너머", dropped=["탑뷰"])
             self.assertEqual(second, "D-002")
             first = decide.load_events(ledger)[0]
-            self.assertEqual((first["choice"], first["dropped"], first["note"]), ("B. 입구 하나", ["A. 국소 패치"], "이름은 X 로"))
+            self.assertEqual((first["choice"], first["dropped"], first["note"]), ("B. 입구 하나", ["A. 국소 패치 — 다음에 또 네 곳"], "이름은 X 로"))
             self.assertEqual(first["answers"], [{"q": "NPC 도 받나?", "a": "예"}])
             before = ledger.read_text(encoding="utf-8")
             done, skipped = decide.reject_decisions(ledger, [("D-001", "입구가 다시 갈렸다"), ("D-002", ""), ("D-009", "x")])
@@ -137,6 +140,15 @@ class LedgerFlow(unittest.TestCase):
             self.assertNotIn("D-001", decide.ledger_table(ledger))
             self.assertIn("입구가 다시 갈렸다", decide.ledger_table(ledger, True))
             self.assertEqual(decide.reject_decisions(ledger, [("D-001", "또")])[1], ["D-001: 유효한 결정이 아니다"])
+
+    def test_rejections_from_an_earlier_form_reach_the_ledger(self):
+        spec = {"kind": "selection", "title": "이름", "questions": [
+            {"id": "q", "title": "이름은?", "dropped_before": ["Hit — 엔진 이름과 겹친다"],
+             "options": [{"id": "A", "name": "ReceiveDamage", "recommended": True}, {"id": "B", "name": "TakeHit"}]}]}
+        self.assertEqual(decide.check_spec(spec)[0], [])
+        with tempfile.TemporaryDirectory() as d:
+            decide.record_selection(spec, {"q": {"q": {"choice": "A"}}}, decide.ledger_path(d))
+            self.assertEqual(decide.load_events(decide.ledger_path(d))[0]["dropped"], ["B. TakeHit", "Hit — 엔진 이름과 겹친다"])
 
     def test_finish_records_and_cleanup_removes_form_files(self):
         with tempfile.TemporaryDirectory() as d:
@@ -232,7 +244,11 @@ class DiffDoc(unittest.TestCase):
         self.assertEqual([f["path"] for f in spec["groups"][2]["files"]], ["Src/Buffer.cpp", "Art/icon.png"])
         self.assertIn("조각 4개 · 묶은 것 2개 · 묶이지 않은 것 2개", report)
         self.assertEqual(decide.check_spec(spec)[0], [])
-        self.assertIn("| 1. 버퍼 규칙을 한 곳으로 | 확인함 | 경계 확인 |", decide.diff_summary(spec, {"g": {"g1": {"ok": True, "note": "경계 확인"}}}))
+        text = decide.diff_summary(spec, {"g": {"g1": {"verdict": "ok", "note": "경계 확인"}, "g2": {"verdict": "no", "note": "이름을 바꿔라"}}})
+        self.assertIn("확인 1 · 기각 1 · 미정 1", text)
+        self.assertIn("| 1. 버퍼 규칙을 한 곳으로 | 확인함 | 경계 확인 |", text)
+        self.assertIn("| 2. 새 타입 | 기각 | 이름을 바꿔라 |", text)
+        self.assertIn("| 3. 묶이지 않은 변경 | 미정 |  |", text)
 
     def test_story_pointing_outside_the_diff_is_an_error(self):
         story = {"title": "t", "groups": [{"title": "없는 변경", "match": ["Src/Ghost.cpp"]}, {"title": "", "match": ["x"]},

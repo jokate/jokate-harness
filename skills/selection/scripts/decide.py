@@ -39,7 +39,6 @@ for _s in (sys.stdout, sys.stderr):  # 한글 Windows 콘솔(cp949)에서 '—' 
 
 PAGE = Path(__file__).resolve().parent / "page.html"
 ID_OK = re.compile(r"^[A-Za-z0-9_-]+$")
-OTHER = "__other"
 LONG = 120           # 한 줄에 사실 하나 (docs/READING.md)
 MAX_QUESTIONS = 5    # 한 번에 묻는 수. 넘으면 다음 양식으로
 MAX_OPTIONS = 4
@@ -82,7 +81,7 @@ def check_spec(spec):
         if len(options) > MAX_OPTIONS:
             warns.append(f"질문 {i}: 선택지 {len(options)}개 — {MAX_OPTIONS}개 이하")
         option_ids = [str(o.get("id") or "") for o in options]
-        if not _ids_ok(option_ids) or OTHER in option_ids or any(not str(o.get("name") or "").strip() for o in options):
+        if not _ids_ok(option_ids) or any(not str(o.get("name") or "").strip() for o in options):
             errors.append(f"질문 {i}: 선택지 id 나 name 이 없거나 겹친다")
         recommended = [o for o in options if o.get("recommended")]
         if len(recommended) > 1:
@@ -216,22 +215,27 @@ def cell(text):
     return str(text or "").replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
 
 
-def option_label(question, choice, other=""):
-    if choice == OTHER:
-        return ("다른 안 — " + other.strip()) if other.strip() else None
+def option_label(question, choice):
     for o in question.get("options") or []:
         if o["id"] == choice:
             return f"{o['id']}. {o['name']}"
     return None
 
 
+def rejected_options(question, answer):
+    """→ [(안 이름, 이유)]. 사용자가 이유를 적어 기각한 안."""
+    rejects = answer.get("rejects") or {}
+    return [(f"{o['id']}. {o['name']}", str(rejects[o["id"]] or "").strip()) for o in question.get("options") or [] if o["id"] in rejects]
+
+
 def selection_summary(spec, answers):
     given = answers.get("q") or {}
-    lines = [f"제출됨 — {spec['title']}", "", "| # | 질문 | 고른 안 | 추천과 | 메모 |", "|---|---|---|---|---|"]
-    unchecked, replies = [], []
+    lines = [f"제출됨 — {spec['title']}", "", "| # | 질문 | 고른 안 | 추천과 | 피드백 |", "|---|---|---|---|---|"]
+    unchecked, replies, rejects = [], [], []
     for i, q in enumerate(spec["questions"], 1):
         a = given.get(q["id"]) or {}
-        label = option_label(q, a.get("choice"), a.get("other") or "")
+        label = option_label(q, a.get("choice"))
+        rejects += [f"- {i}번 {name} — {why or '(이유 없음)'}" for name, why in rejected_options(q, a)]
         recommended = next((o["id"] for o in q.get("options") or [] if o.get("recommended")), None)
         if label is None or recommended is None:
             same = "—"
@@ -243,6 +247,8 @@ def selection_summary(spec, answers):
         for k in q.get("asks") or []:
             reply = str((a.get("asks") or {}).get(k["id"]) or "").strip()
             replies.append(f"- {i}번 · {k['text']} → {reply or '(답 없음)'}")
+    if rejects:
+        lines += ["", "기각한 안 (다시 내지 않는다. 고른 안이 없는 질문은 이 이유를 반영해 선택지를 다시 낸다):"] + rejects
     if unchecked:
         lines += ["", "체크하지 않은 것:"] + unchecked
     if replies:
@@ -250,13 +256,17 @@ def selection_summary(spec, answers):
     return "\n".join(lines)
 
 
+VERDICTS = {"ok": "확인함", "no": "기각"}
+
+
 def diff_summary(spec, answers):
     given = answers.get("g") or {}
-    done = sum(1 for g in spec["groups"] if (given.get(g["id"]) or {}).get("ok"))
-    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {done}/{len(spec['groups'])}", "", "| 묶음 | 확인 | 메모 |", "|---|---|---|"]
-    for i, g in enumerate(spec["groups"], 1):
-        a = given.get(g["id"]) or {}
-        lines.append(f"| {i}. {cell(g['title'])} | {'확인함' if a.get('ok') else '안 함'} | {cell(a.get('note'))} |")
+    marks = [VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정") for g in spec["groups"]]
+    count = marks.count
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}", "",
+             "| 묶음 | 판정 | 피드백 |", "|---|---|---|"]
+    for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
+        lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
     return "\n".join(lines)
 
 
@@ -321,14 +331,18 @@ def add_decision(path, topic, choice, question="", dropped=(), note="", answers=
 
 
 def record_selection(spec, answers, path):
-    """고른 질문만 장부에 적는다. 안 고른 질문과 이유 없는 보류는 결정이 아니다."""
+    """고른 질문만 장부에 적는다. 안 고른 질문은 결정이 아니다 — 기각만 한 질문은 선택지를 다시 낼 재료다.
+    버린 안에는 사용자가 적은 기각 이유와 앞 양식에서 기각한 안(dropped_before)이 붙는다."""
     ids = []
     for q in spec["questions"]:
         a = (answers.get("q") or {}).get(q["id"]) or {}
-        label = option_label(q, a.get("choice"), a.get("other") or "")
+        label = option_label(q, a.get("choice"))
         if label is None:
             continue
-        dropped = [f"{o['id']}. {o['name']}" for o in q.get("options") or [] if o["id"] != a.get("choice")]
+        why = dict(rejected_options(q, a))
+        dropped = [name + (f" — {why[name]}" if why.get(name) else "")
+                   for name in (f"{o['id']}. {o['name']}" for o in q.get("options") or [] if o["id"] != a.get("choice"))]
+        dropped += [str(d) for d in q.get("dropped_before") or []]
         replies = [{"q": k["text"], "a": str((a.get("asks") or {}).get(k["id"]) or "").strip()} for k in q.get("asks") or []]
         ids.append(add_decision(path, spec["title"], label, q["title"], dropped, str(a.get("note") or "").strip(),
                                 [r for r in replies if r["a"]]))
