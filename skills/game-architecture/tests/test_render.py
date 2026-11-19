@@ -412,6 +412,42 @@ class DocFormTest(unittest.TestCase):
         self.assertEqual(spec["questions"][0]["options"], [{"id": "A", "name": "플래그", "summary": "다음 요청 때 3곳"},
                                                             {"id": "B", "name": "상태", "summary": "다음 요청 때 1곳"}])  # 추천 줄이 다른 절에 있다
 
+    def test_table_with_one_decision_per_row_becomes_one_question_per_row(self):
+        doc = ("# 조작표\n\n## 선택지\n| 결정 | A. 국소 패치 | B | C | 정함 |\n|---|---|---|---|---|\n"
+               "| ① 우클릭 태그 | 기존 태그 재사용 | 새 태그 | 생성기 고침 | C |\n"
+               "| ② 길게 누르기 | 타이머 | IA 두 개 | 홀드 표 | |\n"
+               "| ③ 배치 모드 | 행만 | IMC 얹기 | | 보류 |\n\n"
+               "추천: ①C, ②B 로 간다. ③ 은 다시 고른다.\n- 문제: 짧게와 길게를 못 가른다\n")
+        spec, errors = render.doc_form(doc, "조작표")
+        self.assertEqual(errors, [])
+        picks = [(q["id"], q["title"], [o["id"] + ("*" if o.get("recommended") else "") for o in q["options"]]) for q in spec["questions"]]
+        self.assertEqual(picks, [("q1", "① 우클릭 태그", ["A", "B", "C*"]),      # 정함 칸
+                                 ("q2", "② 길게 누르기", ["A", "B*", "C"]),      # 추천 줄의 ②B
+                                 ("q3", "③ 배치 모드", ["A", "B"])])             # 보류 — 추천 없음, 빈 칸은 안이 아니다
+        self.assertEqual(spec["questions"][0]["options"][0]["name"], "기존 태그 재사용")
+        self.assertEqual(spec["questions"][0]["why"], {"problem": "짧게와 길게를 못 가른다"})
+
+    def test_options_on_two_axes_split_into_one_question_per_axis(self):
+        doc = ("# 계층\n\n## 선택지\n| 선택지 | 다음 요청 때 고칠 곳 |\n|---|---|\n| A. 데이터만 | 3곳 |\n| B. 칸 묶음 | 1곳 |\n"
+               "| D. 시작 규칙 | 2곳 |\n| E. 지금 입구 | 1곳 |\n\n추천: B + E. 고르는 것은 사용자.\n\n"
+               "## 질문\n| # | 질문 | 갈래 | 추천 | 답에 따라 바뀌는 것 |\n|---|---|---|---|---|\n"
+               "| 1 | 그래프 축, 진입 축 중 무엇? | A·B / D·E | B + E | 작업 범위 |\n| 2 | 합치나? | 유지 / 합침 | 유지 — 쿨이 다르다 | 넘기기 |\n")
+        spec, _ = render.doc_form(doc, "계층")
+        picks = [(q["id"], [o["id"] + ("*" if o.get("recommended") else "") for o in q["options"]]) for q in spec["questions"]]
+        self.assertEqual(picks, [("q1", ["A", "B*"]), ("q2", ["D", "E*"]), ("q3", ["1*", "2"])])
+        self.assertEqual(spec["questions"][1]["title"], "그래프 축, 진입 축 중 무엇? — D · E")
+
+    def test_options_as_columns(self):
+        doc = "# x\n\n## 선택지\n| | A. 국소 패치 | B. 버퍼 |\n|---|---|---|\n| 다음 요청 때 고칠 곳 | 3곳 | 1곳 |\n| 잃는 것 | 또 세 곳 | 파일 하나 |\n\n추천: B — 한 곳\n"
+        spec, _ = render.doc_form(doc, "x")
+        self.assertEqual(spec["questions"][0]["options"], [{"id": "A", "name": "국소 패치", "next": "3곳", "loss": "또 세 곳"},
+                                                            {"id": "B", "name": "버퍼", "next": "1곳", "loss": "파일 하나", "recommended": True}])
+
+    def test_recommendation_ignores_letters_in_the_reason(self):
+        doc = "# x\n\n## 선택지\n| 선택지 | 값 |\n|---|---|\n| A. 하나 | 1 |\n| B. 둘 | 2 |\n\n추천: B — A 보다 고칠 곳이 적다. GAS 는 그대로다.\n"
+        options = render.doc_form(doc, "x")[0]["questions"][0]["options"]
+        self.assertEqual([o["id"] for o in options if o.get("recommended")], ["B"])
+
     def test_unreadable_doc_gives_reasons(self):
         self.assertEqual(render.doc_form("# x\n\n## 요약\n글\n", "x"), (None, ["'선택지' 절이 없다"]))
         spec, errors = render.doc_form("# x\n\n## 선택지\n| 안 | 값 |\n|---|---|\n| API 설계 | 1 |\n| A. 하나 | 2 |\n", "x")

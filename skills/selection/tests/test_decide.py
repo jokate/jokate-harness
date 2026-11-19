@@ -174,6 +174,17 @@ class Unattended(unittest.TestCase):
         self.assertIn("변경 설명을 띄우지 않았다", buf.getvalue())
         self.assertIn("구현 확인 안 받음", buf.getvalue())
 
+    def test_diff_page_says_so_at_the_first_command(self):
+        """이야기를 쓰기 전의 첫 명령(--status)에서 안다 — 무인 실행이 확인 단계에 토큰을 쓰지 않는다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "PYTHONIOENCODING": "utf-8", "CLAUDE_CODE_SESSION_ATTENDED": "0"}
+            env.pop("GAME_HARNESS_DOC_NUDGE")
+            for flags in (["--status"], ["none.json", "--check"]):
+                r = subprocess.run([sys.executable, str(Path(diffdoc.__file__)), *flags, "--path", tmp, "--project", tmp],
+                                   capture_output=True, env=env, timeout=30)
+                self.assertEqual(r.returncode, decide.UNATTENDED, r.stdout.decode("utf-8", "replace"))
+                self.assertIn("무인 실행", r.stdout.decode("utf-8", "replace"))
+
 
 class DocPage(unittest.TestCase):
     """문서가 딸린 양식: 문서와 문서가 쓰는 파일을 같은 서버가 토큰을 받고 내보낸다 — 읽는 곳과 고르는 곳이 한 탭이다."""

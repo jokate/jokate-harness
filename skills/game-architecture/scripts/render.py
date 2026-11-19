@@ -598,55 +598,106 @@ def _option(text):
     return (m.group(1), m.group(2).strip(" —–-:") or m.group(1) + "안") if m else None
 
 
-def doc_form(md, title):
-    """구조 문서 → (고르기 양식, 못 읽은 이유들). '선택지' 절의 안 · 추천 · 왜 네 칸과 '질문' 절의 표를 옮긴다.
-    안은 표의 첫 칸("A. 국소 패치")이나 소제목("### A. 국소 패치 — …")에서 읽는다."""
-    sec = _section(md, CHOICE_HEADS)
-    if not sec.strip():
-        return None, ["'선택지' 절이 없다"]
-    options = []
+LETTER = re.compile(r"(?<![A-Za-z])([A-Z])안?(?![A-Za-z])")
+MARKED = re.compile(r"([①-⑳])\s*([A-Z])")  # "추천: ①C, ②B" — 결정 표의 행 표시와 고른 안
+SLOT_HEADS = (("next", ("다음 요청", "고칠 곳")), ("gain", ("얻는",)), ("loss", ("잃는",)))
+
+
+def _slot(text):
+    return next((k for k, keys in SLOT_HEADS if any(key in text for key in keys)), None)
+
+
+def _row_options(sec):
+    """표의 행마다 안 하나: 첫 칸이 `A. 이름`, 나머지 칸은 머리줄 이름으로 고칠 곳 · 얻는 것 · 잃는 것."""
     for head, rows in _tables(sec):
-        col = lambda *keys: next((i for i, h in enumerate(head) if any(k in h for k in keys)), None)  # noqa: E731
-        slots = (("next", col("다음 요청", "고칠 곳")), ("gain", col("얻는")), ("loss", col("잃는")))
+        slots = [(i, _slot(h)) for i, h in enumerate(head)]
+        options = []
         for row in rows:
             got = _option(row[0]) if row else None
             if not got or any(o["id"] == got[0] for o in options):
                 continue
             o = {"id": got[0], "name": got[1]}
-            o.update({k: _plain(row[i]) for k, i in slots if i is not None and i < len(row) and _plain(row[i]) not in EMPTY_CELL})
+            o.update({k: _plain(row[i]) for i, k in slots if k and i < len(row) and _plain(row[i]) not in EMPTY_CELL})
             options.append(o)
         if options:
-            break
-    if not options:  # 소제목 꼴: "### A. 플래그 — 다음 요청 때 3곳"
-        for ln in sec.splitlines():
-            if ln.startswith("###"):
-                name, _, tail = _plain(ln.lstrip("#")).partition(" — ")
-                got = _option(name)
-                if got and not any(o["id"] == got[0] for o in options):
-                    options.append({"id": got[0], "name": got[1], **({"summary": tail.strip()} if tail.strip() else {})})
-    if len(options) < 2:
-        return None, [f"'선택지' 절에서 안을 {len(options)}개만 읽었다 — 표 첫 칸을 `A. 이름` 꼴로 쓴다"]
-    ids = [o["id"] for o in options]
+            return options
+    return []
+
+
+def _column_options(sec):
+    """표의 열마다 안 하나(머리줄이 `| | A. 이름 | B. 이름 |`): 행은 고칠 곳 · 얻는 것 · 잃는 것 같은 기준이다."""
+    for head, rows in _tables(sec):
+        cols = [(i, _option(h)) for i, h in enumerate(head) if i > 0]
+        cols = [(i, got) for i, got in cols if got]
+        if len(cols) < 2 or "결정" in head[0] or any("정함" in h for h in head):
+            continue
+        options = [{"id": got[0], "name": got[1]} for _, got in cols]
+        for row in rows:
+            key = _slot(_plain(row[0])) if row else None
+            for (i, _), o in zip(cols, options):
+                if key and i < len(row) and _plain(row[i]) not in EMPTY_CELL:
+                    o[key] = _plain(row[i])
+        return options
+    return []
+
+
+def _heading_options(sec):
+    """소제목마다 안 하나: `### A. 플래그 — 다음 요청 때 3곳`."""
+    options = []
+    for ln in sec.splitlines():
+        if ln.startswith("###"):
+            name, _, tail = _plain(ln.lstrip("#")).partition(" — ")
+            got = _option(name)
+            if got and not any(o["id"] == got[0] for o in options):
+                options.append({"id": got[0], "name": got[1], **({"summary": tail.strip()} if tail.strip() else {})})
+    return options
+
+
+def _decision_questions(sec, rec_line):
+    """결정이 여럿인 표(행마다 결정 하나, 열마다 안): `| 결정 | A. 국소 패치 | B | C | 정함 |` → 행마다 질문 하나."""
+    marks = dict(MARKED.findall(rec_line))
+    for head, rows in _tables(sec):
+        cols = [(i, _option(h)) for i, h in enumerate(head) if i > 0]
+        cols = [(i, got[0]) for i, got in cols if got]
+        pick_i = next((i for i, h in enumerate(head) if i > 0 and "정함" in h), None)
+        if len(cols) < 2 or not ("결정" in head[0] or pick_i is not None):
+            continue
+        out = []
+        for row in rows:
+            name = _plain(row[0]) if row else ""
+            options = [{"id": oid, "name": _plain(row[i])} for i, oid in cols if i < len(row) and _plain(row[i]) not in EMPTY_CELL]
+            if not name or len(options) < 2:
+                continue
+            picked = _plain(row[pick_i]) if pick_i is not None and pick_i < len(row) else ""
+            picked = picked[0] if re.fullmatch(r"[A-Z]안?", picked) else marks.get(name[0], "")
+            for o in options:
+                if o["id"] == picked:
+                    o["recommended"] = True
+            out.append({"id": f"q{len(out) + 1}", "title": name, "options": options})
+        if out:
+            return out
+    return []
+
+
+def doc_form(md, title):
+    """구조 문서 → (고르기 양식, 못 읽은 이유들). '선택지' 절의 안 · 추천 · 왜 네 칸과 '질문' 절의 표를 옮긴다.
+    안은 표의 행(첫 칸 `A. 국소 패치`)이나 열(머리줄 `| | A. … | B. … |`)이나 소제목(`### A. 국소 패치 — …`)에서 읽는다.
+    결정이 여럿인 표(`| 결정 | A | B | 정함 |`)는 행마다 질문 하나가 된다."""
+    sec = _section(md, CHOICE_HEADS)
+    if not sec.strip():
+        return None, ["'선택지' 절이 없다"]
     rec = RECOMMEND.search(sec)
-    if rec:
-        line = sec[rec.end():].splitlines()[0] if sec[rec.end():] else ""
-        m = re.match(r"\s*\**\s*([A-Z])(?:안|[.)\s*:—–-]|$)", line)
-        for o in options:
-            if m and o["id"] == m.group(1):
-                o["recommended"] = True
-    why = {}
-    for key, value in WHY_LINE.findall(sec):
-        if WHY_KEYS[key] == "dropped":
-            why.setdefault("dropped", []).append(_plain(value))
-        else:
-            why.setdefault(WHY_KEYS[key], _plain(value))
-    main = {"id": "q1", "title": "어느 안으로 가나", "options": options}
-    if why:
-        main["why"] = why
-    before = [_plain(d) for d in DROPPED_BEFORE.findall(sec)]
-    if before:
-        main["dropped_before"] = before
-    questions, asks = [main], []
+    rec_line = sec[rec.end():].splitlines()[0] if rec and sec[rec.end():] else ""
+    rec_ids = LETTER.findall(_plain(rec_line).split(" — ")[0].split(".")[0])  # "B" · "B안" · "B + E" — 이유 글의 글자는 세지 않는다
+    questions = _decision_questions(sec, rec_line)
+    single = not questions
+    if single:
+        options = _row_options(sec) or _column_options(sec) or _heading_options(sec)
+        if len(options) < 2:
+            return None, [f"'선택지' 절에서 안을 {len(options)}개만 읽었다 — 표 첫 칸을 `A. 이름` 꼴로 쓴다"]
+        questions = [{"id": "q1", "title": "어느 안으로 가나", "options": options}]
+    main, asks = questions[0], []
+    ids = [o["id"] for o in main["options"]]
     for head, rows in _tables(_section(md, QUESTION_HEADS))[:1]:
         col = lambda key, default: next((i for i, h in enumerate(head) if key in h), default)  # noqa: E731
         q_i, fork_i, rec_i, chg_i = col("질문", 1), col("갈래", 2), col("추천", 3), col("바뀌는", 4)
@@ -656,10 +707,18 @@ def doc_form(md, title):
             forks = [f.strip() for f in re.split(r"\s*/\s*", cell(row, fork_i)) if f.strip()]
             if not text:
                 continue
-            if forks and all(re.fullmatch(r"([A-Z])안?", f) and f[0] in ids for f in forks):  # 구조를 묻는 행 — 선택지 카드가 답한다
+            groups = [LETTER.findall(f) if re.fullmatch(r"[A-Z]안?(?:\s*[·,+]\s*[A-Z]안?)*", f) else None for f in forks]
+            if single and forks and all(g and set(g) <= set(ids) for g in groups):  # 구조를 묻는 행 — 선택지 카드가 답한다
                 main["title"] = text
                 if changes not in EMPTY_CELL:
                     main["changes"] = changes
+                if any(len(g) > 1 for g in groups):  # 축이 여럿이다("A·B·C / D·E") — 축마다 하나씩 고르게 가른다
+                    by_id = {o["id"]: o for o in main["options"]}
+                    used = {i for g in groups for i in g}
+                    groups[0] += [i for i in ids if i not in used]
+                    questions[:1] = [{**main, "id": f"q{k}", "title": f"{text} — {' · '.join(g)}", "options": [by_id[i] for i in g]}
+                                     for k, g in enumerate(groups, 1)]
+                    main = questions[0]
                 continue
             if len(forks) < 2:  # 갈래 없이 묻는 것 — 답을 적는 칸으로
                 asks.append({"id": f"a{n}", "text": text})
@@ -667,15 +726,35 @@ def doc_form(md, title):
             picked = cell(row, rec_i)
             best = max((f for f in forks if picked.startswith(f)), key=len, default=None)
             reason = picked[len(best):].strip(" —–-:") if best else ""  # 추천 칸의 이유 한 구절 — 그 갈래 카드에 보인다
-            q = {"id": f"q{len(questions) + 1}", "title": text, "options": [{"id": str(k), "name": f} for k, f in enumerate(forks, 1)]}
+            q = {"title": text, "options": [{"id": str(k), "name": f} for k, f in enumerate(forks, 1)]}
             for o in q["options"]:
                 if o["name"] == best:
                     o.update({"recommended": True}, **({"summary": reason} if reason else {}))
             if changes not in EMPTY_CELL:
                 q["changes"] = changes
             questions.append(q)
+    if single:  # 안을 고르는 질문마다 추천 하나 — 추천 줄에 먼저 나온 안
+        for q in questions:
+            if q["options"] and q["options"][0]["id"] in ids:
+                best = next((i for i in rec_ids if any(o["id"] == i for o in q["options"])), None)
+                for o in q["options"]:
+                    if o["id"] == best:
+                        o["recommended"] = True
+    why = {}
+    for key, value in WHY_LINE.findall(sec):
+        if WHY_KEYS[key] == "dropped":
+            why.setdefault("dropped", []).append(_plain(value))
+        else:
+            why.setdefault(WHY_KEYS[key], _plain(value))
+    if why:
+        main["why"] = why
+    before = [_plain(d) for d in DROPPED_BEFORE.findall(sec)]
+    if before:
+        main["dropped_before"] = before
     if asks:
         main["asks"] = asks
+    for k, q in enumerate(questions, 1):
+        q["id"] = f"q{k}"
     return {"kind": "selection", "title": title, "questions": questions}, []
 
 

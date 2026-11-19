@@ -277,6 +277,9 @@ def main(argv=None):
     ap.add_argument("--timeout", type=int, default=120)
     args = ap.parse_args(argv)
 
+    # 무인 실행이면 첫 명령(--status · --check)에서 바로 알린다 — 이야기를 다 쓴 뒤에야 알면 그 토큰이 버려진다
+    if decide.blocked("diff"):
+        return decide.UNATTENDED
     confirmed = decide.load_confirmed(args.project)
     if args.status:
         args.story = args.story or "-"
