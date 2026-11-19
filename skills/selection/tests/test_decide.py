@@ -258,11 +258,20 @@ class DiffDoc(unittest.TestCase):
             (root / "b.cpp").write_text("new\n", encoding="utf-8")
             story = root / "story.json"
             story.write_text(json.dumps({"title": "t", "groups": [{"title": "둘 다", "match": ["*.cpp"]}]}), encoding="utf-8")
+            decide.write_answers(decide.answers_path(story), {}, False)   # 하네스가 쓴 파일은 변경으로 세지 않는다
+            decide.add_decision(decide.ledger_path(d), "주제", "고른 것")
+            (root / ".claude" / "decide").mkdir()
+            (root / ".claude" / "decide" / "other.json").write_text("{}", encoding="utf-8")
             out = io.StringIO()
             with redirect_stdout(out):
-                code = diffdoc.main([str(story), "--path", d, "--check", "--add", "story.json"])
+                code = diffdoc.main([str(story), "--path", d, "--check"])
             self.assertEqual(code, 0, out.getvalue())
-            self.assertIn("묶은 것 2개", out.getvalue())
+            self.assertIn("파일 2개", out.getvalue())
+            self.assertIn("묶은 것 2개 · 묶이지 않은 것 0개", out.getvalue())
+
+    def test_mixed_encoding_diff_is_decoded_line_by_line(self):
+        raw = "Index: 소스/효과.cpp\n".encode("cp949") + "+// 피해 입구\n".encode("utf-8")
+        self.assertEqual(diffdoc.decode(raw), "Index: 소스/효과.cpp\n+// 피해 입구\n")
 
 
 if __name__ == "__main__":

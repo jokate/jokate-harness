@@ -29,14 +29,21 @@ BIG_DIFF = 3000      # 줄 수가 이보다 많으면 범위를 좁히라고 알
 REST = "묶이지 않은 변경"
 
 
-def decode(raw):
-    """UTF-8 이 아니면 CP949 로 읽는다 — 한글 Windows 에서 저장한 소스."""
+def _decode_line(raw):
     for enc in ("utf-8", "cp949"):
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
             pass
     return raw.decode("utf-8", errors="replace")
+
+
+def decode(raw):
+    """줄마다 UTF-8, 아니면 CP949 로 읽는다 — 한글 Windows 에서는 경로 줄과 본문의 인코딩이 다를 수 있다."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return "\n".join(_decode_line(line) for line in raw.split(b"\n"))
 
 
 def run(cmd, cwd):
@@ -134,6 +141,13 @@ def new_file(root, rel, label="추가"):
     return entry
 
 
+def _ours(root, rel, story):
+    """하네스가 쓴 파일인가 — 이야기 · 답 · 결정 장부(.claude/)는 사용자의 변경이 아니다."""
+    path = (Path(root) / rel).resolve()
+    story = Path(story).resolve()
+    return ".claude" in Path(rel).parts or path in (story, decide.answers_path(story).resolve())
+
+
 def collect(args):
     """→ 파일 목록. 패치 파일이 있으면 그것만, 없으면 작업 사본의 diff."""
     if args.patch:
@@ -146,7 +160,7 @@ def collect(args):
             files = parse_diff(run(["git", "-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-U3",
                                     args.base or "HEAD", "--", rel], root))
             untracked = run(["git", "-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard", "--", rel], root)
-            files += [new_file(root, f, "추가 · 추적 안 됨") for f in untracked.splitlines() if f.strip()]
+            files += [new_file(root, f, "추가 · 추적 안 됨") for f in untracked.splitlines() if f.strip() and not _ours(root, f, args.story)]
         else:
             files = parse_diff(run(["svn", "diff", "--internal-diff"] + (["-r", args.base] if args.base else []) + [rel], root))
     files += [new_file(root, Path(f).resolve().relative_to(root) if Path(f).is_absolute() else f, "추가 · 올리지 않음") for f in args.add]
