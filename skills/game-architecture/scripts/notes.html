@@ -57,7 +57,7 @@
   const pill = $('.gn-pill'), panel = $('.gn-panel'), list = $('.gn-list'), at = $('.gn-at'), ta = $('textarea'),
         go = $('.gn-go'), cp = $('.gn-copy'), wipe = $('.gn-wipe'), msg = $('.gn-msg');
   const FIGS = 'figure,.mermaid,.ddsvg,svg', INLINE = 'a,button,summary,h1,h2,h3,h4,p,span,td,th,li', WHOLE = '문서 전체';
-  const TAIL = '질문이면 확인해 답하고, 문서가 틀렸으면 고쳐 다시 그린다. 코드는 묻고 고친다.';
+  const TAIL = '질문이면 확인해 답하고, 문서가 틀렸으면 고쳐 다시 그린다. 코드는 묻고 고친다. (game-architecture 스킬 · 문서 메모가 오면)';
   const KEY = 'gh-notes:' + location.pathname;
   const clip = (s, n) => { s = s.replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
   const mine = el => !!(el && el.closest && el.closest('.gn,.gn-add,.gn-sel'));

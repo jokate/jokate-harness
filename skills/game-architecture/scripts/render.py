@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import webbrowser
@@ -483,6 +484,20 @@ def dd_figs(src, exclude=None):
 DD_EXPORT = Path.home() / ".claude" / "skills" / "diagram-design" / "scripts" / "export_svg.py"
 
 
+def _plain_fig(fig, folder):
+    """문서 메모 칸을 뺀 구조도 HTML. 내보내기 도구가 페이지의 <style> 을 SVG 에 담아서, 붙인 채로 내보내면 그림마다 메모 칸 스타일이 따라 들어간다.
+    이름은 지킨다 — 정의 ID 가 파일 이름에서 나온다."""
+    try:
+        text = Path(fig).read_bytes().decode("utf-8").replace("\r\n", "\n")
+    except (OSError, UnicodeDecodeError):
+        return Path(fig)
+    if not NOTES_BLOCK.search(text):
+        return Path(fig)
+    plain = Path(folder) / Path(fig).name
+    plain.write_text(NOTES_BLOCK.sub("", text), encoding="utf-8")
+    return plain
+
+
 def dd_svg(fig):
     """diagram-design 구조도 HTML → 문서에 바로 넣을 SVG 글. diagram-design 의 export_svg.py 가
     스타일을 SVG 안에 담고 정의 ID 에 파일 이름을 붙여 준다(여러 장이 한 문서에 있어도 안 섞인다).
@@ -492,8 +507,9 @@ def dd_svg(fig):
         if not svg.is_file() or svg.stat().st_mtime < Path(fig).stat().st_mtime:
             if not DD_EXPORT.is_file():
                 return None
-            r = subprocess.run([sys.executable, str(DD_EXPORT), str(fig), str(svg)], capture_output=True, timeout=60,
-                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+            with tempfile.TemporaryDirectory() as tmp:
+                r = subprocess.run([sys.executable, str(DD_EXPORT), str(_plain_fig(fig, tmp)), str(svg)], capture_output=True,
+                                   timeout=60, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
             if r.returncode != 0 or not svg.is_file():
                 return None
         text = svg.read_text(encoding="utf-8")

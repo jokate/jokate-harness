@@ -318,6 +318,25 @@ class NotesTest(unittest.TestCase):
                 render.main([str(page), "--detach"])
             self.assertEqual(page.read_bytes(), original)
 
+    def test_attached_figure_page_does_not_leak_into_the_figure(self):
+        """구조도 페이지에 메모 칸을 붙여도 문서에 실리는 그림은 그대로다 — 내보내기 도구는 메모 칸을 뺀 글을 받는다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root, md = self.project(tmp)
+            fig = md.with_name("입력-구조-B.html")
+            fig.write_text('<html><body><style>.n{fill:red}</style><svg viewBox="0 0 10 10"><title>전후</title></svg></body></html>', encoding="utf-8")
+            exporter = Path(tmp) / "export_svg.py"  # 진짜 도구처럼 페이지의 <style> 을 전부 SVG 에 담는다
+            exporter.write_text("import re, sys\nt = open(sys.argv[1], encoding='utf-8').read()\n"
+                                "open(sys.argv[2], 'w', encoding='utf-8').write('<svg><style>' + ''.join(re.findall(r'<style[^>]*>(.*?)</style>', t, re.S)) + '</style></svg>')\n",
+                                encoding="utf-8")
+            old, render.DD_EXPORT = render.DD_EXPORT, exporter
+            self.addCleanup(setattr, render, "DD_EXPORT", old)
+            before = render.dd_svg(fig)
+            with contextlib.redirect_stdout(io.StringIO()):
+                render.attach([fig])
+            self.assertIn("gn-pill", fig.read_text(encoding="utf-8"))
+            self.assertEqual(render.dd_svg(fig), before)
+            self.assertIn(".n{fill:red}", before)
+
     def test_attach_keeps_the_source_of_a_rendered_doc(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, md = self.project(tmp)
