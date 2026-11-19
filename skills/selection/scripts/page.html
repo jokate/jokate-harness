@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--sub:#5b6577;--line:#dfe3ea;--accent:#2f6fed;--accent-ink:#fff;
+--pick:#eaf1ff;--good:#1a7f4b;--warn:#b26a00;--bad:#c0392b;--add:#e6f6ec;--del:#fdeaea;--addi:#1a7f4b;--deli:#c0392b;--code:#f0f2f6}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1c2029;--ink:#e6e9ef;--sub:#9aa4b5;--line:#2c3340;--accent:#6c9cff;
+--accent-ink:#0d1117;--pick:#1f2a44;--good:#56c98a;--warn:#e0a54a;--bad:#f0776a;--add:#16301f;--del:#3a1c1c;--addi:#56c98a;--deli:#f0776a;--code:#232834}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+main,header{max-width:1180px;margin:0 auto;padding:0 20px}
+header{padding-top:28px}
+h1{font-size:22px;margin:0 0 8px}
+h2{font-size:17px;margin:0 0 6px}
+h3{font-size:13px;margin:14px 0 6px;color:var(--sub);font-weight:600}
+.ctx{margin:0;padding:0;list-style:none;color:var(--sub)}
+.ctx li::before{content:"· "}
+.stats{color:var(--sub);font-size:13px;margin-top:6px}
+section,details.g,.ledger{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+.sub{color:var(--sub);font-size:13.5px;margin:0 0 12px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.card{display:block;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;position:relative}
+.card:hover{border-color:var(--accent)}
+.card.on{border-color:var(--accent);background:var(--pick)}
+.card.on::after{content:"고름";position:absolute;top:10px;right:12px;font-size:12px;font-weight:700;color:var(--accent)}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card.no{border-color:var(--bad)}
+.card.no .name{text-decoration:line-through;color:var(--sub)}
+.card.no::after{content:"기각";position:absolute;top:10px;right:12px;font-size:12px;font-weight:700;color:var(--bad)}
+.acts{display:flex;justify-content:flex-end;margin-top:10px}
+button.rej{font-size:12.5px;padding:2px 10px;color:var(--bad)}
+.why-no{margin-top:8px}
+.votes{display:flex;gap:6px}
+button.v{font-size:13px;padding:3px 10px}
+button.v.ok.on{background:var(--good);border-color:var(--good);color:#fff}
+button.v.no.on{background:var(--bad);border-color:var(--bad);color:#fff}
+details.g.no{border-color:var(--bad)}
+.chip{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:1px 7px;margin-right:6px;background:var(--code)}
+.chip.rec{background:var(--accent);color:var(--accent-ink)}
+.chip.r높음{background:var(--bad);color:#fff}.chip.r중간{background:var(--warn);color:#fff}.chip.r낮음{background:var(--good);color:#fff}
+.chip.dead{background:var(--bad);color:#fff}
+.name{font-weight:700}
+.sum{margin:6px 0 8px}
+dl{margin:0;font-size:13.5px}
+dt{color:var(--sub);font-size:12px;margin-top:6px}
+dd{margin:0}
+input[type=text],textarea{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+input[type=text]:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+.row{display:flex;gap:8px;align-items:flex-start;margin:5px 0}
+.row.keep{margin-top:12px;color:var(--sub);font-size:13.5px}
+.row input[type=checkbox]{margin-top:5px;width:16px;height:16px;flex:none}
+.ask{margin:8px 0}
+.ask label{display:block;font-size:13.5px;margin-bottom:3px}
+details.why{margin-top:12px;font-size:13.5px}
+details.why summary{cursor:pointer;color:var(--sub)}
+details.g>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:center}
+details.g>summary::-webkit-details-marker{display:none}
+details.g>summary .t{font-weight:700;font-size:16px;flex:1}
+details.g>summary .n{color:var(--sub);font-size:12.5px;white-space:nowrap}
+.file{margin:14px 0 4px;font:600 13px/1.4 ui-monospace,Consolas,monospace;word-break:break-all}
+.hunkh{font:12px/1.4 ui-monospace,Consolas,monospace;color:var(--sub);background:var(--code);padding:3px 8px;border-radius:6px 6px 0 0;margin-top:8px}
+table.diff{width:100%;border-collapse:collapse;font:12.5px/1.45 ui-monospace,Consolas,"D2Coding",monospace;table-layout:fixed;border:1px solid var(--line)}
+table.diff td{padding:0 6px;vertical-align:top;white-space:pre-wrap;word-break:break-all;tab-size:4}
+table.diff td.no{width:46px;text-align:right;color:var(--sub);user-select:none;background:var(--code)}
+td.a{background:var(--add)}td.d{background:var(--del)}td.e{background:var(--code);opacity:.5}
+td.a::before{content:"+ ";color:var(--addi)}td.d::before{content:"− ";color:var(--deli)}td.c::before{content:"  "}
+table.led{width:100%;border-collapse:collapse;font-size:14px}
+table.led th{text-align:left;color:var(--sub);font-size:12px;font-weight:600;border-bottom:1px solid var(--line);padding:4px 8px}
+table.led td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top}
+table.led td.id{white-space:nowrap;font-weight:700}
+footer{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 20px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;cursor:pointer}
+button.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+#st{color:var(--sub);font-size:13px;min-width:200px}
+#done{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;font-size:18px;text-align:center;padding:20px}
+kbd{font:12px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--bg)}
+</style>
+</head>
+<body>
+<header id="top"></header>
+<main id="main"></main>
+<footer><span id="prog"></span><span id="btns"></span><span id="st"></span></footer>
+<div id="done"></div>
+<script>const BOOT = __BOOT__;</script>
+<script>
+"use strict";
+const spec = BOOT.spec, KEY = "decide:" + BOOT.name;
+let S = BOOT.state || {}, sent = false, timer = null, split = window.innerWidth >= 1100;
+if (!BOOT.served && !BOOT.state) { try { S = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { S = {}; } }
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v == null) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "checked" || k === "open" || k === "value") el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
+}
+const $ = id => document.getElementById(id);
+function status(t) { $("st").textContent = t; }
+function slot(group, id, init) { S[group] = S[group] || {}; return S[group][id] = S[group][id] || init; }
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path + "?t=" + BOOT.token, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    return r.ok;
+  } catch (e) { return false; }
+}
+async function save() {
+  if (BOOT.served) status(await post("/save", {answers: S}) ? "저장됨" : "저장 실패 — 터미널이 꺼졌나 본다");
+  else { try { localStorage.setItem(KEY, JSON.stringify(S)); status("이 브라우저에 저장됨"); } catch (e) { status("저장 안 됨"); } }
+}
+function touch() { clearTimeout(timer); timer = setTimeout(save, 350); progress(); }
+function text(obj, key, placeholder, multi) {
+  const el = h(multi ? "textarea" : "input", {type: multi ? null : "text", placeholder, rows: multi ? 2 : null, value: obj[key] || "",
+    oninput: e => { obj[key] = e.target.value; touch(); }});
+  return el;
+}
+
+/* ── 고르기 ── */
+const rejectInputs = {};
+function renderSelection() {
+  const main = $("main");
+  spec.questions.forEach((q, qi) => {
+    const a = slot("q", q.id, {choice: null, rejects: {}, checks: [], asks: {}, note: "", keep: false});
+    a.rejects = a.rejects || {};
+    const sec = h("section", {id: "q-" + q.id});
+    sec.append(h("h2", {}, (qi + 1) + ". " + q.title));
+    if (q.changes) sec.append(h("p", {class: "sub"}, "답에 따라 바뀌는 것: " + q.changes));
+    const opts = h("div", {class: "opts"});
+    const cards = [];
+    const paint = () => cards.forEach(c => {
+      const no = c.id in a.rejects;
+      c.el.classList.toggle("on", a.choice === c.id);
+      c.el.classList.toggle("no", no);
+      c.why.style.display = no ? "" : "none";
+      c.btn.textContent = no ? "기각 취소" : "기각";
+    });
+    const pick = id => { a.choice = a.choice === id ? null : id; delete a.rejects[id]; paint(); touch(); };
+    const reject = id => {
+      if (id in a.rejects) delete a.rejects[id];
+      else { a.rejects[id] = ""; if (a.choice === id) a.choice = null; }
+      paint(); touch();
+    };
+    (q.options || []).forEach(o => {
+      const why = h("input", {type: "text", class: "why-no", placeholder: "기각하는 이유 — 세션으로 간다", value: a.rejects[o.id] || "",
+        onclick: e => e.stopPropagation(), oninput: e => { a.rejects[o.id] = e.target.value; touch(); }});
+      const btn = h("button", {class: "rej", onclick: e => { e.stopPropagation(); reject(o.id); if (o.id in a.rejects) why.focus(); }}, "기각");
+      const el = h("div", {class: "card", tabindex: "0", role: "button", onclick: () => pick(o.id),
+        onkeydown: e => { if (e.key === " " && e.target === el) { e.preventDefault(); pick(o.id); } }},
+        h("div", {}, h("span", {class: "chip"}, o.id), h("span", {class: "name"}, o.name), o.recommended ? h("span", {class: "chip rec", style: "margin-left:6px"}, "추천") : null),
+        o.summary ? h("p", {class: "sum"}, o.summary) : null,
+        h("dl", {}, ...[["다음 요청 때 고칠 곳", o.next], ["얻는 것", o.gain], ["잃는 것", o.loss]].filter(r => r[1]).flatMap(r => [h("dt", {}, r[0]), h("dd", {}, r[1])])),
+        h("div", {class: "acts"}, btn), why);
+      rejectInputs[q.id + "/" + o.id] = why;
+      cards.push({id: o.id, el, why, btn});
+      opts.append(el);
+    });
+    paint();
+    sec.append(opts);
+    if ((q.dropped_before || []).length) sec.append(h("p", {class: "sub", style: "margin:10px 0 0"}, "앞서 기각한 안: " + q.dropped_before.join(" · ")));
+    if (q.why) sec.append(h("details", {class: "why"}, h("summary", {}, "추천의 왜 — 문제 · 버린 안 · 대가 · 뒤집는 조건"),
+      h("dl", {}, ...[["문제", q.why.problem], ...(q.why.dropped || []).map(d => ["버린 안", d]), ["대가", q.why.cost], ["뒤집는 조건", q.why.flip]]
+        .filter(r => r[1]).flatMap(r => [h("dt", {}, r[0]), h("dd", {}, r[1])]))));
+    if ((q.checks || []).length) {
+      sec.append(h("h3", {}, "고르기 전에 볼 것"));
+      q.checks.forEach((c, i) => sec.append(h("label", {class: "row"},
+        h("input", {type: "checkbox", checked: !!a.checks[i], onchange: e => { a.checks[i] = e.target.checked; touch(); }}), h("span", {}, c))));
+    }
+    if ((q.asks || []).length) {
+      sec.append(h("h3", {}, "답을 적을 것"));
+      q.asks.forEach(k => sec.append(h("div", {class: "ask"}, h("label", {}, k.text), text(a.asks, k.id, "답"))));
+    }
+    sec.append(h("h3", {}, "피드백"), text(a, "note", "고른 안에 붙일 지시나, 선택지를 다시 낼 방향"));
+    sec.append(h("label", {class: "row keep"},
+      h("input", {type: "checkbox", checked: !!a.keep, onchange: e => { a.keep = e.target.checked; touch(); }}),
+      h("span", {}, "이 결정을 장부에 남긴다 — 되돌리기 어렵거나 나중에 다시 물을 결정만")));
+    main.append(sec);
+  });
+  $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
+}
+function unanswered() { return spec.questions.filter(q => !S.q[q.id].choice); }
+function rejected() { return spec.questions.flatMap((q, i) => Object.keys(S.q[q.id].rejects || {}).map(id => ({q, n: i + 1, id}))); }
+
+/* ── 변경 설명 ── */
+function diffTable(hunk) {
+  const t = h("table", {class: "diff"}), cell = (cls, txt) => h("td", {class: cls}, txt == null ? "" : txt);
+  if (!split) hunk.lines.forEach(([k, o, n, s]) => t.append(h("tr", {}, cell("no", o), cell("no", n), cell(k === "+" ? "a" : k === "-" ? "d" : "c", s))));
+  else {
+    let dels = [], adds = [];
+    const flush = () => {
+      for (let i = 0; i < Math.max(dels.length, adds.length); i++) {
+        const d = dels[i], a = adds[i];
+        t.append(h("tr", {}, cell("no", d && d[1]), d ? cell("d", d[3]) : cell("e"), cell("no", a && a[2]), a ? cell("a", a[3]) : cell("e")));
+      }
+      dels = []; adds = [];
+    };
+    hunk.lines.forEach(l => {
+      if (l[0] === "-") dels.push(l); else if (l[0] === "+") adds.push(l);
+      else { flush(); t.append(h("tr", {}, cell("no", l[1]), cell("c", l[3]), cell("no", l[2]), cell("c", l[3]))); }
+    });
+    flush();
+  }
+  return t;
+}
+function renderDiff() {
+  const main = $("main");
+  main.textContent = "";
+  spec.groups.forEach((g, gi) => {
+    const a = slot("g", g.id, {verdict: null, note: ""});
+    const note = text(a, "note", "기각이면 무엇을 어떻게 고칠지 — 세션으로 간다");
+    note.id = "n-" + g.id;
+    const vote = (v, label) => h("button", {class: "v " + v, onclick: e => {
+      e.preventDefault(); e.stopPropagation();
+      a.verdict = a.verdict === v ? null : v;
+      paint(); touch();
+      if (a.verdict === "no") { det.open = true; note.focus(); }
+    }}, label);
+    const okB = vote("ok", "확인함"), noB = vote("no", "기각");
+    const det = h("details", {class: "g", id: "g-" + g.id, open: gi === 0 || g.risk === "높음" || a.verdict === "no" || undefined},
+      h("summary", {}, g.risk ? h("span", {class: "chip r" + g.risk}, g.risk) : null, h("span", {class: "t"}, g.title),
+        h("span", {class: "n"}, "+" + g.added + " −" + g.removed + " · 파일 " + g.files.length),
+        h("span", {class: "votes"}, okB, noB)));
+    const paint = () => {
+      okB.classList.toggle("on", a.verdict === "ok");
+      noB.classList.toggle("on", a.verdict === "no");
+      det.classList.toggle("no", a.verdict === "no");
+    };
+    paint();
+    if (g.why) det.append(h("p", {class: "sub", style: "margin-top:10px"}, "왜: " + g.why));
+    if (g.look) det.append(h("p", {class: "sub"}, "볼 것: " + g.look));
+    g.files.forEach(f => {
+      det.append(h("div", {class: "file"}, f.status !== "수정" ? h("span", {class: "chip"}, f.status) : null, f.path));
+      if (f.binary) det.append(h("p", {class: "sub"}, "바이너리 — 내용을 보이지 않는다"));
+      f.hunks.forEach(k => det.append(h("div", {class: "hunkh"}, k.header), diffTable(k)));
+    });
+    det.append(h("h3", {}, "피드백"), note);
+    main.append(det);
+  });
+}
+function initDiff() {
+  renderDiff();
+  $("btns").append(h("button", {onclick: e => { split = !split; e.target.textContent = split ? "한 줄로 보기" : "나란히 보기"; renderDiff(); }}, split ? "한 줄로 보기" : "나란히 보기"),
+    " ", h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
+}
+
+/* ── 결정 모음 · 기각 ── */
+function renderLedger() {
+  const main = $("main"), rej = spec.mode === "reject";
+  const table = (rows, dead) => h("table", {class: "led"},
+    h("tr", {}, ...["번호", "날짜", "결정", "버린 안", dead ? "기각한 이유" : "메모"].concat(rej && !dead ? ["기각"] : []).map(x => h("th", {}, x))),
+    ...rows.map(d => {
+      const a = rej && !dead ? slot("r", d.id, {reject: false, reason: ""}) : null;
+      const reason = a ? text(a, "reason", "기각하는 이유 한 줄") : null;
+      if (reason) reason.addEventListener("input", () => { if (a.reason.trim() && !a.reject) { a.reject = true; reason.parentElement.querySelector("input[type=checkbox]").checked = true; progress(); } });
+      return h("tr", {id: "r-" + d.id}, h("td", {class: "id"}, d.id), h("td", {}, d.date),
+        h("td", {}, d.question ? h("div", {class: "sub", style: "margin:0"}, d.question) : null, h("div", {class: "name"}, d.choice)),
+        h("td", {}, (d.dropped || []).join(" · ")), h("td", {}, dead ? d.reason + (d.reject_date ? " (" + d.reject_date + ")" : "") : d.note || ""),
+        a ? h("td", {style: "min-width:220px"}, h("label", {class: "row"}, h("input", {type: "checkbox", checked: a.reject, onchange: e => { a.reject = e.target.checked; touch(); }}), reason)) : null);
+    }));
+  const topics = [...new Set(spec.live.map(d => d.topic))];
+  if (!spec.live.length) main.append(h("section", {}, h("p", {class: "sub", style: "margin:0"}, "유효한 결정이 없다.")));
+  topics.forEach(t => main.append(h("div", {class: "ledger"}, h("h2", {}, t), table(spec.live.filter(d => d.topic === t), false))));
+  if (spec.dead.length) main.append(h("details", {class: "g"}, h("summary", {}, h("span", {class: "chip dead"}, "기각"), h("span", {class: "t"}, "기각된 결정 " + spec.dead.length + "건")), table(spec.dead, true)));
+  $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, rej ? "기각 보내기 (Enter)" : "닫기 (Enter)"));
+}
+
+/* ── 공통 ── */
+function progress() {
+  const p = $("prog");
+  if (spec.kind === "selection") {
+    const n = unanswered().length, r = rejected().length, k = spec.questions.filter(q => S.q[q.id].keep && S.q[q.id].choice).length;
+    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 장부 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
+  } else if (spec.kind === "diff") {
+    const count = v => spec.groups.filter(g => S.g[g.id].verdict === v).length;
+    p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (spec.groups.length - count("ok") - count("no"));
+  }
+  else if (spec.mode === "reject") p.textContent = "기각 " + Object.values(S.r || {}).filter(a => a.reject).length + "건";
+  else p.textContent = "유효 " + spec.live.length + "건 · 기각 " + spec.dead.length + "건";
+}
+function finished(msg) { const d = $("done"); d.textContent = msg; d.style.display = "flex"; }
+async function submit() {
+  clearTimeout(timer);
+  if (!BOOT.served) {
+    const payload = "양식 답 — " + BOOT.name + "\n```json\n" + JSON.stringify(S) + "\n```";
+    try { await navigator.clipboard.writeText(payload); status("답을 복사했다 — 대화창에 붙여 넣는다"); }
+    catch (e) { $("main").prepend(h("section", {}, h("p", {class: "sub"}, "아래를 복사해 대화창에 붙여 넣는다"), h("textarea", {rows: 6, value: payload}))); }
+    return;
+  }
+  if (!await post("/submit", {answers: S})) { status("보내지 못했다 — 터미널이 꺼졌나 본다"); return; }
+  sent = true;
+  finished("보냈다. 이 탭은 닫힌다.");
+  setTimeout(() => window.close(), 120);
+  setTimeout(() => finished("보냈다. 이 탭은 닫아도 된다."), 900);
+}
+function trySubmit() {
+  if (spec.kind === "selection") {
+    const bad = rejected().filter(r => !S.q[r.q.id].rejects[r.id].trim());
+    if (bad.length) {
+      const el = rejectInputs[bad[0].q.id + "/" + bad[0].id];
+      el.scrollIntoView({block: "center"}); el.focus();
+      status("기각한 이유가 필요하다: " + bad.map(b => b.n + "번 " + b.id).join(", "));
+      return;
+    }
+  }
+  if (spec.kind === "diff") {
+    const bad = spec.groups.map((g, i) => ({g, n: i + 1})).filter(x => S.g[x.g.id].verdict === "no" && !S.g[x.g.id].note.trim());
+    if (bad.length) {
+      $("g-" + bad[0].g.id).open = true; $("n-" + bad[0].g.id).focus();
+      status("기각한 묶음에 피드백이 필요하다: " + bad.map(b => b.n + "번").join(", "));
+      return;
+    }
+  }
+  if (spec.kind === "ledger" && spec.mode === "reject") {
+    const bad = Object.entries(S.r || {}).filter(([, a]) => a.reject && !a.reason.trim());
+    if (bad.length) { $("r-" + bad[0][0]).scrollIntoView({block: "center"}); status("기각하는 이유 한 줄이 필요하다: " + bad.map(b => b[0]).join(", ")); return; }
+  }
+  submit();
+}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229 || sent) return;
+  const tag = e.target.tagName;
+  if (!e.ctrlKey && (tag === "TEXTAREA" || tag === "BUTTON" || tag === "SUMMARY")) return;
+  e.preventDefault();
+  trySubmit();
+});
+window.addEventListener("pagehide", () => { if (BOOT.served && !sent) navigator.sendBeacon("/bye?t=" + BOOT.token); });
+
+$("top").append(...[h("h1", {}, spec.title), h("ul", {class: "ctx"}, ...(spec.context || []).map(c => h("li", {}, c))),
+  spec.stats ? h("div", {class: "stats"}, spec.stats) : null,
+  h("div", {class: "stats"}, h("kbd", {}, "Enter"), BOOT.served ? " 보내기 — 답이 세션으로 가고 이 탭이 닫힌다" : " 답 복사 — 대화창에 붙여 넣는다")].filter(Boolean));
+({selection: renderSelection, diff: initDiff, ledger: renderLedger})[spec.kind]();
+progress();
+status(BOOT.served ? "바꾸면 바로 저장된다" : "서버 없이 연 파일 — Enter 로 답을 복사한다");
+</script>
+</body>
+</html>

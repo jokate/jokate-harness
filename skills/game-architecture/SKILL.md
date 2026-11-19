@@ -49,6 +49,8 @@ description: 게임 프로젝트(UE / Unity)에서 구현 · 구조 변경 전�
    - 프로젝트 고유: 이미 있는 레지스트리·디스패처·데이터 테이블 (이게 제일 중요하다)
    - **선례**: 같은 종류를 이 프로젝트에서 다른 사람이 어떻게 넣어 왔나 — `evidence.py precedent <경로 조각> --path <소스저장소>`.
      팀 피드백 장부(`<프로젝트>/.claude/team_feedback.md`)가 있으면 같이 읽는다. 기준은 내 시각이 아니라 프로젝트의 꼴이다: [references/team-fit.md](references/team-fit.md)
+   - **결정 장부**: `<프로젝트>/.claude/decisions.jsonl` 이 있으면 `python ~/.claude/skills/selection/scripts/decide.py list --all` 로 읽는다.
+     유효한 결정과 어긋나는 안은 어긋난다고 적는다. 기각된 안은 다시 추천하지 않는다 — 다시 낼 때는 기각 이유가 풀렸다는 근거를 붙인다.
 3. 변경 이력 신호를 뽑는다. 이 단계를 건너뛰지 않는다 — VCS 가 없을 때만 생략하고 그렇다고 적는다.
    - 먼저 소스 저장소를 확정한다: `python ~/.claude/skills/game-architecture/scripts/evidence.py roots`
      (소스가 루트와 별도 저장소인 프로젝트가 흔하다. SessionStart 의 `[game-harness]` 줄에도 나온다)
@@ -169,7 +171,7 @@ Mermaid 규칙 (렌더러 호환 — 어기면 GitLab·Azure DevOps·SVN HTML �
 
 ## 5. 멈춘다
 
-선택지와 그림을 내고 **멈춘다.** 고르는 것은 사용자다. 선택되면:
+선택지와 그림을 내고 **멈춘다.** 고르는 것은 사용자다. 체크 양식으로 고르고 싶으면 `/selection` 이라고 한 줄 알린다(남김 표시한 결정은 결정 장부에 남는다). 선택되면:
 1. 인터페이스 모양이 열려 있고 두 모듈 이상을 건드리면 [references/interface-design.md](references/interface-design.md) 로 3안을 비교하고 추천한 뒤 다시 멈춘다. 아니면 건너뛴다.
 2. 선택된 구조로 계획을 세운다 — 검증 기준(빌드·테스트·PIE 확인 항목)을 구현보다 먼저 적는다 (`game-testing`).
    계획이 고른 선택지와 어긋나면(고칠 파일 · 경계 · 새 모듈이 선택지 행과 다르다) 차이를 한 줄씩 보여 주고 멈춘다. 같으면 바로 3으로 간다(사용자 결정 2026-11-03).

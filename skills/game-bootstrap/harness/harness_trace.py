@@ -1,5 +1,5 @@
 """하네스 추적 훅 (PostToolUse / PostToolUseFailure, matcher: Skill|Bash|PowerShell).
-하네스 스킬(game-*)이 불렸거나 하네스 조회 스크립트(skills/game-*/scripts/*.py)가 실행됐으면
+하네스 스킬(game-* · 문서 스킬 넷)이 불렸거나 하네스 스크립트(skills/<스킬>/scripts/*.py)가 실행됐으면
 harness_events 에 한 줄 남긴다. 그 밖의 도구 호출은 무시한다. 어떤 경우에도 세션을 막지 않는다.
 
   skill.<스킬 이름>            예: skill.game-architecture
@@ -9,7 +9,8 @@ import json
 import re
 import sys
 
-SCRIPT = re.compile(r"game-[a-z-]+[\\/]+scripts[\\/]+(\w+)\.py[\"']?(?:\s+([a-z][\w-]*))?")
+DOC_SKILLS = ("selection", "collect-decision", "reject-decision", "diff-proto")  # game- 로 시작하지 않는 하네스 스킬
+SCRIPT = re.compile(r"(?:game-[a-z-]+|selection)[\\/]+scripts[\\/]+(\w+)\.py[\"']?(?:\s+([a-z][\w-]*))?")
 
 
 def main():
@@ -21,7 +22,7 @@ def main():
     common = {"session": data.get("session_id", ""), "project": data.get("cwd", ""), "source": "harness_trace"}
     if tool == "Skill":
         name = str(inp.get("skill", ""))
-        if name.split(":")[-1].startswith("game-"):
+        if name.split(":")[-1].startswith("game-") or name.split(":")[-1] in DOC_SKILLS:
             emit(f"skill.{name.split(':')[-1]}", inp.get("args", "") or "", ok=ok, **common)
         return
     if tool in ("Bash", "PowerShell"):
