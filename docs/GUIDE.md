@@ -27,7 +27,7 @@
 | 필요할 때 가져오는 맥락 | `skills/game-*` (SKILL.md + references) | 트리거될 때만 로드 |
 | 조회 도구 | `gq.py`(프로젝트), `ue_q.py`(엔진), `cindex.py`(clangd 의미 인덱스: 참조·호출·상속·오버라이드) | 통째로 읽지 않고 좌표로 |
 | 센서 | `evidence.py` (변경 이력 → hotspot·co-change) | 구조 판단의 근거를 계측 |
-| 결정론적 강제 | 훅: SessionStart 인덱스 갱신 · 인덱스 명령 안내, MCP 가드 · 로그 | 모델 판단에 기대지 않는 것 |
+| 결정론적 강제 | 훅: SessionStart 인덱스 갱신 · 인덱스 명령 안내, MCP 가드 · 로그, 문서 양식 띄우기(`doc_nudge.py`) | 모델 판단에 기대지 않는 것 |
 | 평가 | `evals/run_evals.py`, 인덱스 검증(`cindex.py eval`, 웹뷰 검증 탭) | 하네스·인덱스가 의도대로 도는지 재검증 |
 | 관찰 | 하네스 이벤트 로그 → 모니터 mod(상태줄·토스트·`/harness`), 웹뷰 하네스 탭 | 어떤 기능이 지금 동작했는지 사람이 본다 |
 
@@ -43,9 +43,9 @@
 | 2 | `game-architecture` | 기능 추가·구현·설계 요청 (코드 전), 패턴 비교 · 게임 도메인 문제(버프 중첩·선입력·네트워크 예측·세이브 호환 등) | 선택지 A/B/C + "다음 요청 때 고칠 곳" + 근거 그림 → **사람이 고른다**. 패턴은 `references/patterns/`(옛 game-patterns): 증상 → 후보 → 엔진 관용구, 얻음/잃음/쓰지 말 때 |
 | 3 | `game-testing` | 검증 기준·테스트 | 완료 기준 먼저, 검증됨(자동/수동)/검증 안 됨 표기 |
 | 4 | `game-mcp` | 에디터 MCP 조작 | 읽기 먼저·쓰고 재조회·실패는 가드로 |
-| 문서 | `selection` | `/selection` 직접 호출 | A/B/C 카드 · 체크리스트 · 답 칸이 있는 양식. 안마다 기각과 이유. Enter 로 보내면 답이 세션으로 오고, 남김 표시한 결정만 결정 장부에 남는다 |
-| 문서 | `collect-decision` · `reject-decision` | `/collect-decision` · `/reject-decision` 직접 호출 | 결정 장부(`.claude/decisions.jsonl`)의 유효 · 기각 결정 페이지, 기각은 체크 + 이유 한 줄 |
-| 문서 | `diff-proto` | `/diff-proto` 직접 호출 | 실제 diff 를 뜻 묶음 · 위험 순으로 나눈 변경 설명. 묶음마다 확인함 · 기각과 피드백 |
+| 문서 | `selection` | `/selection` · 답에 선택지와 `추천:` 이 나오면 훅이 띄운다 | A/B/C 카드 · 체크리스트 · 답 칸이 있는 양식. 안마다 기각과 이유. Enter 로 보내면 답이 세션으로 오고, 남김 표시한 결정만 결정 장부에 남는다 |
+| 문서 | `collect-decision` · `reject-decision` | `/collect-decision` · `/reject-decision` · "결정 모아줘" · "결정 기각" 이라 하면 훅이 가리킨다 | 결정 장부(`.claude/decisions.jsonl`)의 유효 · 기각 결정 페이지, 기각은 체크 + 이유 한 줄 |
+| 문서 | `diff-proto` | `/diff-proto` · "시안 짜줘" · "바뀐 부분 보여줘" 라 하면 훅이 가리킨다 | 실제 diff 를 뜻 묶음 · 위험 순으로 나눈 변경 설명. 묶음마다 확인함 · 기각과 피드백 |
 
 흐름: 기획서(design-doc) → 사양 표 → 구조 조사(architecture) → 사람 선택 → 완료 기준(testing) → 구현 → 새 컨텍스트 리뷰.
 

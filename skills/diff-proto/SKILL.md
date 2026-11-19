@@ -15,7 +15,7 @@ argument-hint: "[시안으로 짤 것 | 이미 바뀐 범위]"
 2. diff 를 읽는다. git 은 `git diff HEAD` 와 새 파일, svn 은 `svn diff`.
    파일마다 조각(`@@` 한 덩어리)을 위에서부터 1번으로 센다.
 3. 이야기 JSON 을 쓴다. 꼴은 [references/story-sample.json](references/story-sample.json) 그대로다.
-   - 위치: `<프로젝트>/Saved/ClaudeArch/decide/<YYYYMMDD>-<주제>-diff.json` (Unity 는 `Library/ClaudeArch/decide/`, 그 밖은 `<프로젝트>/.claude/decide/`).
+   - 위치: `<프로젝트>/Saved/ClaudeArch/decide/<YYYYMMDD>-<주제>-diff.json` (Unity 는 `Library/ClaudeArch/decide/`, 그 밖은 세션 임시 폴더 — `.claude/` 아래에 쓰면 권한을 묻는다).
    - 묶음은 뜻이 같은 변경이다. 파일 순서가 아니라 읽는 순서로 놓는다. 왜 바꿨는지 드러나는 묶음이 먼저, 따라 바뀐 것은 뒤.
    - `title` 은 결론 문장이다("만료된 입력은 건너뛴다").
    - `why` 는 무엇이 문제였나 한 줄. `look` 은 사용자가 눈으로 확인할 것 한 줄.

@@ -3,6 +3,7 @@
 """고르는 양식과 결정 장부. 스킬 selection · collect-decision · reject-decision · diff-proto 가 같이 쓴다.
 
   python decide.py form <양식.json> [--project <루트>] [--keep] [--no-record] [--no-open] [--timeout <분>] [--static]
+  python decide.py form - [--project <루트>]      양식 JSON 을 표준 입력으로 준다 (파일을 따로 쓰지 않는다)
   python decide.py done <양식.json> [--project <루트>] [--keep] [--no-record]
   python decide.py add --topic <주제> --choice <고른 것> [--question <질문>] [--dropped <버린 안> …] [--note <메모>]
   python decide.py list [--all]
@@ -21,9 +22,11 @@ form 은 페이지를 메모리에서 내보낸다. HTML 파일을 남기지 않
 import argparse
 import html
 import json
+import os
 import re
 import secrets
 import sys
+import tempfile
 import time
 import webbrowser
 from datetime import datetime
@@ -455,10 +458,25 @@ def load_spec(path):
     return spec
 
 
+def spec_from_stdin():
+    """`form -`: 표준 입력의 양식 JSON 을 임시 폴더에 두고 그 경로를 준다. 보내면 다른 양식처럼 지워진다.
+    모델이 양식 파일을 따로 쓰지 않아도 되고, 프로젝트의 `.claude/` 아래에 쓰느라 권한을 묻지도 않는다."""
+    raw = sys.stdin.buffer.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp949", "replace")
+    folder = Path(tempfile.gettempdir()) / "claude-decide"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.json"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["form", "done", "add", "list", "collect", "reject"])
-    ap.add_argument("spec", nargs="?", help="form · done: 양식 JSON")
+    ap.add_argument("spec", nargs="?", help="form · done: 양식 JSON. form 은 `-` 면 표준 입력에서 읽는다")
     ap.add_argument("--project", default=".", help="프로젝트 루트. 장부는 그 아래 .claude/decisions.jsonl")
     ap.add_argument("--keep", action="store_true", help="보낸 뒤에도 양식 · 답 파일을 지우지 않는다")
     ap.add_argument("--no-record", action="store_true", help="고른 것을 장부에 적지 않는다")
@@ -480,7 +498,16 @@ def main(argv=None):
     if args.command in ("form", "done"):
         if not args.spec:
             ap.error("양식 JSON 경로가 필요하다")
-        spec, save_to = load_spec(args.spec), answers_path(args.spec)
+        piped = args.command == "form" and args.spec == "-"
+        if piped:
+            args.spec = spec_from_stdin()
+        try:
+            spec = load_spec(args.spec)
+        except SystemExit:
+            if piped:
+                cleanup(args.spec)
+            raise
+        save_to = answers_path(args.spec)
         if args.command == "done":
             answers = read_answers(save_to)
             if answers is None:
