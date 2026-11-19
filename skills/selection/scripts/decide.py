@@ -11,12 +11,17 @@
   python decide.py reject [--id D-003 --reason <이유>]
 
 form 은 페이지를 메모리에서 내보낸다. HTML 파일을 남기지 않는다.
+문서가 딸린 양식(game-architecture 의 `render.py --form`)은 같은 페이지 위쪽에 그 문서를 싣는다 — 읽는 곳과 고르는 곳이 한 탭이다.
 사용자가 Enter 로 보내면 답을 표준 출력에 찍고, 고르기 양식이면 '남김' 표시한 결정을 장부에 적고, 양식 파일을 지우고 끝난다. 탭은 페이지가 스스로 닫는다.
 그래서 이 명령을 백그라운드로 돌리면 사용자가 보낸 순간 답이 부른 세션으로 돌아온다.
 --static 은 서버를 못 띄울 때만 쓴다: HTML 을 양식 옆에 쓰고, 사용자가 복사한 답을 <양식>.answers.json 에 저장한 뒤 done 을 돌린다.
 
 장부는 <프로젝트>/.claude/decisions.jsonl 이다. 덧붙이기만 한다 — 기각은 옛 줄을 고치지 않고 '기각' 줄을 더한다.
-끝 코드: 0 보냄 · 1 양식 오류 · 2 보내지 않고 닫음 · 3 시간 초과.
+끝 코드: 0 보냄 · 1 양식 오류 · 2 보내지 않고 닫음 · 3 시간 초과 · 4 무인 실행이라 띄우지 않음.
+
+무인 실행(CLAUDE_CODE_SESSION_ATTENDED=0 — `claude -p` · 릴레이 직원)에서는 양식을 띄우지 않는다. 받을 사람이 없어 명령이 끝나지 않는다.
+  GAME_HARNESS_DOC_NUDGE=0   어디서든 띄우지 않는다
+  GAME_HARNESS_DOC_NUDGE=1   무인 신호가 있어도 띄운다 (시험)
 """
 
 import argparse
@@ -32,7 +37,7 @@ import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 for _s in (sys.stdout, sys.stderr):  # 한글 Windows 콘솔(cp949)에서 '—' 를 못 찍어 죽는다
     try:
@@ -47,6 +52,13 @@ MAX_QUESTIONS = 5    # 한 번에 묻는 수. 넘으면 다음 양식으로
 MAX_OPTIONS = 4
 MAX_CHECKS = 7
 CLOSE_GRACE = 3.0    # 탭이 닫힌 뒤 이만큼 기다린다 — 새로 고침이면 그 사이에 다시 온다
+UNATTENDED = 4       # 끝 코드: 무인 실행이라 띄우지 않았다
+SWITCH, ATTENDED = "GAME_HARNESS_DOC_NUDGE", "CLAUDE_CODE_SESSION_ATTENDED"  # 훅 doc_nudge.py 와 같은 스위치
+ASSET_TYPES = {".js": "text/javascript", ".html": "text/html", ".svg": "image/svg+xml", ".css": "text/css",
+               ".png": "image/png", ".json": "application/json"}
+BLOCKED = {"selection": "선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.",
+           "diff": "사용자 확인 단계를 건너뛴다. 결과에 '구현 확인 안 받음 — 무인 실행' 이라고 적는다.",
+           "ledger": "표만 보려면 `decide.py list` 를 쓴다."}
 WHY = (("problem", "문제"), ("dropped", "버린 안"), ("cost", "대가"), ("flip", "뒤집는 조건"))
 
 
@@ -106,10 +118,33 @@ def check_spec(spec):
     return errors, warns
 
 
+# ── 무인 실행 ──────────────────────────────────────────────────────────────
+
+def unattended(env=None):
+    """양식을 받을 사람이 없는 실행이면 그 이유, 아니면 ''. 신호가 0 일 때만 막는다 — 신호가 없는 판(터미널 · IDE)은 띄운다."""
+    env = os.environ if env is None else env
+    switch = env.get(SWITCH, "")
+    if switch == "1":
+        return ""
+    if switch == "0":
+        return f"{SWITCH}=0"
+    return f"{ATTENDED}=0" if env.get(ATTENDED) == "0" else ""
+
+
+def blocked(kind, env=None):
+    """무인 실행이면 대신 할 일을 찍고 True."""
+    why = unattended(env)
+    if why:
+        what = "변경 설명" if kind == "diff" else "양식"
+        print(f"{what}을 띄우지 않았다 — 무인 실행이다({why}).\n다음: {BLOCKED.get(kind, BLOCKED['selection'])}")
+    return bool(why)
+
+
 # ── 페이지 · 서버 ──────────────────────────────────────────────────────────
 
-def build_page(spec, state, token, served, name):
-    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name}, ensure_ascii=False)
+def build_page(spec, state, token, served, name, doc=None):
+    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 양식만 나온다."""
+    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc}, ensure_ascii=False)
     for bad, safe in (("</", "<\\/"), ("<!--", "<\\!--"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
         boot = boot.replace(bad, safe)  # <script> 안에서 끊기지 않게
     page = PAGE.read_text(encoding="utf-8").replace("__TITLE__", html.escape(str(spec.get("title") or "")))
@@ -136,12 +171,23 @@ def write_answers(path, answers, submitted):
     Path(path).write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
-def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=None):
+def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=None, doc=None):
     """양식을 127.0.0.1 에서 내보내고 보낼 때까지 기다린다. → (끝 종류, 답). 끝 종류: submitted · closed · timeout.
-    주소의 토큰이 없으면 페이지도 저장도 거절한다 — 다른 웹 페이지가 이 포트로 읽거나 쓰지 못한다."""
+    주소의 토큰이 없으면 페이지도 저장도 거절한다 — 다른 웹 페이지가 이 포트로 읽거나 쓰지 못한다.
+    doc 은 같은 페이지에 실을 문서를 만드는 함수다: doc(url_for) → HTML. url_for(파일) 은 그 파일을 이 서버에서 읽는 주소를 준다
+    (문서가 쓰는 스크립트 · 그림 — http 페이지는 file:// 을 못 읽는다)."""
     token = secrets.token_urlsafe(16)
     state = {"end": None, "answers": read_answers(save_to), "bye": None, "last": time.time()}
     name = Path(save_to).name
+    assets = {}
+
+    def url_for(path):
+        key = f"{len(assets)}-{Path(path).name}"
+        assets[key] = Path(path)
+        return f"/a/{quote(key)}?t={token}"
+
+    doc_html = doc(url_for) if doc else None
+    doc_url = f"/doc?t={token}" if doc_html else None
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -161,10 +207,22 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
 
         def do_GET(self):
             path = self.allowed()
+            if path is None:
+                return self.reply(403)
+            if path == "/doc" and doc_html:
+                return self.reply(200, doc_html.encode("utf-8"), "text/html; charset=utf-8")
+            if path.startswith("/a/"):
+                asset = assets.get(unquote(path[3:]))
+                try:
+                    body = asset.read_bytes()
+                except (AttributeError, OSError):
+                    return self.reply(404)
+                ctype = ASSET_TYPES.get(asset.suffix.lower(), "application/octet-stream")
+                return self.reply(200, body, ctype + ("; charset=utf-8" if ctype.startswith("text/") else ""))
             if path != "/":
-                return self.reply(403 if path is None else 404)
+                return self.reply(404)
             state["bye"], state["last"] = None, time.time()
-            self.reply(200, build_page(spec, state["answers"], token, True, name).encode("utf-8"), "text/html; charset=utf-8")
+            self.reply(200, build_page(spec, state["answers"], token, True, name, doc_url).encode("utf-8"), "text/html; charset=utf-8")
 
         def do_POST(self):
             path = self.allowed()
@@ -476,9 +534,11 @@ def finish(spec, answers, project, record=True):
         print(ledger_table(ledger))
 
 
-def run_form(spec, spec_path, save_to, args, record=True):
-    """양식을 띄우고 끝 코드를 돌려준다. spec_path 가 있으면 보낸 뒤 양식 파일을 지운다."""
-    kind, answers = serve(spec, save_to, args.timeout, not args.no_open)
+def run_form(spec, spec_path, save_to, args, record=True, doc=None):
+    """양식을 띄우고 끝 코드를 돌려준다. spec_path 가 있으면 보낸 뒤 양식 파일을 지운다. 무인 실행이면 띄우지 않는다."""
+    if blocked(spec["kind"]):
+        return UNATTENDED
+    kind, answers = serve(spec, save_to, args.timeout, not args.no_open, doc=doc)
     if kind != "submitted":
         why = "보내지 않고 닫았다" if kind == "closed" else f"{args.timeout}분 동안 움직임이 없어 닫았다"
         saved = f" 지금까지 답은 {save_to} 에 있다." if Path(save_to).is_file() else ""
@@ -558,6 +618,10 @@ def main(argv=None):
                 cleanup(args.spec)
             raise
         save_to = answers_path(args.spec)
+        if args.command == "form" and blocked(spec["kind"]):
+            if piped:
+                cleanup(args.spec)
+            return UNATTENDED
         if args.command == "done":
             answers = read_answers(save_to)
             if answers is None:

@@ -3,7 +3,7 @@
   Stop              방금 답이 선택지를 냈으면(줄 머리 A · B 이름 둘 이상 + 줄 머리 `추천:`) 한 번 더 이어 가게 해서
                     고르기 양식(selection)을 띄우게 한다.
   UserPromptSubmit  프롬프트가 문서 스킬의 일이면(구현 확인 · 바뀐 부분 · 결정 모음 · 결정 기각 · 양식으로 고르기)
-                    그 스킬 파일을 가리키는 한 줄을 넣는다.
+                    그 스킬 파일을 가리키는 한 줄을 넣는다. 버그를 고치라는 요청이면 고친 뒤 바뀐 부분을 확인받으라는 한 줄을 넣는다.
 
 맞는 것이 없으면 아무것도 내지 않는다(토큰 0). 어떤 경우에도 세션을 막지 않는다.
 
@@ -46,6 +46,7 @@ python "__DECIDE__" form - --project "__ROOT__" <<'JSON'
 JSON
 띄웠으면 '고르기 양식을 띄웠다. 대화로 답해도 된다.' 한 줄만 쓰고 멈춘다. 선택지를 다시 쓰지 않는다.
 명령이 끝났다는 알림이 오면 출력을 읽는다. `양식 오류` 면 고쳐 다시 돌린다. 답이면 따른다: 고른 안으로 진행한다 · 피드백은 지시다 · 기각한 안은 다시 내지 않는다 · 안 고른 질문은 미결이다.
+고른 안 없이 기각만 온 질문은 다시 내라는 뜻이다. 선택지를 고쳐 같은 명령으로 다시 띄운다.
 사용자가 양식 대신 대화로 답하면 양식 명령을 멈추고 그 답을 따른다.
 방금 답이 사용자에게 고르라고 낸 선택지가 아니면 양식을 띄우지 않고 그대로 멈춘다."""
 
@@ -59,10 +60,25 @@ POINTERS = [
         r"결정\S*.{0,12}(모아|모음|모은|목록|정리해|뭐였|뭐\s*있)"
         r"|(정한|결정한)\s*(것|거|사항).{0,10}(모아|정리|보여|목록)")),
     ("selection", re.compile(r"(양식|체크\s*리스트)으로.{0,12}(골라|고[르를른]|정[하할]|선택)|고르기\s*양식")),
+    # "버그 원인 찾아줘" 처럼 고치라는 말이 없는 요청은 잡지 않는다
+    ("bugfix", re.compile(r"(버그|오류|에러|크래시|결함).{0,24}(고쳐|고치|고칠|수정해|수정하|잡아|해결해)"
+                          r"|(고쳐|고치|수정해|잡아).{0,10}(버그|오류|에러|크래시|결함)")),
 ]
 
 
+# 버그를 고치라는 요청 — 구조 스킬을 타지 않아도 고친 것을 확인받게 한다(사용자 2026-11-19: 버그 고칠 때도 쓸 수 있게).
+# 이 안내는 스킬 파일을 먼저 읽으라는 것이 아니다. 고치는 것이 먼저고 확인이 뒤다.
+BUGFIX = "bugfix"
+BUGFIX_TEXT = ("하네스 훅(doc_nudge): 버그를 고치라는 요청으로 보인다. 고친 뒤 끝났다고 쓰기 전에 "
+               "`~/.claude/skills/diff-proto/SKILL.md` 의 2~6 으로 바뀐 부분을 사용자에게 확인받는다. "
+               "사용자가 건너뛰라고 하면 건너뛴다. "
+               "고칠 방법이 둘 이상이고 고칠 곳이 서로 다르면 고치기 전에 선택지 · 추천을 내고 멈춘다. "
+               "코드를 바꾸지 않았거나 요청과 맞지 않으면 이 안내를 무시한다.")
+
+
 def pointer_text(skill):
+    if skill == BUGFIX:
+        return BUGFIX_TEXT
     return (f"하네스 훅(doc_nudge): 이 요청은 문서 스킬 `{skill}` 의 일로 보인다. "
             f"`~/.claude/skills/{skill}/SKILL.md` 를 읽고 그 순서를 따른다. 요청과 맞지 않으면 이 안내를 무시한다.")
 
@@ -151,9 +167,9 @@ def save_state(state):
 
 
 def form_open(data):
-    """고르기 · 변경 설명 양식이 이미 백그라운드에서 돌고 있는가."""
-    blob = json.dumps(data.get("background_tasks") or [], ensure_ascii=False)
-    return "decide.py" in blob or "diffdoc.py" in blob
+    """고르기 · 변경 설명 양식이 이미 백그라운드에서 돌고 있는가. 구조 문서와 한 페이지로 띄운 것(render.py --form)도 센다."""
+    tasks = [json.dumps(t, ensure_ascii=False) for t in data.get("background_tasks") or []]
+    return any("decide.py" in t or "diffdoc.py" in t or ("render.py" in t and "--form" in t) for t in tasks)
 
 
 def on_stop(data, env):
@@ -162,19 +178,22 @@ def on_stop(data, env):
     sid = str(data.get("session_id", ""))
     state = load_state()
     nudged_at = state.pop(sid, None)  # 양식을 띄운 뒤의 첫 멈춤 — 고른 뒤의 답이 선택지처럼 보여도 다시 띄우지 않는다
-    if nudged_at is not None:
+    showing = form_open(data)
+    if showing:  # 스킬이 스스로 띄운 양식도 같다 — 떠 있는 동안 표시를 새로 해 두면 답이 온 뒤 첫 멈춤을 건너뛴다
+        state[sid] = time.time()
+    if showing or nudged_at is not None:
         save_state(state)
     labels = find_options(str(data.get("last_assistant_message") or ""))
     if not labels:
         return None
     common = {"session": sid, "project": data.get("cwd", ""), "source": "doc_nudge"}
     ok, why = scope(data.get("cwd") or ".", env)
+    if ok and showing:
+        ok, why = False, "양식이 이미 떠 있음"
     if ok and nudged_at is not None and time.time() - float(nudged_at) < PENDING_TTL:
         ok, why = False, "양식을 띄운 직후"
     if ok and data.get("permission_mode") == "plan":
         ok, why = False, "계획 모드"
-    if ok and form_open(data):
-        ok, why = False, "양식이 이미 떠 있음"
     if not ok:
         emit("doc.nudge.skip", why, **common)
         return None
