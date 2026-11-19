@@ -43,6 +43,9 @@
 | 2 | `game-architecture` | 기능 추가·구현·설계 요청 (코드 전), 패턴 비교 · 게임 도메인 문제(버프 중첩·선입력·네트워크 예측·세이브 호환 등) | 선택지 A/B/C + "다음 요청 때 고칠 곳" + 근거 그림 → **사람이 고른다**. 패턴은 `references/patterns/`(옛 game-patterns): 증상 → 후보 → 엔진 관용구, 얻음/잃음/쓰지 말 때 |
 | 3 | `game-testing` | 검증 기준·테스트 | 완료 기준 먼저, 검증됨(자동/수동)/검증 안 됨 표기 |
 | 4 | `game-mcp` | 에디터 MCP 조작 | 읽기 먼저·쓰고 재조회·실패는 가드로 |
+| 문서 | `selection` | `/selection` 직접 호출 | A/B/C 카드 · 체크리스트 · 답 칸이 있는 양식. Enter 로 보내면 답이 세션으로 오고 결정 장부에 남는다 |
+| 문서 | `collect-decision` · `reject-decision` | `/collect-decision` · `/reject-decision` 직접 호출 | 결정 장부(`.claude/decisions.jsonl`)의 유효 · 기각 결정 페이지, 기각은 체크 + 이유 한 줄 |
+| 문서 | `diff-proto` | `/diff-proto` 직접 호출 | 실제 diff 를 뜻 묶음 · 위험 순으로 나눈 변경 설명. 묶음마다 확인 체크 · 메모 |
 
 흐름: 기획서(design-doc) → 사양 표 → 구조 조사(architecture) → 사람 선택 → 완료 기준(testing) → 구현 → 새 컨텍스트 리뷰.
 

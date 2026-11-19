@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""실제 diff 로 변경 설명 양식을 만든다 (git · svn · 패치 파일). 스킬 diff-proto 가 쓴다.
+
+  python diffdoc.py <이야기.json> [--path <저장소나 하위 폴더>] [--base <리비전>] [--patch <파일>] [--add <파일> …]
+                    [--check] [--force] [--project <루트>] [--keep] [--no-open] [--timeout <분>]
+
+코드는 diff 에서만 온다. 이야기(JSON)는 묶음의 제목 · 왜 · 볼 것 · 위험과, 어느 조각이 그 묶음인지만 적는다.
+- 이야기가 diff 에 없는 파일을 가리키면 멈춘다(--force 로 넘긴다). 없는 변경을 설명하는 문서를 막는다.
+- 어느 묶음에도 안 든 조각은 '묶이지 않은 변경' 으로 끝에 붙는다. 빠지는 조각이 없다.
+git 은 추적 안 된 새 파일도 넣는다. svn 은 올리지 않은 새 파일을 --add 로 준다.
+--check 는 묶음 점검 줄만 찍고 끝난다. 양식은 decide.py 가 띄운다(Enter 로 보내면 검토 결과를 찍고 이야기 파일을 지운다).
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from fnmatch import fnmatch
+from pathlib import Path
+
+import decide
+
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+RISKS = ("높음", "중간", "낮음")
+BIG_FILE = 300_000   # 이보다 큰 새 파일은 내용을 넣지 않는다
+BIG_DIFF = 3000      # 줄 수가 이보다 많으면 범위를 좁히라고 알린다
+REST = "묶이지 않은 변경"
+
+
+def decode(raw):
+    """UTF-8 이 아니면 CP949 로 읽는다 — 한글 Windows 에서 저장한 소스."""
+    for enc in ("utf-8", "cp949"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return raw.decode("utf-8", errors="replace")
+
+
+def run(cmd, cwd):
+    r = subprocess.run(cmd, cwd=str(cwd), capture_output=True)
+    if r.returncode != 0:
+        raise SystemExit(f"실패: {' '.join(cmd)}\n{decode(r.stderr).strip()[:400]}")
+    return decode(r.stdout)
+
+
+def detect_vcs(path):
+    p = Path(path).resolve()
+    for cand in [p, *p.parents]:
+        if (cand / ".git").exists():
+            return "git", cand
+        if (cand / ".svn").is_dir():
+            return "svn", cand
+    raise SystemExit("git/svn 작업 사본이 아니다. --patch <파일> 로 diff 를 준다.")
+
+
+def _clean(path, strip_prefix):
+    path = path.split("\t")[0].strip().strip('"')
+    if strip_prefix and path[:2] in ("a/", "b/"):
+        path = path[2:]
+    return path
+
+
+def parse_diff(text):
+    """통합 diff → [{path, status, binary, hunks:[{header, lines:[[종류, 옛 줄, 새 줄, 글]]}]}].
+    조각 머리의 줄 수만큼만 본문으로 읽는다 — '--- ' 로 시작하는 지운 줄을 파일 머리로 잘못 읽지 않는다."""
+    files, cur, hunk = [], None, None
+    old = new = left_old = left_new = 0
+    git = False
+    for line in text.splitlines():
+        if hunk is not None and (left_old > 0 or left_new > 0):
+            kind, body = line[:1], line[1:]
+            if kind == "\\":
+                continue
+            if kind == "-":
+                hunk["lines"].append(["-", old, None, body])
+                old, left_old = old + 1, left_old - 1
+            elif kind == "+":
+                hunk["lines"].append(["+", None, new, body])
+                new, left_new = new + 1, left_new - 1
+            else:
+                hunk["lines"].append([" ", old, new, body])
+                old, new, left_old, left_new = old + 1, new + 1, left_old - 1, left_new - 1
+            continue
+        hunk = None
+        if line.startswith("diff --git ") or line.startswith("Index: "):
+            git = line.startswith("diff")
+            m = re.match(r'diff --git "?a/(.*?)"? "?b/(.*?)"?$', line) if git else None
+            cur = {"path": m.group(2) if m else line[7:].strip(), "status": "수정", "binary": False, "hunks": []}
+            files.append(cur)
+        elif cur is None:
+            continue
+        elif m := HUNK.match(line):
+            old, new = int(m.group(1)), int(m.group(3))
+            left_old = int(m.group(2)) if m.group(2) is not None else 1
+            left_new = int(m.group(4)) if m.group(4) is not None else 1
+            hunk = {"header": line.strip(), "lines": []}
+            cur["hunks"].append(hunk)
+        elif line.startswith("new file mode"):
+            cur["status"] = "추가"
+        elif line.startswith("deleted file mode"):
+            cur["status"] = "삭제"
+        elif line.startswith("rename to "):
+            cur["status"], cur["path"] = "이름 바꿈", line[10:].strip().strip('"')
+        elif line.startswith(("Binary files ", "GIT binary patch", "Cannot display: file marked as a binary")):
+            cur["binary"] = True
+        elif line.startswith("--- "):
+            if _clean(line[4:], git) == "/dev/null" or "(nonexistent)" in line or "(revision 0)" in line:
+                cur["status"] = "추가"
+        elif line.startswith("+++ "):
+            if _clean(line[4:], git) == "/dev/null" or "(nonexistent)" in line:
+                cur["status"] = "삭제"
+            else:
+                cur["path"] = _clean(line[4:], git)
+    return files
+
+
+def new_file(root, rel, label="추가"):
+    """diff 에 안 잡히는 새 파일을 '전부 더한 조각' 하나로 만든다."""
+    path = Path(root) / rel
+    entry = {"path": str(rel).replace("\\", "/"), "status": label, "binary": False, "hunks": []}
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        raise SystemExit(f"--add 파일을 못 읽었다: {path}\n{e}")
+    if b"\0" in raw[:8000] or len(raw) > BIG_FILE:
+        entry["binary"] = True
+        return entry
+    lines = decode(raw).splitlines()
+    if lines:
+        entry["hunks"].append({"header": f"@@ -0,0 +1,{len(lines)} @@", "lines": [["+", None, i, s] for i, s in enumerate(lines, 1)]})
+    return entry
+
+
+def collect(args):
+    """→ 파일 목록. 패치 파일이 있으면 그것만, 없으면 작업 사본의 diff."""
+    if args.patch:
+        files = parse_diff(decode(Path(args.patch).read_bytes()))
+        root = Path(args.path).resolve()
+    else:
+        vcs, root = detect_vcs(args.path)
+        rel = Path(args.path).resolve().relative_to(root).as_posix() or "."
+        if vcs == "git":
+            files = parse_diff(run(["git", "-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-U3",
+                                    args.base or "HEAD", "--", rel], root))
+            untracked = run(["git", "-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard", "--", rel], root)
+            files += [new_file(root, f, "추가 · 추적 안 됨") for f in untracked.splitlines() if f.strip()]
+        else:
+            files = parse_diff(run(["svn", "diff", "--internal-diff"] + (["-r", args.base] if args.base else []) + [rel], root))
+    files += [new_file(root, Path(f).resolve().relative_to(root) if Path(f).is_absolute() else f, "추가 · 올리지 않음") for f in args.add]
+    return files
+
+
+def _selected(sel):
+    """'2' · '2-4' · '1,3' → 조각 번호 집합(1부터). 비면 전부."""
+    if not sel:
+        return None
+    picked = set()
+    for part in sel.split(","):
+        lo, _, hi = part.partition("-")
+        picked.update(range(int(lo), int(hi or lo) + 1))
+    return picked
+
+
+def _counts(hunks):
+    kinds = [l[0] for h in hunks for l in h["lines"]]
+    return kinds.count("+"), kinds.count("-")
+
+
+def build(files, story):
+    """diff 와 이야기를 묶는다. → (양식, 점검 줄, 오류)."""
+    claimed, errors, groups = {}, [], []
+    units = [(fi, hi) for fi, f in enumerate(files) for hi in (range(len(f["hunks"])) if f["hunks"] else [None])]
+
+    def make(gid, info, picked):
+        out = []
+        for fi in sorted({fi for fi, _ in picked}):
+            f = files[fi]
+            out.append({"path": f["path"], "status": f["status"], "binary": f["binary"],
+                        "hunks": [f["hunks"][hi] for pfi, hi in picked if pfi == fi and hi is not None]})
+        added, removed = _counts([h for f in out for h in f["hunks"]])
+        return {"id": gid, "title": info["title"], "why": info.get("why") or "", "look": info.get("look") or "",
+                "risk": info.get("risk") or "", "files": out, "added": added, "removed": removed}
+
+    for gi, g in enumerate(story.get("groups") or [], 1):
+        name = str(g.get("title") or "").strip()
+        if not name:
+            errors.append(f"묶음 {gi}: title 이 없다")
+            continue
+        if g.get("risk") and g["risk"] not in RISKS:
+            errors.append(f"묶음 {gi} '{name}': risk 는 {' · '.join(RISKS)} 중 하나다")
+        picked = []
+        for pattern in g.get("match") or []:
+            path, _, sel = pattern.partition("#")
+            try:
+                numbers = _selected(sel)
+            except ValueError:
+                errors.append(f"묶음 {gi} '{name}': 조각 번호를 못 읽었다 — {pattern}")
+                continue
+            hit = False
+            for fi, hi in units:
+                p = files[fi]["path"]
+                if not (p == path or p.endswith("/" + path) or fnmatch(p, path)):
+                    continue
+                if numbers is not None and (hi is None or hi + 1 not in numbers):
+                    continue
+                hit = True
+                if (fi, hi) not in claimed:
+                    claimed[(fi, hi)] = gi
+                    picked.append((fi, hi))
+            if not hit:
+                errors.append(f"묶음 {gi} '{name}': diff 에 없는 것을 가리킨다 — {pattern}")
+        if picked:
+            groups.append(make(f"g{gi}", g, picked))
+        elif g.get("match"):
+            errors.append(f"묶음 {gi} '{name}': 든 조각이 없다(앞 묶음이 다 가져갔거나 diff 에 없다)")
+        else:
+            errors.append(f"묶음 {gi} '{name}': match 가 없다")
+    rest = [u for u in units if u not in claimed]
+    if rest:
+        groups.append(make("rest", {"title": REST, "why": "이야기가 설명하지 않은 조각이다."}, rest))
+    added, removed = _counts([h for f in files for h in f["hunks"]])
+    stats = f"파일 {len(files)}개 · +{added} −{removed} · 조각 {len(units)}개"
+    report = f"{stats} · 묶은 것 {len(claimed)}개 · 묶이지 않은 것 {len(rest)}개"
+    if added + removed > BIG_DIFF:
+        report += f"\n점검: 바뀐 줄이 {added + removed}줄이다 — --path 를 하위 폴더로 좁히거나 나눠서 낸다"
+    if not story.get("groups"):
+        report += "\n점검: 묶음이 없다 — 설명 없는 diff 다"
+    spec = {"kind": "diff", "title": str(story.get("title") or "").strip(), "context": story.get("context") or [],
+            "stats": stats, "groups": groups}
+    return spec, report, errors
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("story", help="이야기 JSON: {title, context[], groups[{title, why, look, risk, match[]}]}")
+    ap.add_argument("--path", default=".", help="저장소나 그 하위 폴더. diff 를 이 아래로 좁힌다")
+    ap.add_argument("--base", help="비교할 리비전 (git 기본 HEAD · svn 기본 BASE)")
+    ap.add_argument("--patch", help="작업 사본 대신 읽을 통합 diff 파일")
+    ap.add_argument("--add", action="append", default=[], help="diff 에 안 잡히는 새 파일 (svn 에 올리지 않은 파일)")
+    ap.add_argument("--check", action="store_true", help="점검 줄만 찍고 끝난다")
+    ap.add_argument("--force", action="store_true", help="이야기가 diff 와 안 맞아도 띄운다")
+    ap.add_argument("--project", default=".")
+    ap.add_argument("--keep", action="store_true", help="보낸 뒤에도 이야기 · 답 파일을 지우지 않는다")
+    ap.add_argument("--no-open", action="store_true")
+    ap.add_argument("--timeout", type=int, default=120)
+    args = ap.parse_args(argv)
+
+    try:
+        story = json.loads(Path(args.story).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"이야기를 못 읽었다: {args.story}\n{e}")
+    files = collect(args)
+    if not files:
+        raise SystemExit("바뀐 것이 없다.")
+    spec, report, errors = build(files, story)
+    spec_errors, warns = decide.check_spec(spec)
+    print(report)
+    for w in warns:
+        print(f"점검: {w}")
+    errors = spec_errors + errors
+    if errors:
+        print("이야기 오류:\n" + "\n".join(f"- {e}" for e in errors))
+        if not args.force or spec_errors:
+            return 1
+    if args.check:
+        return 0
+    return decide.run_form(spec, args.story, decide.answers_path(args.story), args, record=False)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

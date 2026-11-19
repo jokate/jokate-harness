@@ -56,10 +56,15 @@ def link(src, dst):
         dst.symlink_to(src, target_is_directory=True)
 
 
+def skill_dirs():
+    """이 저장소의 스킬 폴더 — SKILL.md 가 있는 것 전부."""
+    return sorted(d for d in (REPO / "skills").iterdir() if (d / "SKILL.md").is_file())
+
+
 def install_skills(a):
     dst_root = CLAUDE / "skills"
     dst_root.mkdir(parents=True, exist_ok=True)
-    for src in sorted((REPO / "skills").glob("game-*")):
+    for src in skill_dirs():
         dst = dst_root / src.name
         if dst.exists() or dst.is_symlink():
             if dst.resolve() == src.resolve():

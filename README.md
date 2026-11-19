@@ -17,6 +17,10 @@ skills/
   game-architecture/  2층 · 구현 전 구조 조사 · scripts/evidence.py, render.py · references/patterns/ 패턴 카탈로그 + 게임 도메인 증상 + UE/Unity 관용구 (옛 game-patterns)
   game-testing/       3층 · 검증 기준·테스트
   game-mcp/           4층 · 에디터 MCP 운용
+  selection/          문서 · 고르기 양식 (/selection) · scripts/decide.py(양식 서버 · 결정 장부), diffdoc.py(변경 설명), page.html
+  collect-decision/   문서 · 결정 모음 (/collect-decision)
+  reject-decision/    문서 · 결정 기각 (/reject-decision)
+  diff-proto/         문서 · 시안의 바뀐 부분 확인 (/diff-proto)
 mods/
   game-harness-monitor/  Claude Code mod · 하네스 기능이 동작하면 상태줄·토스트·/harness 패널로 보인다
 tools/

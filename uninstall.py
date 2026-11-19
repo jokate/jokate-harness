@@ -5,7 +5,7 @@
   python uninstall.py [프로젝트 폴더 ...] [--project-only] [--purge] [--yes] [--dry-run]
 
 머신에서 (--project-only 가 아니면):
-  ~/.claude/skills/game-*      링크는 링크만 끊고, 복사본은 폴더를 지운다 (이 저장소에 있는 이름만)
+  ~/.claude/skills/<이름>      링크는 링크만 끊고, 복사본은 폴더를 지운다 (이 저장소에 있는 이름만)
   ~/.claude/hooks/<훅>.py      이 저장소가 설치한 훅 파일 (harness_events.py 포함)
   ~/.claude/mods/<mod>         하네스 모니터 mod (링크는 링크만 끊는다)
   ~/.claude/settings.json      그 훅을 가리키는 항목과 env.CLAUDE_CODE_PLUGIN_DIRS 의 mod 경로만 뺀다. 원본은 settings.json.bak
@@ -50,8 +50,13 @@ def is_link(p):
         (p.exists() and os.path.normcase(str(p.resolve())) != os.path.normcase(os.path.abspath(p)))
 
 
+def skill_dirs():
+    """이 저장소의 스킬 폴더 — SKILL.md 가 있는 것 전부."""
+    return sorted(d for d in (REPO / "skills").iterdir() if (d / "SKILL.md").is_file())
+
+
 def remove_skills(dry):
-    for src in sorted((REPO / "skills").glob("game-*")):
+    for src in skill_dirs():
         dst = CLAUDE / "skills" / src.name
         if not (dst.exists() or dst.is_symlink()):
             continue
