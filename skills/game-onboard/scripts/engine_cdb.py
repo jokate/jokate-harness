@@ -146,7 +146,7 @@ def main():
     ap = argparse.ArgumentParser(description="런처 설치 엔진용 엔진 compile_commands.json 합성")
     ap.add_argument("--root", default=".", help="프로젝트 폴더")
     ap.add_argument("--out", default=None, help=f"작업 폴더 (기본 {CACHE})")
-    ap.add_argument("--modules", default=None, help="이 모듈만 (쉼표로 구분) — 시험용")
+    ap.add_argument("--modules", default=None, help="이 모듈만 (쉼표로 구분) — 테스트용")
     ap.add_argument("--no-generate", action="store_true", help="뼈대 복사와 UBT 를 건너뛰고 이미 만든 .vscode 를 쓴다")
     a = ap.parse_args()
     root, kind, _ = gq.detect(a.root)

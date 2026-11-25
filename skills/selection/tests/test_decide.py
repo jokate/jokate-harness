@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""decide.py · diffdoc.py — 양식 점검, 서버 왕복(저장 · 보내기 · 토큰), 결정 장부(적기 · 기각), diff 묶기, 무인 실행 차단, 딸린 문서."""
+"""decide.py · diffdoc.py — 폼 점검, 서버 왕복(저장 · 보내기 · 토큰), 결정 로그(적기 · 기각), diff 묶기, 헤드리스 실행 차단, 딸린 문서."""
 import argparse
 import io
 import json
@@ -17,7 +17,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-os.environ["GAME_HARNESS_DOC_NUDGE"] = "1"  # 무인 실행(직원 · CI)에서 이 시험을 돌려도 양식이 뜬다. 차단은 Unattended 가 따로 본다
+os.environ["GAME_HARNESS_DOC_NUDGE"] = "1"  # 헤드리스 실행(직원 · CI)에서 이 테스트를 돌려도 폼이 뜬다. 차단은 Unattended 가 따로 본다
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import decide  # noqa: E402
 import diffdoc  # noqa: E402
@@ -26,7 +26,7 @@ WHY = {"problem": "입구가 넷이다", "dropped": ["A — 땜질"], "cost": "�
 SPEC = {"kind": "selection", "title": "피해 입구", "context": ["입구가 넷이다"], "questions": [
     {"id": "q1", "title": "구조는?", "why": WHY, "checks": ["선례와 같은 꼴인가", "기획자가 혼자 세팅하나"],
      "asks": [{"id": "a1", "text": "NPC 도 받나?"}],
-     "options": [{"id": "A", "name": "국소 패치"}, {"id": "B", "name": "입구 하나", "recommended": True}]},
+     "options": [{"id": "A", "name": "땜질 수정"}, {"id": "B", "name": "입구 하나", "recommended": True}]},
     {"id": "q2", "title": "이름은?", "options": [{"id": "A", "name": "Hit"}, {"id": "B", "name": "Damage"}]}]}
 
 
@@ -114,7 +114,7 @@ ANSWERS = {"q": {"q1": {"choice": "B", "keep": True, "rejects": {"A": "다음에
 
 
 class PipedForm(unittest.TestCase):
-    """`form -`: 양식을 표준 입력으로 받는다 — 모델이 파일을 따로 쓰지 않는다."""
+    """`form -`: 폼을 표준 입력으로 받는다 — 모델이 파일을 따로 쓰지 않는다."""
 
     def run_piped(self, spec, *flags):
         with tempfile.TemporaryDirectory() as tmp:
@@ -127,18 +127,18 @@ class PipedForm(unittest.TestCase):
     def test_bad_form_leaves_nothing(self):
         code, out, left = self.run_piped({"kind": "selection", "title": "x", "questions": []})
         self.assertEqual(code, 1)
-        self.assertIn("양식 오류", out)
+        self.assertIn("폼 오류", out)
         self.assertEqual(left, [])
 
     def test_good_form_is_read_from_stdin(self):
         code, out, left = self.run_piped(SPEC, "--static")
         self.assertEqual(code, 0, out)
-        self.assertIn("양식 파일:", out)
+        self.assertIn("폼 파일:", out)
         self.assertEqual(left, [".html", ".json"])
 
 
 class Unattended(unittest.TestCase):
-    """무인 실행(`claude -p` · 릴레이 직원)에서는 양식을 띄우지 않는다 — 받을 사람이 없어 명령이 끝나지 않는다."""
+    """헤드리스 실행(`claude -p` · 릴레이 직원)에서는 폼을 띄우지 않는다 — 받을 사람이 없어 명령이 끝나지 않는다."""
 
     def test_only_an_explicit_zero_blocks(self):
         self.assertEqual(decide.unattended({}), "")                                  # 신호가 없는 판(터미널 · IDE)은 띄운다
@@ -158,9 +158,9 @@ class Unattended(unittest.TestCase):
         for flags in ((), ("--static",)):
             code, out, left = self.run_cli("form", "-", *flags, stdin=json.dumps(SPEC, ensure_ascii=False).encode("utf-8"))
             self.assertEqual(code, decide.UNATTENDED, out)
-            self.assertIn("무인 실행", out)
+            self.assertIn("헤드리스 실행", out)
             self.assertIn("다음: 선택지와 추천은 답에 글로", out)
-            self.assertNotIn("양식: http", out)
+            self.assertNotIn("폼: http", out)
             self.assertEqual(left, [])
 
     def test_ledger_and_diff_pages_are_not_served(self):
@@ -171,11 +171,11 @@ class Unattended(unittest.TestCase):
             os.environ.pop("GAME_HARNESS_DOC_NUDGE")
             code = decide.run_form({"kind": "diff", "title": "x", "groups": []}, None, "x.answers.json", args)
         self.assertEqual(code, decide.UNATTENDED)
-        self.assertIn("변경 설명을 띄우지 않았다", buf.getvalue())
+        self.assertIn("diff-proto 페이지를 띄우지 않았다", buf.getvalue())
         self.assertIn("구현 확인 안 받음", buf.getvalue())
 
     def test_diff_page_says_so_at_the_first_command(self):
-        """이야기를 쓰기 전의 첫 명령(--status)에서 안다 — 무인 실행이 확인 단계에 토큰을 쓰지 않는다."""
+        """이야기를 쓰기 전의 첫 명령(--status)에서 안다 — 헤드리스 실행이 확인 단계에 토큰을 쓰지 않는다."""
         with tempfile.TemporaryDirectory() as tmp:
             env = {**os.environ, "PYTHONIOENCODING": "utf-8", "CLAUDE_CODE_SESSION_ATTENDED": "0"}
             env.pop("GAME_HARNESS_DOC_NUDGE")
@@ -183,11 +183,11 @@ class Unattended(unittest.TestCase):
                 r = subprocess.run([sys.executable, str(Path(diffdoc.__file__)), *flags, "--path", tmp, "--project", tmp],
                                    capture_output=True, env=env, timeout=30)
                 self.assertEqual(r.returncode, decide.UNATTENDED, r.stdout.decode("utf-8", "replace"))
-                self.assertIn("무인 실행", r.stdout.decode("utf-8", "replace"))
+                self.assertIn("헤드리스 실행", r.stdout.decode("utf-8", "replace"))
 
 
 class DocPage(unittest.TestCase):
-    """문서가 딸린 양식: 문서와 문서가 쓰는 파일을 같은 서버가 토큰을 받고 내보낸다 — 읽는 곳과 고르는 곳이 한 탭이다."""
+    """문서가 딸린 폼: 문서와 문서가 쓰는 파일을 같은 서버가 토큰을 받고 내보낸다 — 읽는 곳과 고르는 곳이 한 탭이다."""
 
     def test_doc_and_its_files_are_served_behind_the_token(self):
         with tempfile.TemporaryDirectory() as d:
@@ -204,7 +204,7 @@ class DocPage(unittest.TestCase):
             t.start()
             self.assertTrue(ready.wait(5))
             base, token = result["url"].split("/?t=")
-            self.assertIn(f'"doc": "/doc?t={token}"', http(result["url"])[1])   # 양식 페이지가 문서를 가리킨다
+            self.assertIn(f'"doc": "/doc?t={token}"', http(result["url"])[1])   # 폼 페이지가 문서를 가리킨다
             code, body = http(f"{base}/doc?t={token}")
             self.assertEqual(code, 200)
             self.assertIn("문서 본문", body)
@@ -226,7 +226,7 @@ class LedgerFlow(unittest.TestCase):
         text = decide.selection_summary(SPEC, ANSWERS)
         self.assertIn("| 1 | 구조는? | B. 입구 하나 | 같음 | 이름은 X 로 |", text)
         self.assertIn("| 2 | 이름은? | 안 고름 | — | 동사로 시작하게 |", text)
-        self.assertIn("- 1번 A. 국소 패치 — 다음에 또 네 곳", text)
+        self.assertIn("- 1번 A. 땜질 수정 — 다음에 또 네 곳", text)
         self.assertIn("- 2번 A. Hit — 엔진 이름과 겹친다", text)
         self.assertIn("- 2번 B. Damage — (이유 없음)", text)
         self.assertIn("- 1번: 기획자가 혼자 세팅하나", text)
@@ -240,7 +240,7 @@ class LedgerFlow(unittest.TestCase):
             second = decide.add_decision(ledger, "카메라", "어깨 너머", dropped=["탑뷰"])
             self.assertEqual(second, "D-002")
             first = decide.load_events(ledger)[0]
-            self.assertEqual((first["choice"], first["dropped"], first["note"]), ("B. 입구 하나", ["A. 국소 패치 — 다음에 또 네 곳"], "이름은 X 로"))
+            self.assertEqual((first["choice"], first["dropped"], first["note"]), ("B. 입구 하나", ["A. 땜질 수정 — 다음에 또 네 곳"], "이름은 X 로"))
             self.assertEqual(first["answers"], [{"q": "NPC 도 받나?", "a": "예"}])
             before = ledger.read_text(encoding="utf-8")
             done, skipped = decide.reject_decisions(ledger, [("D-001", "입구가 다시 갈렸다"), ("D-002", ""), ("D-009", "x")])
@@ -274,7 +274,7 @@ class LedgerFlow(unittest.TestCase):
             with redirect_stdout(out):
                 code = decide.main(["done", str(spec_path), "--project", d])
             self.assertEqual(code, 0)
-            self.assertIn("장부: D-001", out.getvalue())
+            self.assertIn("결정 로그: D-001", out.getvalue())
             self.assertEqual(list(Path(d).glob("form*")), [])
             self.assertTrue(decide.ledger_path(d).is_file())
 
@@ -357,7 +357,7 @@ class DiffDoc(unittest.TestCase):
         self.assertEqual([(g["id"], g["title"], g["added"], g["removed"]) for g in spec["groups"]],
                          [("g1", "버퍼 규칙을 한 곳으로", 2, 1), ("g2", "새 타입", 2, 0), ("rest", diffdoc.REST, 2, 1)])
         self.assertEqual([f["path"] for f in spec["groups"][2]["files"]], ["Src/Buffer.cpp", "Art/icon.png"])
-        self.assertIn("조각 4개 · 묶은 것 2개 · 묶이지 않은 것 2개", report)
+        self.assertIn("hunk 4개 · 묶은 것 2개 · 묶이지 않은 것 2개", report)
         self.assertEqual(decide.check_spec(spec)[0], [])
         text = decide.diff_summary(spec, {"g": {"g1": {"verdict": "ok", "note": "경계 확인"}, "g2": {"verdict": "no", "note": "이름을 바꿔라"}}})
         self.assertIn("확인 1 · 기각 1 · 미정 1", text)
@@ -370,7 +370,7 @@ class DiffDoc(unittest.TestCase):
                                           {"title": "위험 오타", "risk": "큼", "match": ["Src/New.h"]}]}
         _, _, errors = diffdoc.build(diffdoc.parse_diff(GIT_DIFF), story)
         joined = "\n".join(errors)
-        for needle in ("diff 에 없는 것을 가리킨다 — Src/Ghost.cpp", "묶음 2: title 이 없다", "risk 는 높음 · 중간 · 낮음"):
+        for needle in ("diff 에 없는 것을 가리킨다 — Src/Ghost.cpp", "그룹 2: title 이 없다", "risk 는 높음 · 중간 · 낮음"):
             self.assertIn(needle, joined)
 
     def test_cp949_source_is_decoded(self):
@@ -427,7 +427,7 @@ class ImplementationCycle(unittest.TestCase):
         (self.repo / "a.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
     def run_doc(self, *flags, groups=None, verdicts=None):
-        """diffdoc 을 돌린다. verdicts 를 주면 뜬 양식에 그 판정을 보내고 끝까지 기다린다. → 출력."""
+        """diffdoc 을 돌린다. verdicts 를 주면 뜬 폼에 그 판정을 보내고 끝까지 기다린다. → 출력."""
         cmd = [sys.executable, "-u", str(Path(diffdoc.__file__)), "--path", str(self.repo), "--project", str(self.repo), "--no-open", *flags]
         if groups is not None:
             self.story.write_text(json.dumps({"title": "선입력 창", "groups": groups}, ensure_ascii=False), encoding="utf-8")
@@ -440,7 +440,7 @@ class ImplementationCycle(unittest.TestCase):
             for raw in proc.stdout:
                 line = raw.decode("utf-8", "replace")
                 seen.append(line)
-                if line.startswith("양식: "):
+                if line.startswith("폼: "):
                     base, token = line.split()[1].split("/?t=")
                     self.assertEqual(http(f"{base}/submit?t={token}", {"answers": {"g": verdicts}})[0], 204)
                     break
@@ -452,22 +452,22 @@ class ImplementationCycle(unittest.TestCase):
         self.write({3: "new 3", 25: "hard-coded 25"})
         out = self.run_doc(groups=both, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": "no", "note": "테이블에서 읽어라"}})
         self.assertIn("확인 1 · 기각 1 · 미정 0", out)
-        self.assertIn("확인 누계: 조각 1/2", out)
-        self.assertIn("다음: 기각한 묶음을 피드백대로 고친다", out)
+        self.assertIn("확인 누계: hunk 1/2", out)
+        self.assertIn("다음: 기각한 그룹을 피드백대로 고친다", out)
         self.assertNotIn("구현이 확정됐다", out)
 
-        self.write({3: "new 3", 25: "from table 25"})                      # 기각 묶음만 고쳤다
+        self.write({3: "new 3", 25: "from table 25"})                      # 기각 그룹만 고쳤다
         status = self.run_doc("--status")
-        self.assertIn("조각 2개 · 확인 1개 · 남은 것 1개", status)
+        self.assertIn("hunk 2개 · 확인 1개 · 남은 것 1개", status)
         self.assertIn("- a.txt#2", status)
         self.assertNotIn("a.txt#1", status)
 
         again = [{"title": "창 길이를 테이블에서 읽는다", "match": ["a.txt#2"]}]
         check = self.run_doc("--check", groups=again)
-        self.assertIn("묶은 것 1개 · 묶이지 않은 것 0개 · 앞서 확인한 것 1개", check)  # 확인한 조각이 '묶이지 않은 변경' 으로 돌아오지 않는다
+        self.assertIn("묶은 것 1개 · 묶이지 않은 것 0개 · 앞서 확인한 것 1개", check)  # 확인한 hunk 가 '묶이지 않은 변경' 으로 돌아오지 않는다
         out = self.run_doc(groups=again, verdicts={"g1": {"verdict": "ok", "note": ""}})
         self.assertIn("확인 1 · 기각 0 · 미정 0 · 앞서 확인 1", out)
-        self.assertIn("확인 누계: 조각 2/2", out)
+        self.assertIn("확인 누계: hunk 2/2", out)
         self.assertIn("다음: 구현이 확정됐다", out)
         self.assertIn("구현이 확정됐다", self.run_doc("--status"))            # 새 프로세스(새 세션)에서도 남아 있다
 
@@ -479,16 +479,16 @@ class ImplementationCycle(unittest.TestCase):
         status = self.run_doc("--status")
         self.assertIn("남은 것 1개", status)
         self.assertIn("- a.txt#1", status)
-        self.write({3: "new 3", 25: "extra"})                              # 확인한 조각은 그대로, 새 조각이 생겼다
+        self.write({3: "new 3", 25: "extra"})                              # 확인한 hunk 는 그대로, 새 hunk 가 생겼다
         status = self.run_doc("--status")
-        self.assertIn("조각 2개 · 확인 1개 · 남은 것 1개", status)
+        self.assertIn("hunk 2개 · 확인 1개 · 남은 것 1개", status)
         self.assertIn("- a.txt#2", status)
 
     def test_undecided_group_is_not_confirmed(self):
         self.write({3: "new 3", 25: "new 25"})
         both = [{"title": "하나", "match": ["a.txt#1"]}, {"title": "둘", "match": ["a.txt#2"]}]
         out = self.run_doc(groups=both, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": None, "note": ""}})
-        self.assertIn("다음: 미정 1묶음은 확인받지 못했다", out)
+        self.assertIn("다음: 미정 1그룹은 확인받지 못했다", out)
         self.assertNotIn("구현이 확정됐다", out)
         self.assertIn("남은 것 1개", self.run_doc("--status"))
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""cindex_speed.py 시험 (표준 라이브러리 unittest). clangd 없이 돈다.
+"""cindex_speed.py 테스트 (표준 라이브러리 unittest). clangd 없이 돈다.
 
   python skills/game-onboard/tests/test_cindex_speed.py
 

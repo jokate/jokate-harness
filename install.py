@@ -376,7 +376,7 @@ def settings_snippet():
     trace = cmd("harness_trace.py", 10, {"async": True})
     return {"hooks": {
         "SessionStart": [{"hooks": [cmd("session_start.py", 60), cmd("game_context.py", 15)]}],
-        # 문서 양식 훅: 맞는 것이 없으면 아무것도 내지 않는다. 답의 선택지 · 프롬프트의 낱말에 걸릴 때만 한 줄 넣는다.
+        # 문서 폼 훅: 맞는 것이 없으면 아무것도 내지 않는다. 답의 선택지 · 프롬프트의 낱말에 걸릴 때만 한 줄 넣는다.
         "UserPromptSubmit": [{"hooks": [cmd("doc_nudge.py", 5)]}],
         "Stop": [{"hooks": [cmd("doc_nudge.py", 5)]}],
         "PreToolUse": [{"matcher": "mcp__.*", "hooks": [cmd("mcp_guard.py", 5)]}],

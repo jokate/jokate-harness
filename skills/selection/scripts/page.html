@@ -183,7 +183,7 @@ function renderSelection() {
     sec.append(h("h3", {}, "피드백"), text(a, "note", "고른 안에 붙일 지시나, 선택지를 다시 낼 방향"));
     sec.append(h("label", {class: "row keep"},
       h("input", {type: "checkbox", checked: !!a.keep, onchange: e => { a.keep = e.target.checked; touch(); }}),
-      h("span", {}, "이 결정을 장부에 남긴다 — 되돌리기 어렵거나 나중에 다시 물을 결정만")));
+      h("span", {}, "결정 로그에 남긴다 — 되돌리기 어렵거나 나중에 다시 물을 결정만")));
     main.append(sec);
   });
   $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
@@ -191,7 +191,7 @@ function renderSelection() {
 function unanswered() { return spec.questions.filter(q => !S.q[q.id].choice); }
 function rejected() { return spec.questions.flatMap((q, i) => Object.keys(S.q[q.id].rejects || {}).map(id => ({q, n: i + 1, id}))); }
 
-/* ── 변경 설명 ── */
+/* ── diff-proto 페이지 ── */
 function diffTable(hunk) {
   const t = h("table", {class: "diff"}), cell = (cls, txt) => h("td", {class: cls}, txt == null ? "" : txt);
   if (!split) hunk.lines.forEach(([k, o, n, s]) => t.append(h("tr", {}, cell("no", o), cell("no", n), cell(k === "+" ? "a" : k === "-" ? "d" : "c", s))));
@@ -279,11 +279,11 @@ function progress() {
   const p = $("prog");
   if (spec.kind === "selection") {
     const n = unanswered().length, r = rejected().length, k = spec.questions.filter(q => S.q[q.id].keep && S.q[q.id].choice).length;
-    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 장부 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
+    p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 결정 로그 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
   } else if (spec.kind === "diff") {
     const open = spec.groups.filter(g => !g.locked), count = v => open.filter(g => S.g[g.id].verdict === v).length;
     p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (open.length - count("ok") - count("no"))
-      + (open.length < spec.groups.length ? " · 앞서 확인한 묶음은 묻지 않는다" : "");
+      + (open.length < spec.groups.length ? " · 앞서 확인한 그룹은 묻지 않는다" : "");
   }
   else if (spec.mode === "reject") p.textContent = "기각 " + Object.values(S.r || {}).filter(a => a.reject).length + "건";
   else p.textContent = "유효 " + spec.live.length + "건 · 기각 " + spec.dead.length + "건";
@@ -292,7 +292,7 @@ function finished(msg) { const d = $("done"); d.textContent = msg; d.style.displ
 async function submit() {
   clearTimeout(timer);
   if (!BOOT.served) {
-    const payload = "양식 답 — " + BOOT.name + "\n```json\n" + JSON.stringify(S) + "\n```";
+    const payload = "폼 답 — " + BOOT.name + "\n```json\n" + JSON.stringify(S) + "\n```";
     try { await navigator.clipboard.writeText(payload); status("답을 복사했다 — 대화창에 붙여 넣는다"); }
     catch (e) { $("main").prepend(h("section", {}, h("p", {class: "sub"}, "아래를 복사해 대화창에 붙여 넣는다"), h("textarea", {rows: 6, value: payload}))); }
     return;
@@ -317,7 +317,7 @@ function trySubmit() {
     const bad = spec.groups.map((g, i) => ({g, n: i + 1})).filter(x => S.g[x.g.id].verdict === "no" && !S.g[x.g.id].note.trim());
     if (bad.length) {
       $("g-" + bad[0].g.id).open = true; $("n-" + bad[0].g.id).focus();
-      status("기각한 묶음에 피드백이 필요하다: " + bad.map(b => b.n + "번").join(", "));
+      status("기각한 그룹에 피드백이 필요하다: " + bad.map(b => b.n + "번").join(", "));
       return;
     }
   }

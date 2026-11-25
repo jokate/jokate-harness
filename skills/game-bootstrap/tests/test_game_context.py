@@ -74,7 +74,7 @@ class Facts(unittest.TestCase):
         self.assertEqual(self.lines(), "")
         ledger.write_text("# 팀 피드백\n\n## 2026-11-15 · 데이터 구조\n- 누가: 동료\n\n## 2026-11-20 · 세팅 방식\n", encoding="utf-8")
         out = self.lines()
-        self.assertIn("팀 피드백 장부", out)
+        self.assertIn("팀 피드백 로그", out)
         self.assertIn("2건", out)
         self.assertIn("game-architecture", out)
 

@@ -1,6 +1,6 @@
 ---
 name: game-testing
-description: 게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, 테스트 문서, 자동 테스트 작성 · 헤드리스 실행(UE Automation · Unity EditMode/PlayMode), 원인 모를 버그는 재현 고리부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". 검증 안 한 것을 동작한다고 쓰지 않게 한다.
+description: 게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, 테스트 문서, 자동 테스트 작성 · 헤드리스 실행(UE Automation · Unity EditMode/PlayMode), 원인 모를 버그는 재현 루프부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". 검증 안 한 것을 동작한다고 쓰지 않게 한다.
 ---
 
 # game-testing — 검증 기준을 구현보다 먼저
@@ -41,8 +41,8 @@ description: 게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 �
 - 재현 절차가 없는 버그 수정은 수정 전 실패를 먼저 재현한다 (실패 테스트 → 수정 → 통과).
 - 버그를 고쳤으면 끝났다고 쓰기 전에 바뀐 부분을 사용자에게 확인받는다(사용자 결정 2026-11-19).
   먼저 `python ~/.claude/skills/selection/scripts/diffdoc.py --status --path <저장소> --project <프로젝트 루트>` 를 돌린다.
-  `무인 실행` 이 나오면(끝 코드 4) 건너뛰고 결과에 그렇게 적는다. 아니면 `~/.claude/skills/diff-proto/SKILL.md` 를 읽고 2~6을 따른다.
+  `헤드리스 실행` 이 나오면(exit code 4) 건너뛰고 결과에 그렇게 적는다. 아니면 `~/.claude/skills/diff-proto/SKILL.md` 를 읽고 2~6을 따른다.
   기각은 고쳐 다시 확인받는다. 사용자가 건너뛰라고 하면 건너뛴다.
 - 고칠 방법이 둘 이상이고 고칠 곳이 서로 다르면 고치기 전에 선택지 표와 추천(왜 네 칸)을 내고 멈춘다. 고르는 것은 사용자다.
   구조가 갈리는 수정이면 `game-architecture` 로 넘긴다. 고칠 방법이 하나면 묻지 않고 고친다.
-  원인을 모르면 [references/debugging.md](references/debugging.md) 순서대로: 재현 고리 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리.
+  원인을 모르면 [references/debugging.md](references/debugging.md) 순서대로: 재현 루프 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리.

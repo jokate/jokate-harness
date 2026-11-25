@@ -35,8 +35,8 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
 - 둘 곳: PATH, `~/.claude/tools/clangd/bin/`, 또는 `--indexer <경로>` / 환경 변수 `CLANGD_INDEXER`.
 - **setup 이 설치한다**: `clangd_tools.py install` (install.py 단계) — 못 찾는 것만 23.1.0 릴리스에서 받아 SHA-256 을 대조하고
   `~/.claude/tools/clangd/{bin, lib/clang/23/include, share}` 에 푼다. `lib/clang/23/include` 는 clang 내장 헤더(`stddef.h` 등)로
-  실행 파일이 `../lib/clang/<버전>` 에서 찾는다 — 없으면 표준 헤더를 쓰는 TU 가 전부 실패한다(시험에서 33/33).
-  `lib/clang/23/lib`(링크용 컴파일러 런타임)는 색인에 안 쓰여 뺀다. 버전 고정 이유: RIFF 리더와 시험이 23.1.0 출력으로 검증됐다.
+  실행 파일이 `../lib/clang/<버전>` 에서 찾는다 — 없으면 표준 헤더를 쓰는 TU 가 전부 실패한다(테스트에서 33/33).
+  `lib/clang/23/lib`(링크용 컴파일러 런타임)는 색인에 안 쓰여 뺀다. 버전 고정 이유: RIFF 리더와 테스트가 23.1.0 출력으로 검증됐다.
   `status` 로 확인, `remove` 는 이 스크립트가 설치한 파일만 지운다 (`uninstall --purge` 가 부른다).
 
 ### clangd (`--mode bg`, 증분)
@@ -74,7 +74,7 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   풀어 본 TU 의 60% 는 오류가 사라졌다(묶음 탓) — 정확도를 더 원하면 이 옵션을 빼고 하룻밤 돌린다.
   프로젝트 폴더에 `.vscode` 를 만들지 않으려고 `.uproject` · Config · Source · Plugins 의 소스만 복사한 곳에서 생성한다. 항목마다 `/std:c++20` 과
   빈 `.gen.cpp` 폴더를 붙인다 — 런처 엔진은 `.gen.cpp` 를 싣지 않아 `UE_INLINE_GENERATED_CPP_BY_NAME` 이 TU 마다 fatal error 가 되고 유니티 묶음이 전부 풀린다.
-  `--modules A,B` 로 몇 모듈만 먼저 시험한다. 실측(MNYS · UE 5.7): 모듈 847 · TU 23,602 → 묶음 3,399, 모듈 4개 시험은 VERIFICATION.md 2026-10-14.
+  `--modules A,B` 로 몇 모듈만 먼저 테스트한다. 실측(MNYS · UE 5.7): 모듈 847 · TU 23,602 → 묶음 3,399, 모듈 4개 테스트는 VERIFICATION.md 2026-10-14.
   엔진 범위는 **배경 색인(`--mode bg`)을 권한다** — 몇 시간짜리라 중간에 끊겨도 만든 샤드부터 이어진다(clangd-indexer 는 처음부터 다시).
 - **그 외 C++**: 빌드 시스템이 만든 것 (CMake 는 `CMAKE_EXPORT_COMPILE_COMMANDS=ON`) → `--cdb`.
 
@@ -210,7 +210,7 @@ r Source/…/X.cpp:3:48  in Tick  │ <그 줄 원문>
 
 1. **종료 코드 0 이어도 오류가 있을 수 있다.** TU 에 오류가 있어도 0 이다 → `build` 가 stderr 의 `Error while processing` 을 세어
    "오류 있던 TU" 로 낸다 (배경 색인은 샤드의 오류 표시로 센다). 오류가 있어도 심볼은 대부분 들어간다 — include 를 못 찾아도 그 뒤 선언까지
-   색인된다. 예외는 2번: UE 매크로 구조에서 `.generated.h` 가 없으면 UCLASS 클래스 선언과 멤버가 빠진다 (시험, 2026-10-07).
+   색인된다. 예외는 2번: UE 매크로 구조에서 `.generated.h` 가 없으면 UCLASS 클래스 선언과 멤버가 빠진다 (테스트, 2026-10-07).
 2. **`.generated.h` 누락·낡음이면 UCLASS 타입과 멤버가 조용히 빠진다** (`FID_…_PROLOG` 미정의 — .cpp 의 메서드 정의만 남는다). 에디터 빌드(UHT) 한 번 뒤 다시 build. `build` 가 경고한다.
 3. **멤버 시그니처는 기록되지 않는다** — clangd 는 클래스 멤버에 Signature·ReturnType 을 저장하지 않는다. `members` 는 선언 줄 원문을, 시그니처는 `ue_q.py api` 를 쓴다.
 4. **Call 비트는 "호출"이 아니다** — 함수류 심볼에 대한 모든 참조(선언, `&Fn` 포함)에 붙는다. callers/callees 는 Reference 비트 + 참조의 Container 로 계산한 **근사 호출 그래프**다. 호출 관계(relation)는 clangd 에 없다.

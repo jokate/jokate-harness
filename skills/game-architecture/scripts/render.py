@@ -3,7 +3,7 @@
 """Markdown(+Mermaid) → 단일 HTML. SVN 처럼 .md 를 렌더하지 않는 환경이나, Mermaid 를 그리지 않는 Claude Code 대화창 대신 브라우저로 연다.
 
   python render.py <입력.md> [-o 출력.html] [--js-dir <폴더>] [--open]
-  python render.py <입력.md> --form [--project <루트>]     문서와 고르기 양식을 한 페이지로 띄운다
+  python render.py <입력.md> --form [--project <루트>]     문서와 선택 폼을 한 페이지로 띄운다
   python render.py --attach <HTML…> [--project <루트>]     남이 쓴 HTML 에 문서 메모 칸을 붙인다 (--detach 로 뗀다)
 
 스크립트(marked·mermaid)는 이 폴더의 vendor/ 에 동봉돼 있다 — 설치할 것이 없고 인터넷이 없어도 그려진다.
@@ -11,9 +11,9 @@ HTML 은 동봉 파일을 먼저 불러오고, 못 불러오면(다른 PC 로 HT
 --js-dir 를 주면 그 폴더의 marked.min.js, mermaid.min.js 만 쓴다. 어느 쪽도 못 불러오면 원문을 그대로 보인다.
 game-architecture 가 구조 문서를 저장한 뒤 `render.py --form` 으로 쓴다.
 
---form 은 문서의 '선택지' · '질문' 절을 고르기 양식으로 옮겨 문서와 한 페이지에 낸다(selection 의 decide.py 서버).
+--form 은 문서의 '선택지' · '질문' 절을 선택 폼으로 옮겨 문서와 한 페이지에 낸다(selection 의 decide.py 서버).
 읽는 곳(그림 · 근거)과 고르는 곳(안마다 고름 · 기각 · 피드백)이 한 탭이다. Enter 로 보내면 이 명령이 답을 찍고 끝난다.
-선택지 절이 없거나 못 읽으면 문서만 연다. 무인 실행이면 문서만 만들고 띄우지 않는다(끝 코드 4).
+선택지 절이 없거나 못 읽으면 문서만 연다. 헤드리스 실행이면 문서만 만들고 띄우지 않는다(exit code 4).
 
 만든 HTML 에는 문서 메모 칸(notes.html)이 붙는다. 나중에 보다가 이상한 곳을 긋거나 제목 옆 ✎ 를 눌러 적는다.
 'Claude 로 열기'는 claude-cli:// 주소로 그 프로젝트에 새 세션을 열고 요청을 채운다. '복사'는 같은 글을 클립보드에 둔다.
@@ -187,7 +187,7 @@ def page(**vals):
 
 def scripts(js_dir=None, url_for=None):
     """<script> 태그들. --js-dir 이면 그 폴더만, 아니면 동봉 파일 → (못 불러오면) CDN.
-    url_for(파일) → 주소 를 주면 동봉 파일을 그 주소로 부른다 — 양식 서버가 내보낸 http 페이지는 file:// 을 못 읽는다."""
+    url_for(파일) → 주소 를 주면 동봉 파일을 그 주소로 부른다 — 폼 서버가 내보낸 http 페이지는 file:// 을 못 읽는다."""
     if js_dir:
         d = Path(js_dir).resolve()
         return "".join(f'<script src="{html.escape((d / f"{k}.min.js").as_uri())}"></script>' for k in CDN)
@@ -215,7 +215,7 @@ DATE_TAG = re.compile(
 WORK_ID = re.compile(r"\btask_[0-9a-f]{6,}\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # 작업 · 커밋 번호
 FIVE_W = re.compile(r"^\|\s*누가\s*\|.*언제.*어디서.*무엇.*어떻게.*왜", re.M)  # 근거 육하원칙 표 머리줄
 WHY_SLOTS = ("문제", "버린 안", "대가", "뒤집는 조건")  # 추천 밑 결정 블록 (docs/READING.md)
-CHOICE_HEADS = ("선택지", "고를 것")  # 고를 것: 릴레이 GUIDE 의 결재 양식. 이 절이 있으면 추천 · 왜 · 근거 표를 본다
+CHOICE_HEADS = ("선택지", "고를 것")  # 고를 것: 릴레이 GUIDE 의 결재 폼. 이 절이 있으면 추천 · 왜 · 근거 표를 본다
 RECOMMEND = re.compile(r"^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?\**추천\**\s*(?:[:：]|[—–]\s)", re.M)
 # '언제' 칸에 문서를 쓰거나 검토한 때를 적은 줄("구조 검토 시점"). 코드가 불리는 때 · 확인한 날짜 · 커밋은 통과한다
 VAGUE_WHEN = re.compile(r"검토|작성|문서|조사")
@@ -260,7 +260,7 @@ def _fold_long(text, limit=LONG):
 def summary_first(md, hide=()):
     """game-architecture 답변이면 결론 · 선택지 · 그림 · 결정 절을 위로, 나머지 절은 접힌 <details> 하나로 내린다.
     보이는 절의 긴 줄은 첫 문장만 남기고 접는다. 긴 줄글 HTML 이 읽기 힘들다는 사용자 피드백(2026-10-20).
-    '선택지' 절이 없는 글은 그대로 둔다. hide 로 시작하는 절은 위에 두지 않고 접는다(양식이 그 절을 카드로 보일 때)."""
+    '선택지' 절이 없는 글은 그대로 둔다. hide 로 시작하는 절은 위에 두지 않고 접는다(폼이 그 절을 카드로 보일 때)."""
     lines = md.splitlines()
     heads = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
     if not any(_sec_name(lines[i]).startswith("선택지") for i in heads):
@@ -525,7 +525,7 @@ def dd_svg(fig):
 def embed_figs(md, figs, out_dir, url_for=None):
     """'그림' 절 맨 앞에 diagram-design 구조도를 끼워 넣는다. 그 절의 Mermaid 는 원본 코드로 접는다
     (닫힌 <details> 안에서는 mermaid 가 크기를 못 재므로 그리지 않고 글로 둔다). '그림' 절이 없으면 새로 만든다.
-    url_for 를 주면 구조도 파일을 그 주소로 가리킨다(양식 서버가 내보낼 때)."""
+    url_for 를 주면 구조도 파일을 그 주소로 가리킨다(폼 서버가 내보낼 때)."""
     if not figs:
         return md
     tags = []
@@ -631,8 +631,8 @@ def attach(targets, project=None, remove=False):
 
 def render_html(md, out, title, js_dir=None, full=False, src=None, url_for=None, hide=(), project=None):
     """HTML 글. src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다.
-    url_for 를 주면 양식 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다.
-    문서 메모 칸은 파일로 남는 HTML 에만 싣는다. 양식 페이지에는 기각 이유 · 답 칸이 따로 있다."""
+    url_for 를 주면 폼 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다.
+    문서 메모 칸은 파일로 남는 HTML 에만 싣는다. 폼 페이지에는 기각 이유 · 답 칸이 따로 있다."""
     md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent, url_for)
     md = md if full else readable(md, hide)
     stamp = f"{Path(src).name if src else Path(out).stem} · {time.strftime('%Y-%m-%d %H:%M')}"
@@ -647,11 +647,11 @@ def render(md, out, title, js_dir=None, full=False, src=None, project=None):
     return out
 
 
-# ── 문서 → 고르기 양식 (--form) ────────────────────────────────────────────
-# 구조 문서가 이미 선택지 · 추천 · 왜 · 질문을 담고 있다. 양식을 따로 쓰게 하면 같은 것을 두 번 쓰고 두 탭이 뜬다.
-# 그래서 문서에서 읽어 양식으로 옮기고, 문서와 한 페이지에 낸다(사용자 2026-11-19: HTML 로 띄우는 것과 양식을 하나로).
+# ── 문서 → 선택 폼 (--form) ────────────────────────────────────────────
+# 구조 문서가 이미 선택지 · 추천 · 왜 · 질문을 담고 있다. 폼을 따로 쓰게 하면 같은 것을 두 번 쓰고 두 탭이 뜬다.
+# 그래서 문서에서 읽어 폼으로 옮기고, 문서와 한 페이지에 낸다(사용자 2026-11-19: HTML 로 띄우는 것과 폼을 하나로).
 QUESTION_HEADS = ("질문",)
-FORM_HIDES = CHOICE_HEADS + QUESTION_HEADS  # 양식이 카드로 보이는 절 — 실은 문서에서는 접힌 근거로 내린다
+FORM_HIDES = CHOICE_HEADS + QUESTION_HEADS  # 폼이 카드로 보이는 절 — 실은 문서에서는 접힌 근거로 내린다
 OPTION = re.compile(r"^([A-Z])(?:안|[.)])?(?:\s*[:—–-]\s*|\s+|$)(.*)$")
 WHY_KEYS = {"문제": "problem", "버린 안": "dropped", "대가": "cost", "뒤집는 조건": "flip"}
 WHY_LINE = re.compile(r"^\s*[-*]\s*\**(문제|버린 안|대가|뒤집는 조건)\**\s*[:：]\s*(.+)$", re.M)
@@ -660,7 +660,7 @@ EMPTY_CELL = ("", "…", "...", "-", "—")
 
 
 def _plain(text):
-    """표 칸 · 제목의 마크다운 표시를 걷는다 — 양식은 글자 그대로 보인다."""
+    """표 칸 · 제목의 마크다운 표시를 걷는다 — 폼은 글자 그대로 보인다."""
     t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", str(text or ""))
     t = re.sub(r"<[^>]+>", " ", t)
     return re.sub(r"\s+", " ", t.replace("**", "").replace("`", "")).strip()
@@ -754,7 +754,7 @@ def _heading_options(sec):
 
 
 def _decision_questions(sec, rec_line):
-    """결정이 여럿인 표(행마다 결정 하나, 열마다 안): `| 결정 | A. 국소 패치 | B | C | 정함 |` → 행마다 질문 하나."""
+    """결정이 여럿인 표(행마다 결정 하나, 열마다 안): `| 결정 | A. 땜질 수정 | B | C | 정함 |` → 행마다 질문 하나."""
     marks = dict(MARKED.findall(rec_line))
     for head, rows in _tables(sec):
         cols = [(i, _option(h)) for i, h in enumerate(head) if i > 0]
@@ -780,8 +780,8 @@ def _decision_questions(sec, rec_line):
 
 
 def doc_form(md, title):
-    """구조 문서 → (고르기 양식, 못 읽은 이유들). '선택지' 절의 안 · 추천 · 왜 네 칸과 '질문' 절의 표를 옮긴다.
-    안은 표의 행(첫 칸 `A. 국소 패치`)이나 열(머리줄 `| | A. … | B. … |`)이나 소제목(`### A. 국소 패치 — …`)에서 읽는다.
+    """구조 문서 → (선택 폼, 못 읽은 이유들). '선택지' 절의 안 · 추천 · 왜 네 칸과 '질문' 절의 표를 옮긴다.
+    안은 표의 행(첫 칸 `A. 땜질 수정`)이나 열(머리줄 `| | A. … | B. … |`)이나 소제목(`### A. 땜질 수정 — …`)에서 읽는다.
     결정이 여럿인 표(`| 결정 | A | B | 정함 |`)는 행마다 질문 하나가 된다."""
     sec = _section(md, CHOICE_HEADS)
     if not sec.strip():
@@ -859,7 +859,7 @@ def doc_form(md, title):
 
 
 def load_decide():
-    """selection 스킬의 양식 엔진. 설치가 반쪽이면 None — 그때는 문서만 연다."""
+    """selection 스킬의 폼 엔진. 설치가 반쪽이면 None — 그때는 문서만 연다."""
     folder = HERE.parent.parent / "selection" / "scripts"
     if not (folder / "decide.py").is_file():
         return None
@@ -872,7 +872,7 @@ def load_decide():
 
 
 def run_form(src, md, title, out, a):
-    """문서와 고르기 양식을 한 페이지로 띄우고 끝 코드를 돌려준다. 양식을 못 만들면 문서만 연다."""
+    """문서와 선택 폼을 한 페이지로 띄우고 exit code 를 돌려준다. 폼을 못 만들면 문서만 연다."""
     decide = load_decide()
     spec, errors = doc_form(md, title)
     if decide and spec:
@@ -885,11 +885,11 @@ def run_form(src, md, title, out, a):
     elif not decide:
         errors = ["selection 스킬(decide.py)이 없다 — setup.bat 을 다시 돌린다"]
     if decide and decide.unattended():
-        print(f"띄우지 않았다 — 무인 실행이다({decide.unattended()}). 문서만 만들었다.\n"
+        print(f"띄우지 않았다 — 헤드리스 실행이다({decide.unattended()}). 문서만 만들었다.\n"
               "다음: 선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.")
         return decide.UNATTENDED
     if errors:
-        print("고르기 양식을 붙이지 못했다 — 문서만 연다:\n" + "\n".join(f"- {e}" for e in errors))
+        print("선택 폼을 붙이지 못했다 — 문서만 연다:\n" + "\n".join(f"- {e}" for e in errors))
         err = None if a.no_open else open_file(out)
         if err:
             print(f"열지 못했다 ({err}). 위 경로를 브라우저로 직접 연다.")
@@ -919,8 +919,8 @@ def main(argv=None):
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
     ap.add_argument("--full", action="store_true",
                     help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 그 밖의 글은 요약 · 그림 먼저, 나머지는 접기)")
-    ap.add_argument("--form", action="store_true", help="문서와 고르기 양식을 한 페이지로 띄운다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
-    ap.add_argument("--project", help="프로젝트 루트. --form 은 '남김' 표시한 결정을 그 아래 결정 장부에 적는다. "
+    ap.add_argument("--form", action="store_true", help="문서와 선택 폼을 한 페이지로 띄운다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
+    ap.add_argument("--project", help="프로젝트 루트. --form 은 '남김' 표시한 결정을 그 아래 결정 로그에 적는다. "
                                       "문서 메모의 'Claude 로 열기'가 여는 폴더다(안 주면 문서 위쪽 폴더에서 찾는다)")
     ap.add_argument("--attach", action="store_true", help="남이 쓴 HTML 에 문서 메모 칸을 붙인다(다시 붙이면 바꿔 끼운다)")
     ap.add_argument("--detach", action="store_true", help="붙인 문서 메모 칸을 뗀다")

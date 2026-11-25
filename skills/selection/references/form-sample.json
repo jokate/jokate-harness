@@ -11,7 +11,7 @@
       "title": "구조: A / B / C 중 무엇?",
       "changes": "구현 범위 전체",
       "options": [
-        {"id": "A", "name": "국소 패치", "summary": "네 입구에 분기를 하나씩 더한다.",
+        {"id": "A", "name": "땜질 수정", "summary": "네 입구에 분기를 하나씩 더한다.",
          "next": "4곳 · 땜질", "gain": "오늘 끝난다", "loss": "다음 종류 때 또 네 곳"},
         {"id": "B", "name": "입구 하나", "summary": "피해를 한 함수로 받는다.",
          "next": "1곳", "gain": "고칠 곳이 하나", "loss": "호출부 네 곳을 한 번 옮긴다", "recommended": true},

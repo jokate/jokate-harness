@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""cindex.py 조회 계층 시험 (표준 라이브러리 unittest). clangd 없이 합성 원본 표로 돈다.
+"""cindex.py 조회 계층 테스트 (표준 라이브러리 unittest). clangd 없이 합성 원본 표로 돈다.
 
   python skills/game-onboard/tests/test_cindex_query.py
 

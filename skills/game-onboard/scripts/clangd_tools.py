@@ -7,7 +7,7 @@
   python clangd_tools.py remove              # 이 스크립트가 설치한 파일만 지운다 (uninstall.py --purge 가 부른다)
 
 받는 것: github.com/clangd/clangd 릴리스 23.1.0 의 clangd-<os>-23.1.0.zip · clangd_indexing_tools-<os>-23.1.0.zip.
-  버전을 고정한다 — cindex 의 RIFF 리더(clangd_riff.py)와 시험이 이 버전 출력으로 검증됐다. 받은 zip 은 SHA-256 을 대조한다.
+  버전을 고정한다 — cindex 의 RIFF 리더(clangd_riff.py)와 테스트가 이 버전 출력으로 검증됐다. 받은 zip 은 SHA-256 을 대조한다.
 푸는 것: bin/clangd(.exe) · bin/clangd-indexer(.exe) · lib/clang/23/{include,share}
   (clang 내장 헤더 — 실행 파일이 ../lib/clang/<버전> 에서 찾는다). lib/clang/23/lib 는 링크용 컴파일러 런타임이라 색인에 안 쓰여 뺀다.
 내려받는 양: Windows 약 63MB(설치 뒤 약 110MB), 리눅스 약 280MB, 맥 약 210MB.
