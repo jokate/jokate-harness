@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""뺀 훅 시험 (표준 라이브러리 unittest): 뺀 훅의 하네스 등록만 지우는가.
+"""뺀 훅 테스트 (표준 라이브러리 unittest): 뺀 훅의 하네스 등록만 지우는가.
 
   python skills/game-bootstrap/tests/test_hook_scope.py
 """

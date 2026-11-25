@@ -51,8 +51,8 @@
 (function () {
   const CFG = __GN__;  // src: 고칠 원본(이 HTML 폴더 기준, 비면 이 HTML) · up: 프로젝트 루트까지 올라갈 폴더 수(모르면 null) · max: 주소 길이 상한
   const html = document.documentElement;
-  if (window.top !== window || html.hasAttribute('data-embed') || window.__ghNotes) return;  // 양식 안에 실린 문서 · 두 번 붙은 문서
-  window.__ghNotes = {paths, text: n => text(n), link: n => link(n)};  // 시험에서 들여다보는 손잡이
+  if (window.top !== window || html.hasAttribute('data-embed') || window.__ghNotes) return;  // 폼 안에 실린 문서 · 두 번 붙은 문서
+  window.__ghNotes = {paths, text: n => text(n), link: n => link(n)};  // 테스트에서 들여다보는 손잡이
   const box = document.getElementById('gh-notes'), $ = s => box.querySelector(s);
   const pill = $('.gn-pill'), panel = $('.gn-panel'), list = $('.gn-list'), at = $('.gn-at'), ta = $('textarea'),
         go = $('.gn-go'), cp = $('.gn-copy'), wipe = $('.gn-wipe'), msg = $('.gn-msg');

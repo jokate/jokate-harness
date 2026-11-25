@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""engine_cdb.py 시험 (표준 라이브러리 unittest). UBT · clangd 없이 가짜 엔진 폴더로 돈다.
+"""engine_cdb.py 테스트 (표준 라이브러리 unittest). UBT · clangd 없이 가짜 엔진 폴더로 돈다.
 
   python skills/game-onboard/tests/test_engine_cdb.py
 

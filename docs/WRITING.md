@@ -34,7 +34,7 @@
 ```
 전  game-testing  게임 프로젝트(UE / Unity)의 … "이거 동작 확인" … "Functional Test", "Unity Test Framework" …
 뒤  game-testing  게임 프로젝트(UE / Unity)의 테스트 · 검증 — 구현 전에 "무엇으로 확인하나" 정하기, … 원인 모를 버그는
-                  재현 고리부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". …
+                  재현 루프부터. "테스트 짜줘", "검증해줘", "QA 체크리스트", "버그 원인 찾아줘". …
 ```
 
 - 줄일 때 새 갈래가 생기면 촉발 말을 하나 더한다: "프로토타입으로 확인" 은 없을 때 플러그인 prototype 으로 샜다.
@@ -48,7 +48,7 @@
 | references/ | 일부 갈래만 쓰는 형식 · 표 · 근거 | 포인터가 열 때 |
 | scripts/ | 매번 같게 돌아야 하는 일 (`gq.py`) | 실행할 때만 |
 
-- 내리는 시험: 모든 갈래가 쓰면 본문, 일부만 쓰면 references 로 내리고 본문엔 포인터 한 줄.
+- 내리는 테스트: 모든 갈래가 쓰면 본문, 일부만 쓰면 references 로 내리고 본문엔 포인터 한 줄.
 - 너무 적게 내리면 본문이 부풀고 너무 많이 내리면 필요한 글이 숨는다.
 - 환경이 아는 것은 옮겨 적지 않는다. 이유 · 함정 · 안 적힌 관례만 적는다 (포인터 줄의 명령은 예외).
 
@@ -63,7 +63,7 @@
 
 - 순서로 나눈다: 뒷단계가 앞단계를 서두르게 하고 문맥 경계가 있을 때만 (예: 구현 뒤 리뷰).
 - 새 스킬은 사용자가 따로 치는 낱말이 있거나 다른 스킬이 불러야 할 때만 (game-patterns: 0회 불림 → 합침).
-- 이끄는 말: 풀어 쓴 문장 대신 모델이 아는 낱말 하나 — 땜질 · 국소 패치 · 가드 · 좌표 · 검증 안 됨.
+- 이끄는 말: 풀어 쓴 문장 대신 모델이 아는 낱말 하나 — 땜질 수정 · 가드 · 좌표 · 검증 안 됨.
 - 해야 할 일을 앞에 쓴다: "grep 하기 전에 `cindex.py refs`" 가 앞, "grep 으로 추측하지 않는다" 가 뒤.
 - 가지치기: 한 뜻은 한 곳 · 15일 0회 훅 · 스킬은 뺀다 · 모델이 이미 하는 일은 문장째 지운다.
 
@@ -79,7 +79,7 @@
 | 할 일 | 명령 · 곳 |
 |---|---|
 | 바꾸기 전 대조 | `python tools/harness_probe.py --spec <spec.json>` |
-| 크기 재기 · 시험 | `python tools/context_budget.py <프로젝트>` · `test_context_budget.py` |
+| 크기 재기 · 테스트 | `python tools/context_budget.py <프로젝트>` · `test_context_budget.py` |
 | 교훈 남기기 | `EXPERIENCE.draft.md` 확인 → `docs/experience/<이름>.md` + `INDEX.md` 한 줄 |
 | 날짜별 기록 | `docs/VERIFICATION.md` |
 | 바깥에서 빌리기 | `docs/UPSTREAM.md` 표 + `upstream.json` + `python tools/upstream_check.py [--remote \| --diff \| --accept]` |

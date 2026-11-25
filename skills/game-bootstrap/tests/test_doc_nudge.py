@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""문서 양식 훅: 선택지를 낸 답에서만 한 번 띄우고, 고른 뒤의 답 · 무인 실행 · 꺼 둔 곳에서는 조용하다.
+"""문서 폼 훅: 선택지를 낸 답에서만 한 번 띄우고, 고른 뒤의 답 · 헤드리스 실행 · 꺼 둔 곳에서는 조용하다.
 
   python skills/game-bootstrap/tests/test_doc_nudge.py
 """
@@ -21,7 +21,7 @@ OPTIONS = """한눈에: 선입력 창을 어디에 둘지 정한다.
 
 | 선택지 | 다음 요청 때 고칠 곳 |
 |---|---|
-| A. 국소 패치 | 3곳 |
+| A. 땜질 수정 | 3곳 |
 | B. 버퍼가 창을 갖는다 | 1곳 |
 
 추천: B — 고칠 곳이 한 곳이다.
@@ -51,7 +51,7 @@ class Detect(unittest.TestCase):
         for prompt, skill in [("이 구현 확인받자", "diff-proto"), ("바뀐 부분 보여줘", "diff-proto"),
                               ("변경점 문서로 정리해줘", "diff-proto"), ("지금까지 결정한 것 모아줘", "collect-decision"),
                               ("결정 목록 보여줘", "collect-decision"), ("저 결정 기각할래", "reject-decision"),
-                              ("결정 뒤집자", "reject-decision"), ("양식으로 고를게", "selection"),
+                              ("결정 뒤집자", "reject-decision"), ("폼으로 고를게", "selection"), ("양식으로 고를게", "selection"),
                               ("버그 고쳐줘", "bugfix"), ("콤보가 끊기는 버그 좀 잡아줘", "bugfix"), ("고쳐줘 이 크래시", "bugfix"),
                               ("버그 고친 부분 보여줘", "diff-proto")]:
             self.assertEqual(doc_nudge.find_pointer(prompt), skill, prompt)
@@ -94,7 +94,7 @@ class Hook(unittest.TestCase):
         self.assertEqual(first["decision"], "block")
         self.assertIn('scripts/decide.py" form - --project "' + self.game.resolve().as_posix() + '"', first["reason"])
         self.assertNotIn("__", first["reason"])                      # 채울 자리가 남지 않았다
-        self.assertIsNone(self.stop(stop_hook_active=True))          # 양식을 띄운 차례의 끝
+        self.assertIsNone(self.stop(stop_hook_active=True))          # 폼을 띄운 차례의 끝
         self.assertIsNone(self.stop(AFTER_CHOICE))                   # 고른 뒤의 답
         self.assertEqual(self.stop()["decision"], "block")           # 다음 선택지는 다시 띄운다
         self.assertEqual([f for f, _ in self.features()], ["doc.nudge.selection", "doc.nudge.selection"])
@@ -102,8 +102,8 @@ class Hook(unittest.TestCase):
     def test_answer_that_looks_like_options_right_after_a_form_is_skipped(self):
         self.stop()
         self.stop(stop_hook_active=True)
-        self.assertIsNone(self.stop())                               # 양식 답 뒤에 선택지처럼 보이는 답
-        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "양식을 띄운 직후"))
+        self.assertIsNone(self.stop())                               # 폼 답 뒤에 선택지처럼 보이는 답
+        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "폼을 띄운 직후"))
         self.assertEqual(self.stop()["decision"], "block")           # 한 번만 건너뛴다
 
     def test_other_sessions_do_not_share_the_skip(self):
@@ -137,19 +137,19 @@ class Hook(unittest.TestCase):
     def test_plan_mode_and_open_form(self):
         self.assertIsNone(self.stop(permission_mode="plan"))
         self.assertIsNone(self.stop(session_id="s6", background_tasks=[{"command": "python decide.py form x.json"}]))
-        self.assertEqual([d for _, d in self.features()], ["계획 모드", "양식이 이미 떠 있음"])
+        self.assertEqual([d for _, d in self.features()], ["계획 모드", "폼이 이미 떠 있음"])
 
     def test_form_a_skill_launched_counts_like_one_the_hook_launched(self):
-        page = [{"command": "python render.py 20261119-창.md --form --project ."}]  # 구조 문서와 한 페이지로 띄운 양식
-        self.assertIsNone(self.stop("양식을 띄웠다. 대화로 답해도 된다.", background_tasks=page))
+        page = [{"command": "python render.py 20261119-창.md --form --project ."}]  # 구조 문서와 한 페이지로 띄운 폼
+        self.assertIsNone(self.stop("폼을 띄웠다. 대화로 답해도 된다.", background_tasks=page))
         self.assertEqual(self.features(), [])                        # 선택지를 적지 않은 답 — 기록 없이 표시만 해 둔다
         self.assertIsNone(self.stop(background_tasks=page))          # 선택지를 같이 적어도 탭을 또 띄우지 않는다
-        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "양식이 이미 떠 있음"))
+        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "폼이 이미 떠 있음"))
         self.assertIsNone(self.stop())                               # 답이 온 뒤의 첫 멈춤
-        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "양식을 띄운 직후"))
+        self.assertEqual(self.features()[-1], ("doc.nudge.skip", "폼을 띄운 직후"))
         self.assertEqual(self.stop()["decision"], "block")           # 그다음 선택지는 다시 띄운다
         plain = [{"command": "python render.py 20261119-창.md --open"}]
-        self.assertEqual(self.stop(session_id="s7", background_tasks=plain)["decision"], "block")  # 문서만 연 것은 양식이 아니다
+        self.assertEqual(self.stop(session_id="s7", background_tasks=plain)["decision"], "block")  # 문서만 연 것은 폼이 아니다
 
     def test_prompt_pointer(self):
         out = self.prompt("바뀐 부분 보여줘")
@@ -165,7 +165,7 @@ class Hook(unittest.TestCase):
         self.assertIn("diff-proto/SKILL.md` 의 2~6", text)
         self.assertIn("선택지 · 추천을 내고 멈춘다", text)
         self.assertEqual(self.features()[-1][0], "doc.nudge.bugfix")
-        self.assertIsNone(self.prompt("버그 고쳐줘", env={}))         # 무인 실행에는 넣지 않는다
+        self.assertIsNone(self.prompt("버그 고쳐줘", env={}))         # 헤드리스 실행에는 넣지 않는다
 
     def run_hook(self, data, **env):
         full = {**os.environ, **ATTENDED, "GAME_HARNESS_EVENTS": str(self.events), **env}
@@ -177,7 +177,7 @@ class Hook(unittest.TestCase):
                            "stop_hook_active": False, "last_assistant_message": OPTIONS})
         self.assertEqual(r.returncode, 0)
         self.assertTrue(r.stdout.isascii())                          # 콘솔 코드페이지와 무관하게 읽힌다
-        self.assertIn("고르기 양식", json.loads(r.stdout)["reason"])
+        self.assertIn("선택 폼", json.loads(r.stdout)["reason"])
 
     def test_process_never_fails(self):
         for raw in (b"", b"not json", json.dumps({"hook_event_name": "Stop"}).encode()):

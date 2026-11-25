@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""고르는 양식과 결정 장부. 스킬 selection · collect-decision · reject-decision · diff-proto 가 같이 쓴다.
+"""고르는 폼과 결정 로그. 스킬 selection · collect-decision · reject-decision · diff-proto 가 같이 쓴다.
 
-  python decide.py form <양식.json> [--project <루트>] [--keep] [--no-record] [--no-open] [--timeout <분>] [--static]
-  python decide.py form - [--project <루트>]      양식 JSON 을 표준 입력으로 준다 (파일을 따로 쓰지 않는다)
-  python decide.py done <양식.json> [--project <루트>] [--keep] [--no-record]
+  python decide.py form <폼.json> [--project <루트>] [--keep] [--no-record] [--no-open] [--timeout <분>] [--static]
+  python decide.py form - [--project <루트>]      폼 JSON 을 표준 입력으로 준다 (파일을 따로 쓰지 않는다)
+  python decide.py done <폼.json> [--project <루트>] [--keep] [--no-record]
   python decide.py add --topic <주제> --choice <고른 것> [--question <질문>] [--dropped <버린 안> …] [--note <메모>]
   python decide.py list [--all]
   python decide.py collect [--print]
   python decide.py reject [--id D-003 --reason <이유>]
 
 form 은 페이지를 메모리에서 내보낸다. HTML 파일을 남기지 않는다.
-문서가 딸린 양식(game-architecture 의 `render.py --form`)은 같은 페이지 위쪽에 그 문서를 싣는다 — 읽는 곳과 고르는 곳이 한 탭이다.
-사용자가 Enter 로 보내면 답을 표준 출력에 찍고, 고르기 양식이면 '남김' 표시한 결정을 장부에 적고, 양식 파일을 지우고 끝난다. 탭은 페이지가 스스로 닫는다.
+문서가 딸린 폼(game-architecture 의 `render.py --form`)은 같은 페이지 위쪽에 그 문서를 싣는다 — 읽는 곳과 고르는 곳이 한 탭이다.
+사용자가 Enter 로 보내면 답을 표준 출력에 찍고, 선택 폼이면 '남김' 표시한 결정을 결정 로그에 적고, 폼 파일을 지우고 끝난다. 탭은 페이지가 스스로 닫는다.
 그래서 이 명령을 백그라운드로 돌리면 사용자가 보낸 순간 답이 부른 세션으로 돌아온다.
---static 은 서버를 못 띄울 때만 쓴다: HTML 을 양식 옆에 쓰고, 사용자가 복사한 답을 <양식>.answers.json 에 저장한 뒤 done 을 돌린다.
+--static 은 서버를 못 띄울 때만 쓴다: HTML 을 폼 옆에 쓰고, 사용자가 복사한 답을 <폼>.answers.json 에 저장한 뒤 done 을 돌린다.
 
-장부는 <프로젝트>/.claude/decisions.jsonl 이다. 덧붙이기만 한다 — 기각은 옛 줄을 고치지 않고 '기각' 줄을 더한다.
-끝 코드: 0 보냄 · 1 양식 오류 · 2 보내지 않고 닫음 · 3 시간 초과 · 4 무인 실행이라 띄우지 않음.
+결정 로그는 <프로젝트>/.claude/decisions.jsonl 이다. 덧붙이기만 한다 — 기각은 옛 줄을 고치지 않고 '기각' 줄을 더한다.
+exit code: 0 보냄 · 1 폼 오류 · 2 보내지 않고 닫음 · 3 시간 초과 · 4 헤드리스 실행이라 띄우지 않음.
 
-무인 실행(CLAUDE_CODE_SESSION_ATTENDED=0 — `claude -p` · 릴레이 직원)에서는 양식을 띄우지 않는다. 받을 사람이 없어 명령이 끝나지 않는다.
+헤드리스 실행(CLAUDE_CODE_SESSION_ATTENDED=0 — `claude -p` · 릴레이 직원)에서는 폼을 띄우지 않는다. 받을 사람이 없어 명령이 끝나지 않는다.
   GAME_HARNESS_DOC_NUDGE=0   어디서든 띄우지 않는다
-  GAME_HARNESS_DOC_NUDGE=1   무인 신호가 있어도 띄운다 (시험)
+  GAME_HARNESS_DOC_NUDGE=1   헤드리스 실행 신호가 있어도 띄운다 (테스트)
 """
 
 import argparse
@@ -48,28 +48,28 @@ for _s in (sys.stdout, sys.stderr):  # 한글 Windows 콘솔(cp949)에서 '—' 
 PAGE = Path(__file__).resolve().parent / "page.html"
 ID_OK = re.compile(r"^[A-Za-z0-9_-]+$")
 LONG = 120           # 한 줄에 사실 하나 (docs/READING.md)
-MAX_QUESTIONS = 5    # 한 번에 묻는 수. 넘으면 다음 양식으로
+MAX_QUESTIONS = 5    # 한 번에 묻는 수. 넘으면 다음 폼으로
 MAX_OPTIONS = 4
 MAX_CHECKS = 7
 CLOSE_GRACE = 3.0    # 탭이 닫힌 뒤 이만큼 기다린다 — 새로 고침이면 그 사이에 다시 온다
-UNATTENDED = 4       # 끝 코드: 무인 실행이라 띄우지 않았다
+UNATTENDED = 4       # exit code: 헤드리스 실행이라 띄우지 않았다
 SWITCH, ATTENDED = "GAME_HARNESS_DOC_NUDGE", "CLAUDE_CODE_SESSION_ATTENDED"  # 훅 doc_nudge.py 와 같은 스위치
 ASSET_TYPES = {".js": "text/javascript", ".html": "text/html", ".svg": "image/svg+xml", ".css": "text/css",
                ".png": "image/png", ".json": "application/json"}
 BLOCKED = {"selection": "선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.",
-           "diff": "사용자 확인 단계를 건너뛴다. 결과에 '구현 확인 안 받음 — 무인 실행' 이라고 적는다.",
+           "diff": "사용자 확인 단계를 건너뛴다. 결과에 '구현 확인 안 받음 — 헤드리스 실행' 이라고 적는다.",
            "ledger": "표만 보려면 `decide.py list` 를 쓴다."}
 WHY = (("problem", "문제"), ("dropped", "버린 안"), ("cost", "대가"), ("flip", "뒤집는 조건"))
 
 
-# ── 양식 점검 ──────────────────────────────────────────────────────────────
+# ── 폼 점검 ──────────────────────────────────────────────────────────────
 
 def _ids_ok(ids):
     return len(set(ids)) == len(ids) and all(ID_OK.match(i) for i in ids)
 
 
 def check_spec(spec):
-    """→ (오류, 경고). 오류가 있으면 양식을 띄우지 않는다."""
+    """→ (오류, 경고). 오류가 있으면 폼을 띄우지 않는다."""
     errors, warns = [], []
     kind = spec.get("kind")
     if kind not in ("selection", "diff", "ledger"):
@@ -84,7 +84,7 @@ def check_spec(spec):
     if not questions:
         errors.append("questions 가 비었다")
     if len(questions) > MAX_QUESTIONS:
-        warns.append(f"질문 {len(questions)}개 — {MAX_QUESTIONS}개 이하로 줄이고 나머지는 다음 양식으로")
+        warns.append(f"질문 {len(questions)}개 — {MAX_QUESTIONS}개 이하로 줄이고 나머지는 다음 폼으로")
     if not _ids_ok([str(q.get("id") or "") for q in questions]):
         errors.append("질문 id 가 없거나 겹치거나 영문 · 숫자 · - · _ 가 아니다")
     for i, q in enumerate(questions, 1):
@@ -118,10 +118,10 @@ def check_spec(spec):
     return errors, warns
 
 
-# ── 무인 실행 ──────────────────────────────────────────────────────────────
+# ── 헤드리스 실행 ──────────────────────────────────────────────────────────────
 
 def unattended(env=None):
-    """양식을 받을 사람이 없는 실행이면 그 이유, 아니면 ''. 신호가 0 일 때만 막는다 — 신호가 없는 판(터미널 · IDE)은 띄운다."""
+    """폼을 받을 사람이 없는 실행이면 그 이유, 아니면 ''. 신호가 0 일 때만 막는다 — 신호가 없는 판(터미널 · IDE)은 띄운다."""
     env = os.environ if env is None else env
     switch = env.get(SWITCH, "")
     if switch == "1":
@@ -132,18 +132,18 @@ def unattended(env=None):
 
 
 def blocked(kind, env=None):
-    """무인 실행이면 대신 할 일을 찍고 True."""
+    """헤드리스 실행이면 대신 할 일을 찍고 True."""
     why = unattended(env)
     if why:
-        what = "변경 설명" if kind == "diff" else "양식"
-        print(f"{what}을 띄우지 않았다 — 무인 실행이다({why}).\n다음: {BLOCKED.get(kind, BLOCKED['selection'])}")
+        what = "diff-proto 페이지를" if kind == "diff" else "폼을"
+        print(f"{what} 띄우지 않았다 — 헤드리스 실행이다({why}).\n다음: {BLOCKED.get(kind, BLOCKED['selection'])}")
     return bool(why)
 
 
 # ── 페이지 · 서버 ──────────────────────────────────────────────────────────
 
 def build_page(spec, state, token, served, name, doc=None):
-    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 양식만 나온다."""
+    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 폼만 나온다."""
     boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc}, ensure_ascii=False)
     for bad, safe in (("</", "<\\/"), ("<!--", "<\\!--"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
         boot = boot.replace(bad, safe)  # <script> 안에서 끊기지 않게
@@ -172,7 +172,7 @@ def write_answers(path, answers, submitted):
 
 
 def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=None, doc=None):
-    """양식을 127.0.0.1 에서 내보내고 보낼 때까지 기다린다. → (끝 종류, 답). 끝 종류: submitted · closed · timeout.
+    """폼을 127.0.0.1 에서 내보내고 보낼 때까지 기다린다. → (끝 종류, 답). 끝 종류: submitted · closed · timeout.
     주소의 토큰이 없으면 페이지도 저장도 거절한다 — 다른 웹 페이지가 이 포트로 읽거나 쓰지 못한다.
     doc 은 같은 페이지에 실을 문서를 만드는 함수다: doc(url_for) → HTML. url_for(파일) 은 그 파일을 이 서버에서 읽는 주소를 준다
     (문서가 쓰는 스크립트 · 그림 — http 페이지는 file:// 을 못 읽는다)."""
@@ -250,7 +250,7 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
     server = HTTPServer(("127.0.0.1", port), Handler)
     server.timeout = 0.3
     url = f"http://127.0.0.1:{server.server_address[1]}/?t={token}"
-    print(f"양식: {url}\n브라우저에서 고르고 Enter 로 보낸다. 보내면 이 명령이 답을 찍고 끝난다.", flush=True)
+    print(f"폼: {url}\n브라우저에서 고르고 Enter 로 보낸다. 보내면 이 명령이 답을 찍고 끝난다.", flush=True)
     if open_browser:
         webbrowser.open(url)
     if on_ready:
@@ -335,15 +335,15 @@ def diff_summary(spec, answers):
     count = marks.count
     kept = f" · 앞서 확인 {count(KEPT_MARK)}" if count(KEPT_MARK) else ""
     lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}", "",
-             "| 묶음 | 판정 | 피드백 |", "|---|---|---|"]
+             "| 그룹 | 판정 | 피드백 |", "|---|---|---|"]
     for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
         lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
     return "\n".join(lines)
 
 
 # ── 구현 확인 기록 ─────────────────────────────────────────────────────────
-# 변경 설명에서 '확인함' 을 받은 조각의 지문을 적어 둔다. 다음 차례에는 그 조각을 다시 묻지 않고,
-# 그 뒤로 바뀐 조각은 지문이 달라져 다시 나온다 — 적용되는 코드는 확인받은 코드와 같아야 한다.
+# diff-proto 페이지에서 '확인함' 을 받은 hunk 의 해시를 적어 둔다. 다음 차례에는 그 hunk 를 다시 묻지 않고,
+# 그 뒤로 바뀐 hunk 는 해시가 달라져 다시 나온다 — 적용되는 코드는 확인받은 코드와 같아야 한다.
 
 def confirmed_path(project):
     return Path(project) / ".claude" / "diff_confirmed.json"
@@ -357,7 +357,7 @@ def load_confirmed(project):
 
 
 def confirm_diff(spec, answers, project):
-    """확인받은 조각을 기록하고 다음에 할 일을 돌려준다. 기록은 지금 diff 에 있는 조각만 남긴다."""
+    """확인받은 hunk 를 기록하고 다음에 할 일을 돌려준다. 기록은 지금 diff 에 있는 hunk 만 남긴다."""
     marks = diff_marks(spec, answers)
     units = [fp for g in spec["groups"] for fp in g.get("fps") or []]
     done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in ("확인함", KEPT_MARK) for fp in g.get("fps") or []})
@@ -368,18 +368,18 @@ def confirm_diff(spec, answers, project):
                         encoding="utf-8")
     except OSError as e:
         return f"확인 기록을 못 썼다: {e}"
-    lines = [f"확인 누계: 조각 {len(done)}/{len(units)}"]
+    lines = [f"확인 누계: hunk {len(done)}/{len(units)}"]
     if marks.count("기각"):
-        lines.append("다음: 기각한 묶음을 피드백대로 고친다. 고친 조각만 이야기에 담아 같은 명령으로 다시 띄운다. "
-                     "확인받은 조각은 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
+        lines.append("다음: 기각한 그룹을 피드백대로 고친다. 고친 hunk 만 이야기에 담아 같은 명령으로 다시 띄운다. "
+                     "확인받은 hunk 는 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
     if marks.count("미정"):
-        lines.append(f"다음: 미정 {marks.count('미정')}묶음은 확인받지 못했다. 그 묶음을 다시 띄운다. 확인받은 것으로 치지 않는다.")
+        lines.append(f"다음: 미정 {marks.count('미정')}그룹은 확인받지 못했다. 그 그룹을 다시 띄운다. 확인받은 것으로 치지 않는다.")
     if len(done) == len(units):
-        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 조각만 다시 확인받는다.")
+        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다.")
     return "\n".join(lines)
 
 
-# ── 결정 장부 ──────────────────────────────────────────────────────────────
+# ── 결정 로그 ──────────────────────────────────────────────────────────────
 
 def ledger_path(project):
     return Path(project) / ".claude" / "decisions.jsonl"
@@ -399,7 +399,7 @@ def load_events(path):
         try:
             events.append(json.loads(line))
         except ValueError:
-            print(f"장부 {n}번째 줄을 못 읽어 건너뛴다: {path}", file=sys.stderr)
+            print(f"결정 로그 {n}번째 줄을 못 읽어 건너뛴다: {path}", file=sys.stderr)
     return events
 
 
@@ -440,9 +440,9 @@ def add_decision(path, topic, choice, question="", dropped=(), note="", answers=
 
 
 def record_selection(spec, answers, path):
-    """사용자가 '장부에 남긴다' 를 표시하고 고른 질문만 적는다. 고른 것을 전부 적으면 사소한 선택이 쌓여 읽지 않는 목록이 된다.
+    """사용자가 '결정 로그에 남긴다' 를 표시하고 고른 질문만 적는다. 고른 것을 전부 적으면 사소한 선택이 쌓여 읽지 않는 목록이 된다.
     안 고른 질문은 결정이 아니다 — 기각만 한 질문은 선택지를 다시 낼 재료다.
-    버린 안에는 사용자가 적은 기각 이유와 앞 양식에서 기각한 안(dropped_before)이 붙는다."""
+    버린 안에는 사용자가 적은 기각 이유와 앞 폼에서 기각한 안(dropped_before)이 붙는다."""
     ids = []
     for q in spec["questions"]:
         a = (answers.get("q") or {}).get(q["id"]) or {}
@@ -509,15 +509,15 @@ def cleanup(spec_path):
 
 
 def finish(spec, answers, project, record=True):
-    """보낸 답을 찍고, 종류에 맞게 장부를 고친다."""
+    """보낸 답을 찍고, 종류에 맞게 결정 로그를 고친다."""
     ledger = ledger_path(project)
     if spec["kind"] == "selection":
         print(selection_summary(spec, answers))
         ids = record_selection(spec, answers, ledger) if record else []
         if ids:
-            print(f"\n장부: {' · '.join(ids)} — {ledger}")
+            print(f"\n결정 로그: {' · '.join(ids)} — {ledger}")
         elif record:
-            print("\n장부: 남김 표시한 결정이 없어 적지 않았다")
+            print("\n결정 로그: 남김 표시한 결정이 없어 적지 않았다")
     elif spec["kind"] == "diff":
         print(diff_summary(spec, answers))
         if any(g.get("fps") for g in spec["groups"]):
@@ -535,7 +535,7 @@ def finish(spec, answers, project, record=True):
 
 
 def run_form(spec, spec_path, save_to, args, record=True, doc=None):
-    """양식을 띄우고 끝 코드를 돌려준다. spec_path 가 있으면 보낸 뒤 양식 파일을 지운다. 무인 실행이면 띄우지 않는다."""
+    """폼을 띄우고 exit code 를 돌려준다. spec_path 가 있으면 보낸 뒤 폼 파일을 지운다. 헤드리스 실행이면 띄우지 않는다."""
     if blocked(spec["kind"]):
         return UNATTENDED
     kind, answers = serve(spec, save_to, args.timeout, not args.no_open, doc=doc)
@@ -559,18 +559,18 @@ def load_spec(path):
     try:
         spec = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        raise SystemExit(f"양식을 못 읽었다: {path}\n{e}")
+        raise SystemExit(f"폼을 못 읽었다: {path}\n{e}")
     errors, warns = check_spec(spec)
     for w in warns:
         print(f"점검: {w}")
     if errors:
-        raise SystemExit("양식 오류:\n" + "\n".join(f"- {e}" for e in errors))
+        raise SystemExit("폼 오류:\n" + "\n".join(f"- {e}" for e in errors))
     return spec
 
 
 def spec_from_stdin():
-    """`form -`: 표준 입력의 양식 JSON 을 임시 폴더에 두고 그 경로를 준다. 보내면 다른 양식처럼 지워진다.
-    모델이 양식 파일을 따로 쓰지 않아도 되고, 프로젝트의 `.claude/` 아래에 쓰느라 권한을 묻지도 않는다."""
+    """`form -`: 표준 입력의 폼 JSON 을 임시 폴더에 두고 그 경로를 준다. 보내면 다른 폼처럼 지워진다.
+    모델이 폼 파일을 따로 쓰지 않아도 되고, 프로젝트의 `.claude/` 아래에 쓰느라 권한을 묻지도 않는다."""
     raw = sys.stdin.buffer.read()
     try:
         text = raw.decode("utf-8-sig")
@@ -586,10 +586,10 @@ def spec_from_stdin():
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["form", "done", "add", "list", "collect", "reject"])
-    ap.add_argument("spec", nargs="?", help="form · done: 양식 JSON. form 은 `-` 면 표준 입력에서 읽는다")
-    ap.add_argument("--project", default=".", help="프로젝트 루트. 장부는 그 아래 .claude/decisions.jsonl")
-    ap.add_argument("--keep", action="store_true", help="보낸 뒤에도 양식 · 답 파일을 지우지 않는다")
-    ap.add_argument("--no-record", action="store_true", help="고른 것을 장부에 적지 않는다")
+    ap.add_argument("spec", nargs="?", help="form · done: 폼 JSON. form 은 `-` 면 표준 입력에서 읽는다")
+    ap.add_argument("--project", default=".", help="프로젝트 루트. 결정 로그는 그 아래 .claude/decisions.jsonl")
+    ap.add_argument("--keep", action="store_true", help="보낸 뒤에도 폼 · 답 파일을 지우지 않는다")
+    ap.add_argument("--no-record", action="store_true", help="고른 것을 결정 로그에 적지 않는다")
     ap.add_argument("--no-open", action="store_true", help="브라우저를 열지 않고 주소만 찍는다")
     ap.add_argument("--timeout", type=int, default=120, help="움직임이 없으면 닫는 시간(분)")
     ap.add_argument("--static", action="store_true", help="form: 서버 없이 HTML 파일로 쓴다")
@@ -607,7 +607,7 @@ def main(argv=None):
 
     if args.command in ("form", "done"):
         if not args.spec:
-            ap.error("양식 JSON 경로가 필요하다")
+            ap.error("폼 JSON 경로가 필요하다")
         piped = args.command == "form" and args.spec == "-"
         if piped:
             args.spec = spec_from_stdin()
@@ -633,7 +633,7 @@ def main(argv=None):
         if args.static:
             out = Path(args.spec).with_suffix(".html")
             out.write_text(build_page(spec, read_answers(save_to), "", False, save_to.name), encoding="utf-8")
-            print(f"양식 파일: {out}\n사용자가 Enter 로 복사한 답을 받으면 {save_to} 에 저장하고 `decide.py done {args.spec}` 를 돌린다.")
+            print(f"폼 파일: {out}\n사용자가 Enter 로 복사한 답을 받으면 {save_to} 에 저장하고 `decide.py done {args.spec}` 를 돌린다.")
             if not args.no_open:
                 webbrowser.open(out.resolve().as_uri())
             return 0

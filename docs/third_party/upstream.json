@@ -38,7 +38,7 @@
             "skills/game-testing/SKILL.md",
             "skills/game-testing/references/debugging.md"
           ],
-          "what": "재현 고리 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리"
+          "what": "재현 루프 → 줄이기 → 가설 3–5개 → 계측 → 회귀 테스트 → 정리"
         },
         {
           "upstream": "skills/engineering/codebase-design/SKILL.md",
@@ -47,7 +47,7 @@
             "skills/game-architecture/references/interface-design.md",
             "skills/game-architecture/references/scan.md"
           ],
-          "what": "과설계 가드: 지우기 시험 · 구현체 하나면 가짜 경계 · 구조 말(깊이 · 경계 · leverage · locality)"
+          "what": "과설계 가드: 삭제 테스트 · 구현체 하나면 가짜 경계 · 구조 말(깊이 · 경계 · leverage · locality)"
         },
         {
           "upstream": "skills/productivity/grilling/SKILL.md",

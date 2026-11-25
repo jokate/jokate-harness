@@ -95,7 +95,7 @@ def fact_lines(root, engine, home=None):
         except OSError:
             n = 0
         if n:
-            out.append(f"- 팀 피드백 장부 `{ledger.as_posix()}`: 동료에게 받은 지적 {n}건. game-architecture 스킬이 구조를 내기 전에 읽는다.")
+            out.append(f"- 팀 피드백 로그 `{ledger.as_posix()}`: 동료에게 받은 지적 {n}건. game-architecture 스킬이 구조를 내기 전에 읽는다.")
     return (["이 프로젝트에 있는 것:"] + out) if out else []
 
 

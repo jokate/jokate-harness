@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""하네스 대조 시험 — 같은 과제를 하네스 두 팔(지금 · 수정안)에서 돌려 비교한다.
+"""하네스 A/B 테스트 — 같은 과제를 하네스 두 팔(지금 · 수정안)에서 돌려 비교한다.
 
 Harness²(arXiv 2610.14224)의 Propose → Probe → Compose 중 Probe 를 우리 정답지로 한다: 논문은 정답 없이 기준 실행과
 수정안 실행의 차이만 보지만, 우리는 정답지(심볼 재현율)와 run_evals 의 채점(스킬 호출 · 셸 명령 · 답 정규식)이 있다.
@@ -181,7 +181,7 @@ def mean(xs):
 
 def report(rows, spec, out: Path) -> str:
     arms = sorted({r["arm"] for r in rows})
-    lines = [f"# 하네스 대조 시험 — {spec['name']} ({time.strftime('%Y-%m-%d %H:%M')})", "",
+    lines = [f"# 하네스 A/B 테스트 — {spec['name']} ({time.strftime('%Y-%m-%d %H:%M')})", "",
              "| 팔 | 설명 | 정답 재현율 | 스킬 사례 통과 | 비용 $/회 | 토큰/회 | 턴/회 | grep/회 | 인덱스/회 | 위키 읽기/회 | 실행 수 |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for a in arms:

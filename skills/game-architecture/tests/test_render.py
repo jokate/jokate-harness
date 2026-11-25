@@ -201,7 +201,7 @@ class ReadabilityTest(unittest.TestCase):
         self.assertIn("추천의 왜 칸 3/4", line)
 
     def test_go_reul_geot_heading_is_checked_too(self):
-        """'선택지' 를 GUIDE 양식의 '고를 것' 으로 바꾸고 추천을 지우면 검사를 피했다 (문서 시범 1차)."""
+        """'선택지' 를 GUIDE 폼의 '고를 것' 으로 바꾸고 추천을 지우면 검사를 피했다 (문서 시범 1차)."""
         md = ("# t\n\n## 결론\n- 헛 끊김은 경로 확인으로 막는다.\n\n## 고를 것\n| 안 | 방법 |\n|---|---|\n| 가 | 끊기 전 확인 |\n"
               "| 나 | 남길 때 확인 |\n\n## 근거\n- 파일 표\n")
         c = render.check(md)
@@ -300,7 +300,7 @@ class NotesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             md = Path(tmp) / "x.md"
             text = render.render_html("# x\n", md.with_suffix(".html"), "x", src=md, url_for=lambda p: "/a/" + p.name)
-            self.assertNotIn("gh-notes", text)  # 양식 페이지에는 기각 이유 · 답 칸이 따로 있다
+            self.assertNotIn("gh-notes", text)  # 폼 페이지에는 기각 이유 · 답 칸이 따로 있다
 
     def test_attach_to_someone_elses_html_and_take_it_off_again(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -437,7 +437,7 @@ FORM_DOC = """# 선입력 창 — 구조 조사
 ## 선택지
 | 선택지 | 다음 요청 때 고칠 곳 | 얻는 것 | 잃는 것 | 근거 |
 |---|---|---|---|---|
-| A. 국소 패치 | 3곳 | 지금 빠르다 | 다음에 또 세 곳 | 확인 |
+| A. 땜질 수정 | 3곳 | 지금 빠르다 | 다음에 또 세 곳 | 확인 |
 | **B. 버퍼가 창을 갖는다** | 1곳 | 한 곳만 고친다 | 파일 하나가 는다 | 확인 |
 
 추천: B. 고르는 것은 사용자.
@@ -476,7 +476,7 @@ def http(url, body=None):
 
 
 class DocFormTest(unittest.TestCase):
-    """구조 문서의 선택지 · 추천 · 왜 · 질문을 고르기 양식으로 옮긴다 — 같은 것을 두 번 쓰지 않는다."""
+    """구조 문서의 선택지 · 추천 · 왜 · 질문을 선택 폼으로 옮긴다 — 같은 것을 두 번 쓰지 않는다."""
 
     def test_options_recommendation_why_and_questions_are_read(self):
         spec, errors = render.doc_form(FORM_DOC, "선입력 창")
@@ -484,7 +484,7 @@ class DocFormTest(unittest.TestCase):
         main, extra = spec["questions"]
         self.assertEqual((main["title"], main["changes"]), ("구조: A / B 중 무엇?", "구현 범위 전체"))
         self.assertEqual(main["options"], [
-            {"id": "A", "name": "국소 패치", "next": "3곳", "gain": "지금 빠르다", "loss": "다음에 또 세 곳"},
+            {"id": "A", "name": "땜질 수정", "next": "3곳", "gain": "지금 빠르다", "loss": "다음에 또 세 곳"},
             {"id": "B", "name": "버퍼가 창을 갖는다", "next": "1곳", "gain": "한 곳만 고친다", "loss": "파일 하나가 는다", "recommended": True}])
         self.assertEqual(main["why"], {"problem": "창 길이를 바꾸면 세 곳을 고친다", "dropped": ["A — 다음에 또 세 곳"],
                                        "cost": "파일 하나가 는다", "flip": "창이 하나로 줄면"})
@@ -500,7 +500,7 @@ class DocFormTest(unittest.TestCase):
                                                             {"id": "B", "name": "상태", "summary": "다음 요청 때 1곳"}])  # 추천 줄이 다른 절에 있다
 
     def test_table_with_one_decision_per_row_becomes_one_question_per_row(self):
-        doc = ("# 조작표\n\n## 선택지\n| 결정 | A. 국소 패치 | B | C | 정함 |\n|---|---|---|---|---|\n"
+        doc = ("# 조작표\n\n## 선택지\n| 결정 | A. 땜질 수정 | B | C | 정함 |\n|---|---|---|---|---|\n"
                "| ① 우클릭 태그 | 기존 태그 재사용 | 새 태그 | 생성기 고침 | C |\n"
                "| ② 길게 누르기 | 타이머 | IA 두 개 | 홀드 표 | |\n"
                "| ③ 배치 모드 | 행만 | IMC 얹기 | | 보류 |\n\n"
@@ -525,9 +525,9 @@ class DocFormTest(unittest.TestCase):
         self.assertEqual(spec["questions"][1]["title"], "그래프 축, 진입 축 중 무엇? — D · E")
 
     def test_options_as_columns(self):
-        doc = "# x\n\n## 선택지\n| | A. 국소 패치 | B. 버퍼 |\n|---|---|---|\n| 다음 요청 때 고칠 곳 | 3곳 | 1곳 |\n| 잃는 것 | 또 세 곳 | 파일 하나 |\n\n추천: B — 한 곳\n"
+        doc = "# x\n\n## 선택지\n| | A. 땜질 수정 | B. 버퍼 |\n|---|---|---|\n| 다음 요청 때 고칠 곳 | 3곳 | 1곳 |\n| 잃는 것 | 또 세 곳 | 파일 하나 |\n\n추천: B — 한 곳\n"
         spec, _ = render.doc_form(doc, "x")
-        self.assertEqual(spec["questions"][0]["options"], [{"id": "A", "name": "국소 패치", "next": "3곳", "loss": "또 세 곳"},
+        self.assertEqual(spec["questions"][0]["options"], [{"id": "A", "name": "땜질 수정", "next": "3곳", "loss": "또 세 곳"},
                                                             {"id": "B", "name": "버퍼", "next": "1곳", "loss": "파일 하나", "recommended": True}])
 
     def test_recommendation_ignores_letters_in_the_reason(self):
@@ -559,7 +559,7 @@ class DocFormTest(unittest.TestCase):
 
 
 class OnePageTest(unittest.TestCase):
-    """--form: 문서와 고르기 양식이 한 페이지로 뜨고, 보내면 이 명령이 답을 찍고 끝난다."""
+    """--form: 문서와 선택 폼이 한 페이지로 뜨고, 보내면 이 명령이 답을 찍고 끝난다."""
 
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
@@ -579,7 +579,7 @@ class OnePageTest(unittest.TestCase):
             for raw in proc.stdout:
                 line = raw.decode("utf-8", "replace")
                 seen.append(line)
-                if line.startswith("양식: "):
+                if line.startswith("폼: "):
                     base, token = line.split()[1].split("/?t=")
                     self.page, self.doc = http(f"{base}/?t={token}")[1], http(f"{base}/doc?t={token}")[1]
                     self.assertEqual(http(f"{base}/submit?t={token}", {"answers": answers})[0], 204)
@@ -595,29 +595,29 @@ class OnePageTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("읽기 점검:", out)
         self.assertNotIn("점검: 질문 2", out)                             # 곁 질문에 왜 네 칸을 요구하지 않는다
-        self.assertIn('"doc": "/doc?t=', self.page)                       # 양식 페이지 한 장에 문서가 실린다
+        self.assertIn('"doc": "/doc?t=', self.page)                       # 폼 페이지 한 장에 문서가 실린다
         self.assertIn('"name": "버퍼가 창을 갖는다"', self.page)
         self.assertIn("data-embed", self.doc)
         self.assertIn("## 한눈에", self.doc)
         self.assertIn("제출됨 — 선입력 창", out)
         self.assertIn("B. 버퍼가 창을 갖는다", out)
         self.assertIn("이름은 InputWindow", out)
-        self.assertIn("장부: D-001", out)
+        self.assertIn("결정 로그: D-001", out)
         self.assertEqual(self.files(), ["20261119-창.html", "20261119-창.md"])  # 답 파일은 지우고 문서는 남긴다
 
     def test_unattended_run_writes_the_doc_and_serves_nothing(self):
         code, out = self.launch(FORM_DOC, CLAUDE_CODE_SESSION_ATTENDED="0", GAME_HARNESS_DOC_NUDGE=None)
         self.assertEqual(code, 4, out)
-        self.assertIn("무인 실행", out)
-        self.assertNotIn("양식: http", out)
+        self.assertIn("헤드리스 실행", out)
+        self.assertNotIn("폼: http", out)
         self.assertEqual(self.files(), ["20261119-창.html", "20261119-창.md"])
 
     def test_doc_without_options_stays_a_plain_doc(self):
         code, out = self.launch("# 구조 지도\n\n## 요약\n- 한 줄\n")
         self.assertEqual(code, 0, out)
-        self.assertIn("고르기 양식을 붙이지 못했다", out)
+        self.assertIn("선택 폼을 붙이지 못했다", out)
         self.assertIn("'선택지' 절이 없다", out)
-        self.assertNotIn("양식: http", out)
+        self.assertNotIn("폼: http", out)
 
 
 if __name__ == "__main__":

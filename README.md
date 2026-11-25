@@ -17,14 +17,14 @@ skills/
   game-architecture/  2층 · 구현 전 구조 조사 · scripts/evidence.py, render.py · references/patterns/ 패턴 카탈로그 + 게임 도메인 증상 + UE/Unity 관용구 (옛 game-patterns)
   game-testing/       3층 · 검증 기준·테스트
   game-mcp/           4층 · 에디터 MCP 운용
-  selection/          문서 · 고르기 양식 (/selection) · scripts/decide.py(양식 서버 · 결정 장부), diffdoc.py(변경 설명), page.html
+  selection/          문서 · 선택 폼 (/selection) · scripts/decide.py(폼 서버 · 결정 로그), diffdoc.py(diff-proto 페이지), page.html
   collect-decision/   문서 · 결정 모음 (/collect-decision)
   reject-decision/    문서 · 결정 기각 (/reject-decision)
   diff-proto/         문서 · 구현을 확인받아 확정 (/diff-proto)
 mods/
   game-harness-monitor/  Claude Code mod · 하네스 기능이 동작하면 상태줄·토스트·/harness 패널로 보인다
 tools/
-  harness_probe.py    하네스 대조 시험: 같은 과제를 지금 · 수정안 두 팔로 돌려 정답 재현율 · 스킬 호출 · 비용 · 도구 사용을 비교
+  harness_probe.py    하네스 A/B 테스트: 같은 과제를 지금 · 수정안 두 팔로 돌려 정답 재현율 · 스킬 호출 · 비용 · 도구 사용을 비교
   context_budget.py   세션마다 항상 들어가는 글의 크기 (하네스 몫 한도 7,000 B)
 docs/experience/      대조로 뒷받침된 하네스 교훈 (목차 INDEX.md — 하네스를 고치기 전에 본다)
 docs/WRITING.md       스킬 · 안내 글을 고치기 전에 보는 글쓰기 규칙 · 점검표

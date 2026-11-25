@@ -31,7 +31,7 @@
 VCS가 없어서 변경 이력 신호(hotspot, co-change)는 뽑지 않았습니다. 정적 구조만으로 판단했습니다. `Variant_InputProcess`는 참조하는 곳이 컨트롤러 하나뿐이라, 고쳐도 영향 범위가 작습니다.
 
 ## 선택지
-### A. 국소 패치: `ProcessInput` 안에 시퀀스별 if/switch를 하드코딩
+### A. 땜질 수정: `ProcessInput` 안에 시퀀스별 if/switch를 하드코딩
 - **다음 커맨드를 추가할 때 고칠 곳:** 1곳(`InputProcessingComponent.cpp`)에 분기를 하나 더 넣습니다. 땜질입니다.
 - **트레이드오프:** 가장 빨리 돌아가게 만들 수 있지만, 이미 있는 `FInputProcessingData`를 쓰지 않게 되고, 커맨드를 늘릴 때마다 C++을 고치고 다시 빌드해야 합니다.
 - **근거:** 데이터 구조체가 이미 정의돼 있습니다. 이걸 무시하는 방향입니다.
@@ -63,7 +63,7 @@ graph LR
 **다음 커맨드를 추가할 때 선택지별로 고치는 곳**
 ```mermaid
 graph LR
-  subgraph A["A. 국소 패치 — 다음 요청 때 1곳 코드(분기 추가)"]
+  subgraph A["A. 땜질 수정 — 다음 요청 때 1곳 코드(분기 추가)"]
     A1["InputProcessingComponent.cpp<br/>if/switch +1"]
   end
   subgraph B["B. DataTable — 다음 요청 때 0곳 코드(행 +1)"]
