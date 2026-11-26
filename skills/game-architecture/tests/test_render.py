@@ -567,11 +567,11 @@ class OnePageTest(unittest.TestCase):
         self.dir = Path(self._td.name)
         self.src = self.dir / "20261119-창.md"
 
-    def launch(self, md, answers=None, **env):
+    def launch(self, md, answers=None, more=(), **env):
         self.src.write_text(md, encoding="utf-8")
         full = {**os.environ, "PYTHONIOENCODING": "utf-8", "GAME_HARNESS_DOC_NUDGE": "1", **env}
         full = {k: v for k, v in full.items() if v is not None}
-        proc = subprocess.Popen([sys.executable, "-u", str(HERE.parent / "scripts" / "render.py"), str(self.src), "--form", "--no-open",
+        proc = subprocess.Popen([sys.executable, "-u", str(HERE.parent / "scripts" / "render.py"), str(self.src), *map(str, more), "--form", "--no-open",
                                  "--project", str(self.dir)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=full)
         self.addCleanup(lambda: proc.poll() is None and proc.kill())
         seen = []
@@ -582,6 +582,7 @@ class OnePageTest(unittest.TestCase):
                 if line.startswith("폼: "):
                     base, token = line.split()[1].split("/?t=")
                     self.page, self.doc = http(f"{base}/?t={token}")[1], http(f"{base}/doc?t={token}")[1]
+                    self.docs = [http(f"{base}/doc/{i}?t={token}") for i in range(3)]
                     self.assertEqual(http(f"{base}/submit?t={token}", {"answers": answers})[0], 204)
                     break
         out, _ = proc.communicate(timeout=30)
@@ -612,11 +613,57 @@ class OnePageTest(unittest.TestCase):
         self.assertNotIn("폼: http", out)
         self.assertEqual(self.files(), ["20261119-창.html", "20261119-창.md"])
 
-    def test_doc_without_options_stays_a_plain_doc(self):
-        code, out = self.launch("# 구조 지도\n\n## 요약\n- 한 줄\n")
+    def test_doc_without_options_gets_a_verdict_per_section(self):
+        """고를 것이 없는 문서도 절마다 판정과 피드백을 받는다(사용자 결정 2026-11-26) — 입력 칸 없는 문서로 열리지 않는다."""
+        md = "# 몬스터 스탯 검수\n\n## 결론\n- 통과\n\n```\n## 코드 블록 안의 줄은 절이 아니다\n```\n\n## 확인한 것\n- 빌드\n"
+        code, out = self.launch(md, {"s": {"d1s1": {"verdict": "ok", "note": ""}, "d1s2": {"verdict": "no", "note": "PIE 로그를 붙여라"}}})
         self.assertEqual(code, 0, out)
-        self.assertIn("선택 폼을 붙이지 못했다", out)
-        self.assertIn("'선택지' 절이 없다", out)
+        self.assertNotIn("선택 폼을 붙이지 못했다", out)
+        self.assertIn("문서 1개 · 절 2개", out)
+        self.assertIn('"kind": "review"', self.page)
+        self.assertIn('"docs": ["/doc/0?t=', self.page)
+        self.assertIn('"doc": null', self.page)                            # 맨 위 문서 자리를 또 쓰지 않는다
+        self.assertEqual(self.docs[0][0], 200)
+        self.assertIn("data-embed", self.docs[0][1])
+        self.assertEqual(self.docs[1][0], 404)
+        self.assertIn("확인 1 · 다시 1 · 안 봄 0", out)
+        self.assertIn("| 몬스터 스탯 검수 | 결론 | 확인함 |  |", out)
+        self.assertIn("| 몬스터 스탯 검수 | 확인한 것 | 다시 | PIE 로그를 붙여라 |", out)
+        self.assertIn("다음: '다시' 인 절을 피드백대로 고친다", out)
+        self.assertNotIn("문서가 전부 확인됐다", out)
+
+    def test_unreadable_options_still_get_a_form(self):
+        code, out = self.launch("# x\n\n## 선택지\n\n표가 없다\n\n## 근거\n- 한 줄\n", {"s": {}})
+        self.assertEqual(code, 0, out)
+        self.assertIn("선택 폼을 붙이지 못했다 — 문서 확인 페이지로 띄운다", out)
+        self.assertIn("확인 0 · 다시 0 · 안 봄 2", out)
+        self.assertIn("다음: 안 본 절 2개는 확인받지 못했다", out)
+
+    def test_several_docs_and_foreign_html_share_one_page(self):
+        """문서 여러 개와 남이 손으로 쓴 HTML 을 한 페이지에 모은다 — 직원 산출물도 판정과 피드백을 받는다."""
+        report = self.dir / "핵심코드.html"
+        report.write_text("<html><head><title>핵심 코드</title></head><body><h1>핵심 코드</h1><h2>설계 <b>포인트</b></h2><p>표</p>"
+                          "<h2>1 · 행이 있으면 GE</h2><pre>code</pre></body></html>", encoding="utf-8")
+        bare = self.dir / "메모.html"
+        bare.write_text("<html><body><p>제목 없는 쪽지</p></body></html>", encoding="utf-8")
+        answers = {"s": {"d1s1": {"verdict": "ok", "note": ""}, "d2s1": {"verdict": "ok", "note": "그림이 좋다"},
+                         "d2s2": {"verdict": "ok", "note": ""}, "d3s1": {"verdict": "ok", "note": ""}}}
+        code, out = self.launch("# 검수\n\n## 결론\n- 통과\n", answers, more=[report, bare])
+        self.assertEqual(code, 0, out)
+        self.assertIn("문서 3개 · 절 4개", out)
+        self.assertIn("제출됨 — 검수 외 2개", out)
+        self.assertEqual([d[0] for d in self.docs], [200, 200, 200])
+        self.assertEqual(self.docs[1][1], report.read_text(encoding="utf-8"))  # 남의 HTML 은 쓴 그대로 싣는다
+        self.assertIn("| 핵심 코드 | 설계 포인트 | 확인함 | 그림이 좋다 |", out)
+        self.assertIn("| 메모 | 문서 전체 | 확인함 |  |", out)                  # 절 제목이 없는 문서는 통째로 판정한다
+        self.assertIn("다음: '다시' 가 아닌 절에 적힌 피드백도 반영한다", out)
+        self.assertIn("다음: 문서가 전부 확인됐다", out)
+        self.assertEqual(self.files(), ["20261119-창.md", "메모.html", "핵심코드.html"])  # 입력 칸 없는 HTML 을 새로 남기지 않는다
+
+    def test_unattended_review_serves_nothing(self):
+        code, out = self.launch("# 검수\n\n## 결론\n- 통과\n", CLAUDE_CODE_SESSION_ATTENDED="0", GAME_HARNESS_DOC_NUDGE=None)
+        self.assertEqual(code, 4, out)
+        self.assertIn("문서 확인 단계를 건너뛴다", out)
         self.assertNotIn("폼: http", out)
 
 

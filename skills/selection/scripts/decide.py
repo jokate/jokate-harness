@@ -58,6 +58,7 @@ ASSET_TYPES = {".js": "text/javascript", ".html": "text/html", ".svg": "image/sv
                ".png": "image/png", ".json": "application/json"}
 BLOCKED = {"selection": "선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.",
            "diff": "사용자 확인 단계를 건너뛴다. 결과에 '구현 확인 안 받음 — 헤드리스 실행' 이라고 적는다.",
+           "review": "문서 확인 단계를 건너뛴다. 결과에 '문서 확인 안 받음 — 헤드리스 실행' 이라고 적는다.",
            "ledger": "표만 보려면 `decide.py list` 를 쓴다."}
 WHY = (("problem", "문제"), ("dropped", "버린 안"), ("cost", "대가"), ("flip", "뒤집는 조건"))
 
@@ -72,12 +73,21 @@ def check_spec(spec):
     """→ (오류, 경고). 오류가 있으면 폼을 띄우지 않는다."""
     errors, warns = [], []
     kind = spec.get("kind")
-    if kind not in ("selection", "diff", "ledger"):
-        return [f"kind 가 selection · diff · ledger 가 아니다: {kind!r}"], warns
+    if kind not in ("selection", "diff", "ledger", "review"):
+        return [f"kind 가 selection · diff · ledger · review 가 아니다: {kind!r}"], warns
     if not str(spec.get("title") or "").strip():
         errors.append("title 이 없다")
     if len(spec.get("context") or []) > 3:
         warns.append("context 는 3줄 이하로 쓴다")
+    if kind == "review":
+        docs = spec.get("docs") or []
+        if not docs:
+            errors.append("docs 가 비었다")
+        if any(not d.get("sections") for d in docs):
+            errors.append("sections 가 없는 문서가 있다")
+        if not _ids_ok([str(s.get("id") or "") for d in docs for s in d.get("sections") or []]):
+            errors.append("절의 id 가 비었거나 겹친다")
+        return errors, warns
     if kind != "selection":
         return errors, warns
     questions = spec.get("questions") or []
@@ -142,9 +152,10 @@ def blocked(kind, env=None):
 
 # ── 페이지 · 서버 ──────────────────────────────────────────────────────────
 
-def build_page(spec, state, token, served, name, doc=None):
-    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 폼만 나온다."""
-    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc}, ensure_ascii=False)
+def build_page(spec, state, token, served, name, doc=None, docs=None):
+    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 폼만 나온다. docs: 문서 확인 페이지가 싣는 문서들의 주소."""
+    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc, "docs": docs or []},
+                      ensure_ascii=False)
     for bad, safe in (("</", "<\\/"), ("<!--", "<\\!--"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
         boot = boot.replace(bad, safe)  # <script> 안에서 끊기지 않게
     page = PAGE.read_text(encoding="utf-8").replace("__TITLE__", html.escape(str(spec.get("title") or "")))
@@ -186,8 +197,11 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
         assets[key] = Path(path)
         return f"/a/{quote(key)}?t={token}"
 
-    doc_html = doc(url_for) if doc else None
-    doc_url = f"/doc?t={token}" if doc_html else None
+    makers = list(doc) if isinstance(doc, (list, tuple)) else [doc] if doc else []
+    doc_pages = [make(url_for) for make in makers]
+    doc_html = doc_pages[0] if doc_pages else None
+    doc_urls = [f"/doc/{i}?t={token}" for i in range(len(doc_pages))]
+    doc_url = f"/doc?t={token}" if doc_html and spec.get("kind") != "review" else None  # 문서 확인 페이지는 문서를 여럿 싣는다
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -211,6 +225,8 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
                 return self.reply(403)
             if path == "/doc" and doc_html:
                 return self.reply(200, doc_html.encode("utf-8"), "text/html; charset=utf-8")
+            if path.startswith("/doc/") and path[5:].isdigit() and int(path[5:]) < len(doc_pages):
+                return self.reply(200, doc_pages[int(path[5:])].encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/a/"):
                 asset = assets.get(unquote(path[3:]))
                 try:
@@ -222,7 +238,7 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
             if path != "/":
                 return self.reply(404)
             state["bye"], state["last"] = None, time.time()
-            self.reply(200, build_page(spec, state["answers"], token, True, name, doc_url).encode("utf-8"), "text/html; charset=utf-8")
+            self.reply(200, build_page(spec, state["answers"], token, True, name, doc_url, doc_urls).encode("utf-8"), "text/html; charset=utf-8")
 
         def do_POST(self):
             path = self.allowed()
@@ -321,12 +337,26 @@ VERDICTS = {"ok": "확인함", "no": "기각"}
 
 
 KEPT_MARK = "앞서 확인"
+SKIP_MARK = "판정 안 함"   # 접혀 나온 나머지 변경 — 사용자는 핵심만 확인한다
+
+
+def _mark(g, given):
+    if g.get("locked"):
+        return KEPT_MARK
+
+    if g.get("skipped"):
+        return SKIP_MARK
+
+    return VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정")
 
 
 def diff_marks(spec, answers):
     given = answers.get("g") or {}
-    return [KEPT_MARK if g.get("locked") else VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정")
-            for g in spec["groups"]]
+    return [_mark(g, given) for g in spec["groups"]]
+
+
+def skipped_fps(spec):
+    return sorted({fp for g in spec["groups"] if g.get("skipped") for fp in g.get("fps") or []})
 
 
 def diff_summary(spec, answers):
@@ -334,10 +364,41 @@ def diff_summary(spec, answers):
     marks = diff_marks(spec, answers)
     count = marks.count
     kept = f" · 앞서 확인 {count(KEPT_MARK)}" if count(KEPT_MARK) else ""
-    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}", "",
+    unseen = f" · 나머지 hunk {len(skipped_fps(spec))}개는 보지 않음" if count(SKIP_MARK) else ""
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}{unseen}", "",
              "| 그룹 | 판정 | 피드백 |", "|---|---|---|"]
     for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
         lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
+    return "\n".join(lines)
+
+
+# ── 문서 확인 ──────────────────────────────────────────────────────────────
+# 고를 것이 없는 보고 문서도 절마다 판정과 피드백을 받는다(사용자 결정 2026-11-26). 입력 칸 없는 문서는 답을 따로 적어 보내야 해서 검수가 느리다.
+REVIEW_VERDICTS = {"ok": "확인함", "no": "다시"}
+UNSEEN = "안 봄"
+
+
+def review_summary(spec, answers):
+    given = answers.get("s") or {}
+    rows, marks, noted = [], [], False
+    for d in spec["docs"]:
+        for s in d["sections"]:
+            a = given.get(s["id"]) or {}
+            mark = REVIEW_VERDICTS.get(a.get("verdict"), UNSEEN)
+            marks.append(mark)
+            noted = noted or (mark != "다시" and bool(str(a.get("note") or "").strip()))
+            rows.append(f"| {cell(d.get('title'))} | {cell(s.get('title'))} | {mark} | {cell(a.get('note'))} |")
+    count = marks.count
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 다시 {count('다시')} · 안 봄 {count(UNSEEN)}", "",
+             "| 문서 | 절 | 판정 | 피드백 |", "|---|---|---|---|", *rows, ""]
+    if count("다시"):
+        lines.append("다음: '다시' 인 절을 피드백대로 고친다. 고친 문서를 같은 명령으로 다시 띄운다.")
+    if noted:
+        lines.append("다음: '다시' 가 아닌 절에 적힌 피드백도 반영한다.")
+    if count(UNSEEN):
+        lines.append(f"다음: 안 본 절 {count(UNSEEN)}개는 확인받지 못했다. 확인받은 것으로 치지 않는다.")
+    if not count("다시") and not count(UNSEEN):
+        lines.append("다음: 문서가 전부 확인됐다.")
     return "\n".join(lines)
 
 
@@ -349,33 +410,61 @@ def confirmed_path(project):
     return Path(project) / ".claude" / "diff_confirmed.json"
 
 
-def load_confirmed(project):
+def _load_fps(project, key):
     try:
-        return set(json.loads(confirmed_path(project).read_text(encoding="utf-8")).get("fps") or [])
+        return set(json.loads(confirmed_path(project).read_text(encoding="utf-8")).get(key) or [])
     except (OSError, ValueError, AttributeError):
         return set()
+
+
+def load_confirmed(project):
+    return _load_fps(project, "fps")
+
+
+def load_skipped(project):
+    """접혀 나와 사용자가 판정하지 않은 hunk 의 해시."""
+    return _load_fps(project, "skipped")
+
+
+def load_partial(project):
+    """줄 범위로 핵심 줄만 확인받은 hunk 의 해시."""
+    return _load_fps(project, "partial")
 
 
 def confirm_diff(spec, answers, project):
     """확인받은 hunk 를 기록하고 다음에 할 일을 돌려준다. 기록은 지금 diff 에 있는 hunk 만 남긴다."""
     marks = diff_marks(spec, answers)
-    units = [fp for g in spec["groups"] for fp in g.get("fps") or []]
-    done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in ("확인함", KEPT_MARK) for fp in g.get("fps") or []})
+    passed = ("확인함", KEPT_MARK)
+    units = {fp for g in spec["groups"] for fp in (g.get("fps") or []) + (g.get("part_fps") or [])}
+    done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in passed for fp in g.get("fps") or []})
+    judged = {}  # 줄 범위로 본 hunk — 그 줄을 담은 그룹이 전부 통과해야 '핵심 줄만 봄' 이다
+    for g, mark in zip(spec["groups"], marks):
+        for fp in g.get("part_fps") or []:
+            judged.setdefault(fp, []).append(mark in passed)
+    partial = sorted(fp for fp, oks in judged.items() if all(oks) and fp not in done)
+    skipped = [fp for fp in skipped_fps(spec) if fp not in done and fp not in partial]
     path = confirmed_path(project)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"updated": today(), "title": spec.get("title", ""), "fps": done}, ensure_ascii=False, indent=1),
-                        encoding="utf-8")
+        record = {"updated": today(), "title": spec.get("title", ""), "fps": done, "partial": partial, "skipped": skipped}
+        path.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     except OSError as e:
         return f"확인 기록을 못 썼다: {e}"
-    lines = [f"확인 누계: hunk {len(done)}/{len(units)}"]
+    seen = len(done) + len(partial)
+    lines = [f"확인 누계: hunk {seen}/{len(units) - len(skipped)}" + (f" · 그 가운데 {len(partial)}개는 핵심 줄만 봄" if partial else "")
+             + (f" · 나머지 {len(skipped)}개는 보지 않음" if skipped else "")]
+    given = answers.get("g") or {}
+    if any(g.get("skipped") and str((given.get(g["id"]) or {}).get("note") or "").strip() for g in spec["groups"]):
+        lines.append("다음: 나머지 변경에 적힌 피드백을 반영한다. 반영해서 바뀐 hunk 는 그룹에 담아 확인받는다.")
     if marks.count("기각"):
         lines.append("다음: 기각한 그룹을 피드백대로 고친다. 고친 hunk 만 이야기에 담아 같은 명령으로 다시 띄운다. "
                      "확인받은 hunk 는 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
     if marks.count("미정"):
         lines.append(f"다음: 미정 {marks.count('미정')}그룹은 확인받지 못했다. 그 그룹을 다시 띄운다. 확인받은 것으로 치지 않는다.")
-    if len(done) == len(units):
-        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다.")
+    if seen + len(skipped) == len(units):
+        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다."
+                     + (f" 결과에 '나머지 hunk {len(skipped)}개는 사용자가 보지 않음' 이라고 적는다." if skipped else "")
+                     + (f" 'hunk {len(partial)}개는 핵심 줄만 확인' 도 적는다." if partial else ""))
     return "\n".join(lines)
 
 
@@ -520,8 +609,10 @@ def finish(spec, answers, project, record=True):
             print("\n결정 로그: 남김 표시한 결정이 없어 적지 않았다")
     elif spec["kind"] == "diff":
         print(diff_summary(spec, answers))
-        if any(g.get("fps") for g in spec["groups"]):
+        if any(g.get("fps") or g.get("part_fps") for g in spec["groups"]):
             print("\n" + confirm_diff(spec, answers, project))
+    elif spec["kind"] == "review":
+        print(review_summary(spec, answers))
     elif spec.get("mode") == "reject":
         picked = [(target, a.get("reason")) for target, a in (answers.get("r") or {}).items() if a.get("reject")]
         done, skipped = reject_decisions(ledger, picked)

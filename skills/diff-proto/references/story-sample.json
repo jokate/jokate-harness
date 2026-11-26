@@ -10,14 +10,14 @@
       "why": "0.2초 지난 입력이 다음 콤보에서 소비됐다.",
       "look": "경계값(정확히 0.2초)이 소비되는지",
       "risk": "높음",
-      "match": ["Source/Combat/InputBuffer.cpp"]
+      "match": ["Source/Combat/InputBuffer.cpp#2"]
     },
     {
       "title": "창 길이를 버퍼가 갖는다",
       "why": "호출부마다 다른 값을 넘기고 있었다.",
       "look": "기본값 0.2초가 기획 값과 같은지",
       "risk": "중간",
-      "match": ["Source/Combat/InputBuffer.h#1", "Source/Combat/CancelWindow.h"]
+      "match": ["Source/Combat/InputBuffer.h#1", "Source/Combat/CancelWindow.cpp:40-62"]
     }
   ]
 }

@@ -3,11 +3,15 @@
 """실제 diff 로 diff-proto 페이지를 만든다 (git · svn · 패치 파일). 스킬 diff-proto 가 쓴다.
 
   python diffdoc.py <이야기.json> [--path <저장소나 하위 폴더>] [--base <리비전>] [--patch <파일>] [--add <파일> …]
-                    [--check] [--force] [--project <루트>] [--keep] [--no-open] [--timeout <분>]
+                    [--doc <설계.md>] [--check] [--force] [--project <루트>] [--keep] [--no-open] [--timeout <분>]
 
 코드는 diff 에서만 온다. 이야기(JSON)는 그룹의 제목 · 왜 · 볼 것 · 위험과, 어느 hunk 가 그 그룹인지만 적는다.
 - 이야기가 diff 에 없는 파일을 가리키면 멈춘다(--force 로 넘긴다). 없는 변경을 설명하는 문서를 막는다.
-- 어느 그룹에도 안 든 hunk 는 '묶이지 않은 변경' 으로 끝에 붙는다. 빠지는 hunk 가 없다.
+- 그룹은 핵심만 담는다. 어느 그룹에도 안 든 hunk 는 '나머지 변경' 으로 접혀 나오고 판정하지 않는다.
+  사용자는 모든 코드를 보지 않는다 — 핵심 설계와 핵심 구현만 확인한다(사용자 결정 2026-11-26). 빠지는 hunk 는 없다.
+- match 는 `경로`(파일 전부) · `경로#2`(둘째 hunk) · `경로:40-95`(새 파일 쪽 40~95째 줄만)다. 새 파일은 hunk 하나가 파일 전체라 줄 범위로 핵심 함수만 고른다.
+  줄 범위로 고른 hunk 의 남은 줄은 '나머지 변경' 에 보이고, 그 hunk 는 '핵심 줄만 봄' 으로 적힌다.
+- --doc 은 설계 포인트 문서(md)를 페이지 맨 위에 싣는다. 그림과 표는 구조 문서 렌더러가 그린다.
 git 은 추적 안 된 새 파일도 넣는다. svn 은 올리지 않은 새 파일을 --add 로 준다.
 --check 는 그룹 점검 줄만 찍고 끝난다. 폼은 decide.py 가 띄운다(Enter 로 보내면 검토 결과를 찍고 이야기 파일을 지운다).
 """
@@ -27,7 +31,10 @@ HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 RISKS = ("높음", "중간", "낮음")
 BIG_FILE = 300_000   # 이보다 큰 새 파일은 내용을 넣지 않는다
 BIG_DIFF = 3000      # 줄 수가 이보다 많으면 범위를 좁히라고 알린다
-REST = "묶이지 않은 변경"
+REST = "나머지 변경"
+REST_LIST = 30       # 점검 줄에 이름을 다 적는 나머지 hunk 수
+BIG_GROUP = 120      # 그룹 하나가 이보다 길면 줄 범위로 줄이라고 알린다 — 사용자는 긴 그룹을 미정으로 넘겼다(2026-11-26)
+LINES = re.compile(r"^(.+):(\d+)-(\d+)$")  # 경로:40-95 — 새 파일 쪽 줄 번호로 hunk 의 일부만 고른다
 KEPT = "앞서 확인한 변경"
 
 
@@ -191,23 +198,32 @@ def _counts(hunks):
     return kinds.count("+"), kinds.count("-")
 
 
-def build(files, story, confirmed=frozenset()):
+def build(files, story, confirmed=frozenset(), partial=frozenset()):
     """diff 와 이야기를 묶는다. → (폼, 점검 줄, 오류).
-    confirmed 는 앞 차례에 확인받은 hunk 의 해시다. 이야기가 다시 담지 않은 그 hunk 는 묻지 않고 접어 둔다."""
-    claimed, errors, groups = {}, [], []
+    confirmed 는 앞 차례에 확인받은 hunk 의 해시, partial 은 핵심 줄만 확인받은 hunk 의 해시다.
+    이야기가 다시 담지 않은 그 hunk 는 묻지 않고 접어 둔다."""
+    claimed, sliced, errors, groups = {}, {}, [], []
     units = [(fi, hi) for fi, f in enumerate(files) for hi in (range(len(f["hunks"])) if f["hunks"] else [None])]
     fps = {(fi, hi): fingerprint(files[fi], files[fi]["hunks"][hi] if hi is not None else None) for fi, hi in units}
 
-    def make(gid, info, picked):
+    def piece(fi, hi, lo, up):
+        """hunk 의 lo~up 째 줄만 담은 조각. 머리줄에 새 파일 쪽 줄 번호를 적는다."""
+        lines = files[fi]["hunks"][hi]["lines"][lo:up + 1]
+        nums = [l[2] or l[1] for l in lines if l[2] or l[1]]
+        return {"header": f"@@ {nums[0]}–{nums[-1]}줄 @@" if nums else "@@", "lines": lines, "cut": True}
+
+    def make(gid, info, picked, pieces=()):
         out = []
-        for fi in sorted({fi for fi, _ in picked}):
+        for fi in sorted({fi for fi, _ in picked} | {fi for fi, *_ in pieces}):
             f = files[fi]
-            out.append({"path": f["path"], "status": f["status"], "binary": f["binary"],
-                        "hunks": [f["hunks"][hi] for pfi, hi in picked if pfi == fi and hi is not None]})
+            whole = [f["hunks"][hi] for pfi, hi in picked if pfi == fi and hi is not None]
+            cut = [piece(*p) for p in sorted(pieces) if p[0] == fi]
+            out.append({"path": f["path"], "status": f["status"], "binary": f["binary"], "hunks": whole + cut})
         added, removed = _counts([h for f in out for h in f["hunks"]])
         return {"id": gid, "title": info["title"], "why": info.get("why") or "", "look": info.get("look") or "",
                 "risk": info.get("risk") or "", "files": out, "added": added, "removed": removed,
-                "fps": [fps[u] for u in picked], "locked": bool(info.get("locked"))}
+                "fps": [fps[u] for u in picked], "part_fps": sorted({fps[(fi, hi)] for fi, hi, *_ in pieces}),
+                "locked": bool(info.get("locked")), "skipped": bool(info.get("skipped"))}
 
     for gi, g in enumerate(story.get("groups") or [], 1):
         name = str(g.get("title") or "").strip()
@@ -216,9 +232,10 @@ def build(files, story, confirmed=frozenset()):
             continue
         if g.get("risk") and g["risk"] not in RISKS:
             errors.append(f"그룹 {gi} '{name}': risk 는 {' · '.join(RISKS)} 중 하나다")
-        picked = []
+        picked, pieces = [], []
         for pattern in g.get("match") or []:
-            path, _, sel = pattern.partition("#")
+            span = LINES.match(pattern)
+            path, _, sel = (span.group(1), "", "") if span else pattern.partition("#")
             try:
                 numbers = _selected(sel)
             except ValueError:
@@ -231,27 +248,66 @@ def build(files, story, confirmed=frozenset()):
                     continue
                 if numbers is not None and (hi is None or hi + 1 not in numbers):
                     continue
+                if span:
+                    lo, up = int(span.group(2)), int(span.group(3))
+                    at = [i for i, l in enumerate(files[fi]["hunks"][hi]["lines"]) if l[2] and lo <= l[2] <= up] if hi is not None else []
+                    if not at:
+                        continue
+                    hit = True
+                    if (fi, hi) not in claimed:
+                        sliced.setdefault((fi, hi), []).append((at[0], at[-1]))
+                        pieces.append((fi, hi, at[0], at[-1]))
+                    continue
                 hit = True
-                if (fi, hi) not in claimed:
+                if (fi, hi) not in claimed and (fi, hi) not in sliced:
                     claimed[(fi, hi)] = gi
                     picked.append((fi, hi))
             if not hit:
                 errors.append(f"그룹 {gi} '{name}': diff 에 없는 것을 가리킨다 — {pattern}")
-        if picked:
-            groups.append(make(f"g{gi}", g, picked))
+        if picked or pieces:
+            groups.append(make(f"g{gi}", g, picked, pieces))
         elif g.get("match"):
             errors.append(f"그룹 {gi} '{name}': 든 hunk 가 없다(앞 그룹이 다 가져갔거나 diff 에 없다)")
         else:
             errors.append(f"그룹 {gi} '{name}': match 가 없다")
-    kept = [u for u in units if u not in claimed and fps[u] in confirmed]
-    rest = [u for u in units if u not in claimed and fps[u] not in confirmed]
-    if rest:
-        groups.append(make("rest", {"title": REST, "why": "이야기가 설명하지 않은 hunk 다."}, rest))
+    seen = set(confirmed) | set(partial)
+    free = [u for u in units if u not in claimed and u not in sliced]
+    kept, rest = [u for u in free if fps[u] in seen], [u for u in free if fps[u] not in seen]
+    leftover = []  # 줄 범위로 자른 hunk 의 남은 줄 — 접힌 나머지에 같이 보인다. 빠지는 줄은 없다
+    for (fi, hi), spans in sliced.items():
+        shown = {i for lo, up in spans for i in range(lo, up + 1)}
+        hidden = [i for i in range(len(files[fi]["hunks"][hi]["lines"])) if i not in shown]
+        for i in hidden:
+            if leftover and leftover[-1][:2] == (fi, hi) and leftover[-1][3] == i - 1:
+                leftover[-1] = (fi, hi, leftover[-1][2], i)
+            else:
+                leftover.append((fi, hi, i, i))
+    if rest or leftover:
+        info = {"title": REST, "why": "이야기가 핵심으로 꼽지 않은 hunk 와 줄이다. 판정하지 않는다.", "skipped": True}
+        group = make("rest", info, rest, leftover)
+        group["part_fps"] = []  # 남은 줄은 보이기만 한다. 그 hunk 의 기록은 핵심 줄을 본 그룹이 갖는다
+        groups.append(group)
     if kept:
-        groups.append(make("kept", {"title": KEPT, "why": "앞 차례에 확인했고 그 뒤로 바뀌지 않았다.", "locked": True}, kept))
+        info = {"title": KEPT, "why": "앞 차례에 확인했고 그 뒤로 바뀌지 않았다.", "locked": True}
+        group = make("kept", info, kept)
+        group["fps"] = [fps[u] for u in kept if fps[u] in confirmed]
+        group["part_fps"] = sorted(fps[u] for u in kept if fps[u] not in confirmed)  # 핵심 줄만 봤던 hunk 는 그 기록 그대로 둔다
+        groups.append(group)
     added, removed = _counts([h for f in files for h in f["hunks"]])
     stats = f"파일 {len(files)}개 · +{added} −{removed} · hunk {len(units)}개"
-    report = f"{stats} · 묶은 것 {len(claimed)}개 · 묶이지 않은 것 {len(rest)}개" + (f" · 앞서 확인한 것 {len(kept)}개" if kept else "")
+    shown = sum(g["added"] + g["removed"] for g in groups if not g["skipped"] and not g["locked"])
+    report = (f"{stats} · 핵심 그룹 {sum(1 for g in groups if not g['skipped'] and not g['locked'])}개"
+              f" · 핵심 hunk {len(claimed) + len(sliced)}개 · 판정 안 하는 나머지 {len(rest)}개"
+              + (f" · 앞서 확인한 것 {len(kept)}개" if kept else "") + f" · 판정받을 줄 {shown}")
+    if rest:
+        names = [files[fi]["path"] + (f"#{hi + 1}" if hi is not None else "") for fi, hi in rest]
+        report += "\n나머지: " + " · ".join(names[:REST_LIST]) + (f" 외 {len(names) - REST_LIST}개" if len(names) > REST_LIST else "")
+    if rest or leftover:
+        report += "\n점검: 나머지에 동작이 바뀌는 hunk 가 있으면 그룹에 넣는다 — 사용자는 나머지를 보지 않는다"
+    for g in groups:
+        if not g["skipped"] and not g["locked"] and g["added"] + g["removed"] > BIG_GROUP:
+            report += (f"\n점검: 그룹 '{g['title']}' 이 {g['added'] + g['removed']}줄이다 — 핵심 함수만 줄 범위로 고른다"
+                       f"(`경로:시작-끝`, 새 파일 쪽 줄 번호). 사용자는 {BIG_GROUP}줄 넘는 그룹을 미정으로 넘긴다")
     if added + removed > BIG_DIFF:
         report += f"\n점검: 바뀐 줄이 {added + removed}줄이다 — --path 를 하위 폴더로 좁히거나 나눠서 낸다"
     if not story.get("groups"):
@@ -261,9 +317,27 @@ def build(files, story, confirmed=frozenset()):
     return spec, report, errors
 
 
+def design_doc(path):
+    """설계 포인트 문서(md)를 페이지 맨 위에 싣는 함수를 돌려준다. 그리는 일은 game-architecture 의 render.py 가 한다."""
+    src = Path(path)
+    folder = Path(__file__).resolve().parent.parent.parent / "game-architecture" / "scripts"
+    if not src.is_file():
+        raise SystemExit(f"설계 문서가 없다: {path}")
+
+    if not (folder / "render.py").is_file():
+        raise SystemExit("game-architecture 스킬(render.py)이 없다 — setup.bat 을 다시 돌린다")
+
+    sys.path.insert(0, str(folder))
+    import render
+    md = src.read_text(encoding="utf-8")
+    title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
+    return lambda url_for: render.render_html(md, src.with_suffix(".html"), title, src=src, url_for=url_for)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("story", nargs="?", help="이야기 JSON: {title, context[], groups[{title, why, look, risk, match[]}]}")
+    ap.add_argument("--doc", help="페이지 맨 위에 실을 설계 포인트 문서(md): 클래스 관계 · 책임 · 흐름")
     ap.add_argument("--status", action="store_true", help="이야기 없이: 어느 hunk 가 확인됐고 어느 hunk 가 남았는지만 찍는다")
     ap.add_argument("--path", default=".", help="저장소나 그 하위 폴더. diff 를 이 아래로 좁힌다")
     ap.add_argument("--base", help="비교할 리비전 (git 기본 HEAD · svn 기본 BASE)")
@@ -280,15 +354,28 @@ def main(argv=None):
     # 헤드리스 실행이면 첫 명령(--status · --check)에서 바로 알린다 — 이야기를 다 쓴 뒤에야 알면 그 토큰이 버려진다
     if decide.blocked("diff"):
         return decide.UNATTENDED
-    confirmed = decide.load_confirmed(args.project)
+    confirmed, partial = decide.load_confirmed(args.project), decide.load_partial(args.project)
     if args.status:
         args.story = args.story or "-"
         files = collect(args)
-        left = [f"- {f['path']}" + (f"#{hi + 1}" if h else "") for f in files
-                for hi, h in enumerate(f["hunks"] or [None]) if fingerprint(f, h) not in confirmed]
-        total = sum(len(f["hunks"]) or 1 for f in files)
-        print(f"hunk {total}개 · 확인 {total - len(left)}개 · 남은 것 {len(left)}개")
-        print("\n".join(left) if left else ("구현이 확정됐다 — 바뀐 hunk 가 전부 확인됐다." if total else "바뀐 것이 없다."))
+        skipped = decide.load_skipped(args.project)
+        marks = [(f"- {f['path']}" + (f"#{hi + 1}" if h else ""), fingerprint(f, h)) for f in files for hi, h in enumerate(f["hunks"] or [None])]
+        seen = confirmed | partial
+        left = [name for name, fp in marks if fp not in seen and fp not in skipped]
+        unseen = sum(1 for _, fp in marks if fp in skipped and fp not in seen)
+        cut = sum(1 for _, fp in marks if fp in partial and fp not in confirmed)
+        total = len(marks)
+        print(f"hunk {total}개 · 확인 {total - len(left) - unseen}개" + (f"(핵심 줄만 본 것 {cut}개 포함)" if cut else "")
+              + (f" · 보지 않은 나머지 {unseen}개" if unseen else "") + f" · 남은 것 {len(left)}개")
+        if left:
+            print("\n".join(left))
+            print("다음: 남은 것 가운데 동작이 바뀌는 hunk 는 그룹에 담아 확인받는다. 나머지는 접혀 나온다.")
+        elif not total:
+            print("바뀐 것이 없다.")
+        elif unseen:
+            print(f"구현이 확정됐다 — 핵심 hunk 는 전부 확인됐다. 나머지 {unseen}개는 사용자가 보지 않았다.")
+        else:
+            print("구현이 확정됐다 — 바뀐 hunk 가 전부 확인됐다.")
         return 0
     if not args.story:
         ap.error("이야기 JSON 이 필요하다 (확인 상태만 보려면 --status)")
@@ -299,9 +386,11 @@ def main(argv=None):
     files = collect(args)
     if not files:
         raise SystemExit("바뀐 것이 없다.")
-    spec, report, errors = build(files, story, confirmed)
+    spec, report, errors = build(files, story, confirmed, partial)
     spec_errors, warns = decide.check_spec(spec)
     print(report)
+    if not args.doc:
+        print("점검: --doc 이 없다 — 설계 포인트 문서(클래스 관계 · 책임 · 흐름)를 맨 위에 싣는다")
     for w in warns:
         print(f"점검: {w}")
     errors = spec_errors + errors
@@ -309,9 +398,10 @@ def main(argv=None):
         print("이야기 오류:\n" + "\n".join(f"- {e}" for e in errors))
         if not args.force or spec_errors:
             return 1
+    doc = design_doc(args.doc) if args.doc else None
     if args.check:
         return 0
-    return decide.run_form(spec, args.story, decide.answers_path(args.story), args, record=False)
+    return decide.run_form(spec, args.story, decide.answers_path(args.story), args, record=False, doc=doc)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ game-architecture 가 구조 문서를 저장한 뒤 `render.py --form` 으로 �
 
 --form 은 문서의 '선택지' · '질문' 절을 선택 폼으로 옮겨 문서와 한 페이지에 낸다(selection 의 decide.py 서버).
 읽는 곳(그림 · 근거)과 고르는 곳(안마다 고름 · 기각 · 피드백)이 한 탭이다. Enter 로 보내면 이 명령이 답을 찍고 끝난다.
-선택지 절이 없거나 못 읽으면 문서만 연다. 헤드리스 실행이면 문서만 만들고 띄우지 않는다(exit code 4).
+선택지 절이 없거나 못 읽으면 절마다 판정 · 피드백 칸을 붙인 문서 확인 페이지로 띄운다. 헤드리스 실행이면 문서만 만들고 띄우지 않는다(exit code 4).
 
 만든 HTML 에는 문서 메모 칸(notes.html)이 붙는다. 나중에 보다가 이상한 곳을 긋거나 제목 옆 ✎ 를 눌러 적는다.
 'Claude 로 열기'는 claude-cli:// 주소로 그 프로젝트에 새 세션을 열고 요청을 채운다. '복사'는 같은 글을 클립보드에 둔다.
@@ -871,29 +871,108 @@ def load_decide():
         return None
 
 
-def run_form(src, md, title, out, a):
-    """문서와 선택 폼을 한 페이지로 띄우고 exit code 를 돌려준다. 폼을 못 만들면 문서만 연다."""
+# ── 문서 → 문서 확인 페이지 ────────────────────────────────────────────
+# 고를 것이 없는 문서(검수 · 판정 · 보고)도 절마다 '확인함 · 다시' 와 피드백을 받는다. 문서 여러 개와 남이 쓴 HTML 도 한 페이지에 모은다.
+# 입력 칸 없는 문서는 판정을 대화에 따로 적어야 해서 검수가 느리다(사용자 결정 2026-11-26).
+HTML_SUFFIXES = (".html", ".htm")
+HTML_H2 = re.compile(r"<h2\b[^>]*>(.*?)</h2>", re.S | re.I)
+HTML_TITLE = re.compile(r"<title\b[^>]*>(.*?)</title>|<h1\b[^>]*>(.*?)</h1>", re.S | re.I)
+WHOLE_DOC = "문서 전체"
+
+
+def _tagless(text):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", text))).strip()
+
+
+def _md_h2(md):
+    """코드 블록 밖의 `## 제목` 들."""
+    titles, fenced = [], False
+    for ln in md.splitlines():
+        if ln.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+            continue
+        if not fenced and ln.startswith("## "):
+            titles.append(_plain(ln[3:]))
+    return titles
+
+
+def review_doc(path, n, js_dir=None):
+    """문서 하나 → (폼에 실을 문서 정보, 그 문서를 그리는 함수). md 는 전부 펼쳐 그리고, HTML 은 쓴 그대로 싣는다."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix.lower() in HTML_SUFFIXES:
+        found = HTML_TITLE.search(text)
+        title = _tagless(found.group(1) or found.group(2) or "") if found else ""
+        heads = [t for t in map(_tagless, HTML_H2.findall(text)) if t]
+        make = lambda url_for: text  # noqa: E731
+    else:
+        title = next((ln.lstrip("# ").strip() for ln in text.splitlines() if ln.startswith("# ")), "")
+        heads = _md_h2(text)
+        make = lambda url_for: render_html(text, path.with_suffix(".html"), title or path.stem, js_dir, full=True, src=path, url_for=url_for)  # noqa: E731
+    sections = [{"id": f"d{n}s{i}", "title": t} for i, t in enumerate(heads or [WHOLE_DOC], 1)]
+    return {"id": f"d{n}", "title": title or path.stem, "name": path.name, "sections": sections, "heads": bool(heads)}, make
+
+
+def review_spec(paths, title=None, js_dir=None):
+    docs, makers = [], []
+    for n, path in enumerate(paths, 1):
+        if not Path(path).is_file():
+            raise SystemExit(f"문서가 없다: {path}")
+
+        doc, make = review_doc(path, n, js_dir)
+        docs.append(doc)
+        makers.append(make)
+    head = docs[0]["title"] + (f" 외 {len(docs) - 1}개" if len(docs) > 1 else "")
+    return {"kind": "review", "title": title or head, "context": [], "docs": docs}, makers
+
+
+def run_review(paths, a):
+    """문서들을 한 페이지에 싣고 절마다 판정과 피드백을 받는다. → exit code."""
     decide = load_decide()
-    spec, errors = doc_form(md, title)
-    if decide and spec:
-        spec_errors, warns = decide.check_spec(spec)
-        errors = spec_errors
-        for w in warns:
-            if "왜 네 칸" in w and not w.startswith("질문 1:"):
-                continue  # 곁 질문의 추천 이유는 질문 표 추천 칸의 한 구절이 전부다 — 문서에서 고칠 것이 없다
-            print(f"점검: {w}")
-    elif not decide:
-        errors = ["selection 스킬(decide.py)이 없다 — setup.bat 을 다시 돌린다"]
-    if decide and decide.unattended():
-        print(f"띄우지 않았다 — 헤드리스 실행이다({decide.unattended()}). 문서만 만들었다.\n"
-              "다음: 선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.")
-        return decide.UNATTENDED
+    if not decide:
+        print("selection 스킬(decide.py)이 없다 — setup.bat 을 다시 돌린다.")
+        return 1
+
+    spec, makers = review_spec(paths, getattr(a, "title", None), a.js_dir)
+    errors, _ = decide.check_spec(spec)
     if errors:
-        print("선택 폼을 붙이지 못했다 — 문서만 연다:\n" + "\n".join(f"- {e}" for e in errors))
+        print("문서 확인 페이지를 못 만들었다:\n" + "\n".join(f"- {e}" for e in errors))
+        return 1
+
+    count = sum(len(d["sections"]) for d in spec["docs"])
+    print(f"문서 {len(spec['docs'])}개 · 절 {count}개 — 절마다 '확인함 · 다시' 와 피드백을 받는다.", flush=True)
+    first = Path(paths[0])
+    return decide.run_form(spec, None, first.with_name(first.stem + ".answers.json"), a, record=False, doc=makers)
+
+
+def run_form(src, md, title, out, a):
+    """문서와 선택 폼을 한 페이지로 띄우고 exit code 를 돌려준다. 고를 것이 없거나 선택지를 못 읽으면 문서 확인 페이지로 띄운다."""
+    decide = load_decide()
+    if not decide:
+        print("selection 스킬(decide.py)이 없다 — setup.bat 을 다시 돌린다. 문서만 연다.")
         err = None if a.no_open else open_file(out)
         if err:
             print(f"열지 못했다 ({err}). 위 경로를 브라우저로 직접 연다.")
         return 0
+
+    spec, errors = doc_form(md, title)
+    warns = []
+    if spec:
+        errors, warns = decide.check_spec(spec)
+    for w in warns:
+        if "왜 네 칸" in w and not w.startswith("질문 1:"):
+            continue  # 곁 질문의 추천 이유는 질문 표 추천 칸의 한 구절이 전부다 — 문서에서 고칠 것이 없다
+        print(f"점검: {w}")
+    if errors:
+        if _section(md, CHOICE_HEADS).strip():
+            print("선택 폼을 붙이지 못했다 — 문서 확인 페이지로 띄운다:\n" + "\n".join(f"- {e}" for e in errors))
+        return run_review([src], a)
+
+    if decide.unattended():
+        print(f"띄우지 않았다 — 헤드리스 실행이다({decide.unattended()}). 문서만 만들었다.\n"
+              "다음: 선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.")
+        return decide.UNATTENDED
+
     doc = lambda url_for: render_html(md, out, title, a.js_dir, src=src, url_for=url_for, hide=FORM_HIDES)  # noqa: E731
     return decide.run_form(spec, None, Path(src).with_name(Path(src).stem + ".answers.json"), a, doc=doc)
 
@@ -913,13 +992,16 @@ def open_file(path):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
-    ap.add_argument("more", nargs="*", help="--attach · --detach: HTML 을 더 준다(폴더 · * 도 된다)")
+    ap.add_argument("more", nargs="*", help="--form: 한 페이지에 모을 문서를 더 준다(md · HTML). --attach · --detach: HTML 을 더 준다(폴더 · * 도 된다)")
+    ap.add_argument("--title", help="--form 으로 문서를 여럿 모을 때 페이지 제목")
     ap.add_argument("-o", "--out")
     ap.add_argument("--js-dir")
     ap.add_argument("--open", action="store_true", help="만든 HTML 을 기본 브라우저로 연다")
     ap.add_argument("--full", action="store_true",
                     help="절 순서를 바꾸지 않고 전부 펼친다 (기본: 선택지 · 그림 먼저, 그 밖의 글은 요약 · 그림 먼저, 나머지는 접기)")
-    ap.add_argument("--form", action="store_true", help="문서와 선택 폼을 한 페이지로 띄운다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
+    ap.add_argument("--form", action="store_true",
+                    help="문서와 폼을 한 페이지로 띄운다. 선택지가 있으면 선택 폼, 없으면 절마다 판정과 피드백을 받는다. "
+                         "문서를 여럿 주거나 HTML 을 주면 한 페이지에 모은다. 보낼 때까지 기다린다 — 백그라운드로 돌린다")
     ap.add_argument("--project", help="프로젝트 루트. --form 은 '남김' 표시한 결정을 그 아래 결정 로그에 적는다. "
                                       "문서 메모의 'Claude 로 열기'가 여는 폴더다(안 주면 문서 위쪽 폴더에서 찾는다)")
     ap.add_argument("--attach", action="store_true", help="남이 쓴 HTML 에 문서 메모 칸을 붙인다(다시 붙이면 바꿔 끼운다)")
@@ -931,9 +1013,11 @@ def main(argv=None):
     if a.attach or a.detach:
         attach([a.src, *a.more], project, remove=a.detach)
         return 0
-    if a.more:
-        ap.error("문서는 하나만 받는다")
+    if a.more and not a.form:
+        ap.error("문서 여러 개는 --form 과 같이 준다")
     src = Path(a.src)
+    if a.form and (a.more or src.suffix.lower() in HTML_SUFFIXES):
+        return run_review([src, *a.more], a)
     md = src.read_text(encoding="utf-8")
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), src.stem)
     out = render(md, a.out or src.with_suffix(".html"), title, a.js_dir, a.full, src=src, project=project)

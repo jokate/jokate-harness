@@ -44,9 +44,10 @@
 | 3 | `game-testing` | 검증 기준·테스트 · 버그 수정 | 완료 기준 먼저, 검증됨(자동/수동)/검증 안 됨 표기. 버그를 고쳤으면 `diff-proto` 페이지로 확인받는다 |
 | 4 | `game-mcp` | 에디터 MCP 조작 | 읽기 먼저·쓰고 재조회·실패는 가드로 |
 | 문서 | `selection` | `/selection` · 답에 선택지와 `추천:` 이 나오면 훅이 띄운다 · 구조 조사는 구조 문서와 한 페이지로 띄운다(`render.py --form`) | A/B/C 카드 · 체크리스트 · 답 칸이 있는 폼. 안마다 기각과 이유. Enter 로 보내면 답이 세션으로 오고, 남김 표시한 결정만 결정 로그에 남는다. 헤드리스 실행에서는 뜨지 않는다 |
+| 문서 | 문서 확인 페이지 (`render.py --form`) | 고를 것이 없는 문서(검수 · 판정 · 보고)를 보일 때 · 문서 여러 개나 남이 쓴 HTML 을 모아 보일 때(`render.py <a.md> <b.html> --form`) | 절마다 '확인함 · 다시' 와 피드백 칸이 붙는다. Enter 로 보내면 답이 세션으로 온다. 안 본 절은 확인받은 것으로 치지 않는다 |
 | 문서 | 문서 메모 칸 (`render.py`) | 구조 문서 HTML 을 나중에 보다가 이상한 곳을 긋거나 제목 옆 ✎ 를 누른다 · 손으로 쓴 HTML 에는 `render.py --attach` | 그 자리(절 · 그림 · 그은 글)가 붙은 메모를 모아 'Claude 로 열기'(`claude-cli://` 주소로 그 프로젝트에 새 세션, 요청이 채워진다)나 '복사'로 보낸다. 서버가 없다 |
 | 문서 | `collect-decision` · `reject-decision` | `/collect-decision` · `/reject-decision` · "결정 모아줘" · "결정 기각" 이라 하면 훅이 가리킨다 | 결정 로그(`.claude/decisions.jsonl`)의 유효 · 기각 결정 페이지, 기각은 체크 + 이유 한 줄 |
-| 문서 | `diff-proto` | `/diff-proto` · "구현 확인받자" · "바뀐 부분 보여줘" 라 하면 훅이 가리킨다 · 구조 조사의 구현 단계 뒤 · "버그 고쳐줘" 로 고친 뒤 | 구현을 확정하는 단계. 실제 diff 를 의미별 그룹 · 위험 순으로 나눈 페이지에서 그룹마다 확인함 · 기각. 기각은 고쳐 다시 확인받고, 확인한 hunk 는 다시 묻지 않는다 |
+| 문서 | `diff-proto` | `/diff-proto` · "구현 확인받자" · "바뀐 부분 보여줘" 라 하면 훅이 가리킨다 · 구조 조사의 구현 단계 뒤 · "버그 고쳐줘" 로 고친 뒤 | 구현을 확정하는 단계. 설계 포인트 문서와 핵심 hunk 그룹을 한 페이지에 띄워 그룹마다 확인함 · 기각. 나머지 hunk 는 접히고 판정하지 않는다. 기각은 고쳐 다시 확인받고, 확인한 hunk 는 다시 묻지 않는다 |
 
 흐름: 기획서(design-doc) → 사양 표 → 구조 조사(architecture) → 사람 선택 → 완료 기준(testing) → 구현 → 새 컨텍스트 리뷰.
 
@@ -209,7 +210,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
 | 인덱스가 기대 위치를 못 찾는다 | `<프로젝트>/.claude/index_eval.json` 에 그 질의를 넣고 웹뷰 "질의 세트" 로 Acc@1·MRR 을 본다 |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
-| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --form`(고를 것이 없는 문서는 `--open`). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
+| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --form`(고를 것이 없는 문서도 `--form` — 절마다 판정 칸이 붙는다). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
 | 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `tools/harness_probe.py` 로 지금 대 수정안 (정답지 과제가 있으면 `qa` 로 재현율까지) |
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.

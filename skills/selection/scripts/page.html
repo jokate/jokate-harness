@@ -21,6 +21,8 @@ h3{font-size:13px;margin:14px 0 6px;color:var(--sub);font-weight:600}
 .stats{color:var(--sub);font-size:13px;margin-top:6px}
 .docwrap{max-width:1180px;margin:14px auto 0;padding:0 20px}
 iframe.doc{display:block;width:100%;height:70vh;border:0}
+.rdoc{margin-top:18px} .rdoc>h2{max-width:1180px;margin:0 auto;padding:0 20px;font-size:16px} .rdoc>h2 .n{color:var(--mute);font-weight:400;font-size:12.5px}
+.secs{max-width:1180px;margin:0 auto;padding:0 20px}
 section,details.g,.ledger{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
 .sub{color:var(--sub);font-size:13.5px;margin:0 0 12px}
 .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
@@ -226,10 +228,11 @@ function renderDiff() {
       if (a.verdict === "no") { det.open = true; note.focus(); }
     }}, label);
     const okB = vote("ok", "확인함"), noB = vote("no", "기각");
-    const det = h("details", {class: "g", id: "g-" + g.id, open: (!g.locked && (gi === 0 || g.risk === "높음" || a.verdict === "no")) || undefined},
+    const fixed = g.locked || g.skipped;  // 접혀 나오고 판정을 받지 않는다 — 앞서 확인한 것, 핵심이 아닌 나머지
+    const det = h("details", {class: "g", id: "g-" + g.id, open: (!fixed && (gi === 0 || g.risk === "높음" || a.verdict === "no")) || undefined},
       h("summary", {}, g.risk ? h("span", {class: "chip r" + g.risk}, g.risk) : null, h("span", {class: "t"}, g.title),
         h("span", {class: "n"}, "+" + g.added + " −" + g.removed + " · 파일 " + g.files.length),
-        g.locked ? h("span", {class: "chip"}, "확인됨") : h("span", {class: "votes"}, okB, noB)));
+        fixed ? h("span", {class: "chip"}, g.locked ? "확인됨" : "판정 안 함") : h("span", {class: "votes"}, okB, noB)));
     const paint = () => {
       okB.classList.toggle("on", a.verdict === "ok");
       noB.classList.toggle("on", a.verdict === "no");
@@ -243,6 +246,7 @@ function renderDiff() {
       if (f.binary) det.append(h("p", {class: "sub"}, "바이너리 — 내용을 보이지 않는다"));
       f.hunks.forEach(k => det.append(h("div", {class: "hunkh"}, k.header), diffTable(k)));
     });
+    if (g.skipped) note.placeholder = "펼쳐 보다가 걸리는 것이 있으면 적는다 — 세션으로 간다";
     if (!g.locked) det.append(h("h3", {}, "피드백"), note);
     main.append(det);
   });
@@ -274,6 +278,61 @@ function renderLedger() {
   $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, rej ? "기각 보내기 (Enter)" : "닫기 (Enter)"));
 }
 
+/* ── 문서 확인 — 절마다 판정과 피드백 ── */
+const secNotes = {};
+const BAR = "margin:14px 0 26px;padding:10px 12px;border:1px solid rgba(128,128,128,.5);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:14px/1.4 system-ui,sans-serif";
+const VOTE = "padding:6px 12px;border:1px solid rgba(128,128,128,.6);border-radius:6px;cursor:pointer;font:inherit;font-weight:600";
+const NOTE = "flex:1 1 240px;min-height:34px;padding:6px 8px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit;font:inherit";
+const sections = () => spec.docs.flatMap(d => d.sections);
+function sectionBar(doc, s) {  // 딸린 문서 안에 그린다 — 그 문서의 CSS 를 모르니 스타일을 직접 단다
+  const a = slot("s", s.id, {verdict: null, note: ""});
+  const el = (tag, css) => { const e = doc.createElement(tag); e.style.cssText = css; return e; };
+  const bar = el("div", BAR), label = el("span", "font-weight:600;opacity:.8"), note = el("textarea", NOTE);
+  label.textContent = s.title;
+  note.rows = 1; note.placeholder = "피드백 — 세션으로 간다"; note.value = a.note || "";
+  note.addEventListener("input", () => { a.note = note.value; touch(); });
+  const vote = (v, label, color) => {
+    const b = el("button", VOTE);
+    b.type = "button"; b.textContent = label; b.setAttribute("data-v", v);
+    b.addEventListener("click", () => { a.verdict = a.verdict === v ? null : v; paint(); touch(); if (a.verdict === "no") note.focus(); });
+    b.paint = () => { const on = a.verdict === v; b.style.background = on ? color : "transparent"; b.style.color = on ? "#fff" : "inherit"; };
+    return b;
+  };
+  const ok = vote("ok", "확인함", "#1a7f37"), no = vote("no", "다시", "#b42318");
+  const paint = () => { ok.paint(); no.paint(); };
+  paint();
+  bar.setAttribute("data-sec", s.id);
+  bar.append(label, ok, no, note);
+  secNotes[s.id] = note;
+  return bar;
+}
+const plainTitle = t => (t || "").replace(/\s+/g, " ").trim();
+function attachBars(doc, d, fallback, tries) {
+  const heads = [...doc.querySelectorAll("h2")];
+  if (!heads.length && d.heads && (tries || 0) < 10) { setTimeout(() => attachBars(doc, d, fallback, (tries || 0) + 1), 200); return; }
+  const used = new Set();
+  d.sections.forEach((s, i) => {  // 제목이 같은 h2 밑에 단다. 못 찾은 절은 문서 아래에 모은다 — 판정할 곳이 없는 절은 없다
+    let at = heads.findIndex((x, k) => !used.has(k) && plainTitle(x.textContent) === plainTitle(s.title));
+    if (at < 0 && heads.length === d.sections.length && !used.has(i)) at = i;
+    if (at < 0) { fallback.append(sectionBar(document, s)); return; }
+    used.add(at);
+    let end = heads[at];
+    const nextSection = n => /^H[12]$/.test(n.tagName) || n.querySelector("h1,h2");  // 다음 절의 제목이거나, 다음 절들을 감싼 상자
+    while (end.nextElementSibling && !nextSection(end.nextElementSibling)) end = end.nextElementSibling;
+    end.after(sectionBar(doc, s));
+  });
+}
+function renderReview() {
+  const box = h("div", {id: "rdocs"});
+  spec.docs.forEach((d, di) => {
+    const fallback = h("div", {class: "secs"});
+    box.append(h("div", {class: "rdoc"}, spec.docs.length > 1 ? h("h2", {}, (di + 1) + ". " + d.title + " ", h("span", {class: "n"}, d.name || "")) : null,
+      docFrame(BOOT.docs[di], doc => attachBars(doc, d, fallback)), fallback));
+  });
+  $("top").after(box);
+  $("btns").append(h("button", {class: "go", onclick: () => trySubmit()}, "보내기 (Enter)"));
+}
+
 /* ── 공통 ── */
 function progress() {
   const p = $("prog");
@@ -281,9 +340,14 @@ function progress() {
     const n = unanswered().length, r = rejected().length, k = spec.questions.filter(q => S.q[q.id].keep && S.q[q.id].choice).length;
     p.textContent = "고른 것 " + (spec.questions.length - n) + "/" + spec.questions.length + (r ? " · 기각 " + r + "개" : "") + " · 결정 로그 " + k + "건" + (n ? " — 안 고른 것은 미결로 간다" : "");
   } else if (spec.kind === "diff") {
-    const open = spec.groups.filter(g => !g.locked), count = v => open.filter(g => S.g[g.id].verdict === v).length;
+    const open = spec.groups.filter(g => !g.locked && !g.skipped), count = v => open.filter(g => S.g[g.id].verdict === v).length;
     p.textContent = "확인 " + count("ok") + " · 기각 " + count("no") + " · 미정 " + (open.length - count("ok") - count("no"))
-      + (open.length < spec.groups.length ? " · 앞서 확인한 그룹은 묻지 않는다" : "");
+      + (spec.groups.some(g => g.locked) ? " · 앞서 확인한 그룹은 묻지 않는다" : "")
+      + (spec.groups.some(g => g.skipped) ? " · 나머지 변경은 판정하지 않는다" : "");
+  }
+  else if (spec.kind === "review") {
+    const count = v => sections().filter(s => ((S.s || {})[s.id] || {}).verdict === v).length;
+    p.textContent = "확인 " + count("ok") + " · 다시 " + count("no") + " · 안 봄 " + (sections().length - count("ok") - count("no"));
   }
   else if (spec.mode === "reject") p.textContent = "기각 " + Object.values(S.r || {}).filter(a => a.reject).length + "건";
   else p.textContent = "유효 " + spec.live.length + "건 · 기각 " + spec.dead.length + "건";
@@ -321,6 +385,15 @@ function trySubmit() {
       return;
     }
   }
+  if (spec.kind === "review") {
+    const bad = sections().filter(s => { const a = (S.s || {})[s.id]; return a && a.verdict === "no" && !a.note.trim(); });
+    if (bad.length) {
+      const note = secNotes[bad[0].id];
+      if (note) { note.scrollIntoView({block: "center"}); note.focus(); }
+      status("'다시' 인 절에 피드백이 필요하다: " + bad.map(b => b.title).join(", "));
+      return;
+    }
+  }
   if (spec.kind === "ledger" && spec.mode === "reject") {
     const bad = Object.entries(S.r || {}).filter(([, a]) => a.reject && !a.reason.trim());
     if (bad.length) { $("r-" + bad[0][0]).scrollIntoView({block: "center"}); status("기각하는 이유 한 줄이 필요하다: " + bad.map(b => b[0]).join(", ")); return; }
@@ -340,8 +413,8 @@ $("top").append(...[h("h1", {}, spec.title), h("ul", {class: "ctx"}, ...(spec.co
   spec.stats ? h("div", {class: "stats"}, spec.stats) : null,
   h("div", {class: "stats"}, h("kbd", {}, "Enter"), BOOT.served ? " 보내기 — 답이 세션으로 가고 이 탭이 닫힌다" : " 답 복사 — 대화창에 붙여 넣는다")].filter(Boolean));
 /* ── 딸린 문서 — 읽는 곳과 고르는 곳을 한 탭에 둔다 ── */
-if (BOOT.doc) {
-  const frame = h("iframe", {class: "doc", src: BOOT.doc, title: "문서"});
+function docFrame(src, onReady) {
+  const frame = h("iframe", {class: "doc", src, title: "문서"});
   frame.addEventListener("load", () => {
     try {
       const doc = frame.contentDocument, fit = () => { frame.style.height = Math.ceil(doc.body.getBoundingClientRect().height) + "px"; };
@@ -349,14 +422,17 @@ if (BOOT.doc) {
       fit();
       doc.addEventListener("keydown", e => {  // 문서를 누른 채 Enter 를 쳐도 보낸다
         if (e.key !== "Enter" || e.isComposing || sent || ["SUMMARY", "BUTTON", "A"].includes(e.target.tagName)) return;
+        if (e.target.tagName === "TEXTAREA" && !e.ctrlKey) return;
         e.preventDefault();
         trySubmit();
       });
+      if (onReady) onReady(doc);
     } catch (e) {}
   });
-  $("top").after(h("div", {class: "docwrap"}, frame));
+  return h("div", {class: "docwrap"}, frame);
 }
-({selection: renderSelection, diff: initDiff, ledger: renderLedger})[spec.kind]();
+if (BOOT.doc) $("top").after(docFrame(BOOT.doc));
+({selection: renderSelection, diff: initDiff, ledger: renderLedger, review: renderReview})[spec.kind]();
 progress();
 status(BOOT.served ? "바꾸면 바로 저장된다" : "서버 없이 연 파일 — Enter 로 답을 복사한다");
 </script>
