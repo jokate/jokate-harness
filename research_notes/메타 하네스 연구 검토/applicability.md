@@ -28,7 +28,7 @@ The cost A/B is a usable optimization objective for a narrow surface. The behavi
 - The current `cases.json` has **9 cases and 28 checks**:
   - arch-cc 7, arch-small 3, arch-new 4, onboard-new 2, onboard-ue53 2, onboard-engine 2, design-doc 4, testing 2, mcp-read 2.
   - Check types: skill ×8, final_re ×8, bash_re ×6, final_not_re ×4, skill_any ×1, tool_re ×1 (counted from `skills/game-bootstrap/evals/cases.json:35-266`).
-  - Three cases use a copied fixture with bootstrap applied (`cases.json:125-133`, `:150-158`, `:161-170`). The other six run directly in the live `C:/Users/kkkk4017/Projects/MNYS` checkout (`cases.json:38`, `:80`, `:187`, `:204`, `:231`, `:248`).
+  - Three cases use a copied fixture with bootstrap applied (`cases.json:125-133`, `:150-158`, `:161-170`). The other six run directly in the live `~/Projects/MNYS` checkout (`cases.json:38`, `:80`, `:187`, `:204`, `:231`, `:248`).
   - `mcp-read` requires a live Unreal editor MCP server (`cases.json:247-264`).
 - Examples of the final-answer checks:
   - `다음[^\n]{0,40}(요청|고칠 곳|때 \d+곳)|같은 (종류의 )?요청`, which checks that the answer states where the next similar request would need edits (`cases.json:68`).

@@ -31,16 +31,21 @@ for _s in (sys.stdout, sys.stderr):
 HERE = Path(__file__).resolve().parent
 
 
+def home(x):
+    """케이스의 경로는 `~` 나 `{HOME}` 으로 쓴다. 공개 저장소에 사용자 폴더 이름을 남기지 않는다."""
+    return os.path.expanduser(x).replace("{HOME}", Path.home().as_posix())
+
+
 def prepare_fixture(case, out):
     """"fixture": {"from": 원본, "copy": [항목...], "bootstrap": true} — 원본을 건드리지 않고 사본에서 돌린다."""
     fx = case.get("fixture")
     if not fx:
-        return case["cwd"]
+        return home(case["cwd"])
     dst = out / "fixtures" / case["id"]
     if dst.exists():
         shutil.rmtree(dst)
     dst.mkdir(parents=True)
-    src = Path(fx["from"])
+    src = Path(home(fx["from"]))
     for item in fx["copy"]:
         s = src / item
         (shutil.copytree if s.is_dir() else shutil.copy2)(s, dst / item)
@@ -54,7 +59,7 @@ def run_case(case, args_base, out):
     log = out / f"{case['id']}.jsonl"
     cwd = prepare_fixture(case, out)
     cmd = (["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose"] + args_base
-           + [os.path.expanduser(x) for x in case.get("extra_args", [])])
+           + [home(x) for x in case.get("extra_args", [])])
     with open(log, "w", encoding="utf-8") as f:
         subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.DEVNULL, shell=(os.name == "nt"),
                        env={**os.environ, "GAME_HARNESS_NO_OPEN": "1"})  # 그림 훅이 케이스마다 브라우저를 열지 않게
@@ -117,7 +122,7 @@ def main():
     if a.only:
         keep = set(a.only.split(","))
         cases = [c for c in cases if c["id"] in keep]
-    args_base = [os.path.expanduser(x) for x in spec.get("claude_args", [])]
+    args_base = [home(x) for x in spec.get("claude_args", [])]
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
