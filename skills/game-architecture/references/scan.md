@@ -38,7 +38,7 @@
 ## 3. 보고 — 후보 표 하나
 
 - 파일: `<프로젝트>/Saved/ClaudeArch/<YYYYMMDD>-구조점검.md` (Unity 는 `Library/ClaudeArch/`)
-- 렌더: `python ~/.claude/skills/game-architecture/scripts/render.py <파일.md> --open`
+- 렌더: `python ~/.claude/skills/game-architecture/scripts/render.py <파일.md> --form --project <프로젝트 루트>` (백그라운드). 후보마다 고름 · 기각 · 피드백을 받는다.
 - 원본의 Tailwind HTML 은 쓰지 않는다. 후보 절 제목은 `## 선택지` 로 시작해야 렌더러가 접는다.
 - 후보는 5개 이하, 한 행에 하나, 근거 센 순서. 카드나 줄글 설명을 붙이지 않는다.
 - 근거 세기: 강함 = hotspot 상위 + 땜질 흔적 + 코드로 확인 / 볼 만함 = 신호 하나나 코드만 / 추측 = 읽은 인상뿐

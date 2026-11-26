@@ -210,7 +210,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 | 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
 | 인덱스가 기대 위치를 못 찾는다 | `<프로젝트>/.claude/index_eval.json` 에 그 질의를 넣고 웹뷰 "질의 세트" 로 Acc@1·MRR 을 본다 |
 | 매번 반드시 일어나야 하는데 안 일어남 | 훅 (`skills/game-bootstrap/harness/`) |
-| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --form`(고를 것이 없는 문서는 `--open`). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
+| 그림이 `flowchart LR`·`subgraph …` 글자로 보인다 | 대화창은 mermaid 를 그리지 않는다 — 구조 문서를 저장하고 `render.py --form`(고를 것이 없는 문서도 `--form` — 절마다 판정 칸이 붙는다). HTML 에서도 글자면 render.py 옆 `vendor/` 가 있는지 |
 | 위 수정이 정말 효과 있나 | `evals/cases.json` 에 그 실패를 케이스로 추가 → `tools/harness_probe.py` 로 지금 대 수정안 (정답지 과제가 있으면 `qa` 로 재현율까지) |
 
 평가는 비용이 든다(케이스당 약 $0.5~2). 큰 수정 뒤, 모델 업데이트 뒤에만 돌린다.

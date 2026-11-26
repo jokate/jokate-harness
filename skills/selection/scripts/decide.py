@@ -426,20 +426,33 @@ def load_skipped(project):
     return _load_fps(project, "skipped")
 
 
+def load_partial(project):
+    """줄 범위로 핵심 줄만 확인받은 hunk 의 해시."""
+    return _load_fps(project, "partial")
+
+
 def confirm_diff(spec, answers, project):
     """확인받은 hunk 를 기록하고 다음에 할 일을 돌려준다. 기록은 지금 diff 에 있는 hunk 만 남긴다."""
     marks = diff_marks(spec, answers)
-    units = [fp for g in spec["groups"] for fp in g.get("fps") or []]
-    done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in ("확인함", KEPT_MARK) for fp in g.get("fps") or []})
-    skipped = [fp for fp in skipped_fps(spec) if fp not in done]
+    passed = ("확인함", KEPT_MARK)
+    units = {fp for g in spec["groups"] for fp in (g.get("fps") or []) + (g.get("part_fps") or [])}
+    done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in passed for fp in g.get("fps") or []})
+    judged = {}  # 줄 범위로 본 hunk — 그 줄을 담은 그룹이 전부 통과해야 '핵심 줄만 봄' 이다
+    for g, mark in zip(spec["groups"], marks):
+        for fp in g.get("part_fps") or []:
+            judged.setdefault(fp, []).append(mark in passed)
+    partial = sorted(fp for fp, oks in judged.items() if all(oks) and fp not in done)
+    skipped = [fp for fp in skipped_fps(spec) if fp not in done and fp not in partial]
     path = confirmed_path(project)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        record = {"updated": today(), "title": spec.get("title", ""), "fps": done, "skipped": skipped}
+        record = {"updated": today(), "title": spec.get("title", ""), "fps": done, "partial": partial, "skipped": skipped}
         path.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     except OSError as e:
         return f"확인 기록을 못 썼다: {e}"
-    lines = [f"확인 누계: hunk {len(done)}/{len(units) - len(skipped)}" + (f" · 나머지 {len(skipped)}개는 보지 않음" if skipped else "")]
+    seen = len(done) + len(partial)
+    lines = [f"확인 누계: hunk {seen}/{len(units) - len(skipped)}" + (f" · 그 가운데 {len(partial)}개는 핵심 줄만 봄" if partial else "")
+             + (f" · 나머지 {len(skipped)}개는 보지 않음" if skipped else "")]
     given = answers.get("g") or {}
     if any(g.get("skipped") and str((given.get(g["id"]) or {}).get("note") or "").strip() for g in spec["groups"]):
         lines.append("다음: 나머지 변경에 적힌 피드백을 반영한다. 반영해서 바뀐 hunk 는 그룹에 담아 확인받는다.")
@@ -448,9 +461,10 @@ def confirm_diff(spec, answers, project):
                      "확인받은 hunk 는 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
     if marks.count("미정"):
         lines.append(f"다음: 미정 {marks.count('미정')}그룹은 확인받지 못했다. 그 그룹을 다시 띄운다. 확인받은 것으로 치지 않는다.")
-    if len(done) + len(skipped) == len(units):
+    if seen + len(skipped) == len(units):
         lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다."
-                     + (f" 결과에 '나머지 hunk {len(skipped)}개는 사용자가 보지 않음' 이라고 적는다." if skipped else ""))
+                     + (f" 결과에 '나머지 hunk {len(skipped)}개는 사용자가 보지 않음' 이라고 적는다." if skipped else "")
+                     + (f" 'hunk {len(partial)}개는 핵심 줄만 확인' 도 적는다." if partial else ""))
     return "\n".join(lines)
 
 
@@ -595,7 +609,7 @@ def finish(spec, answers, project, record=True):
             print("\n결정 로그: 남김 표시한 결정이 없어 적지 않았다")
     elif spec["kind"] == "diff":
         print(diff_summary(spec, answers))
-        if any(g.get("fps") for g in spec["groups"]):
+        if any(g.get("fps") or g.get("part_fps") for g in spec["groups"]):
             print("\n" + confirm_diff(spec, answers, project))
     elif spec["kind"] == "review":
         print(review_summary(spec, answers))

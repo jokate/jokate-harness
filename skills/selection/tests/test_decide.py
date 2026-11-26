@@ -375,7 +375,7 @@ class DiffDoc(unittest.TestCase):
         self.assertEqual([(g["id"], g["title"], g["added"], g["removed"]) for g in spec["groups"]],
                          [("g1", "버퍼 규칙을 한 곳으로", 2, 1), ("g2", "새 타입", 2, 0), ("rest", diffdoc.REST, 2, 1)])
         self.assertEqual([f["path"] for f in spec["groups"][2]["files"]], ["Src/Buffer.cpp", "Art/icon.png"])
-        self.assertIn("hunk 4개 · 핵심 2개 · 판정 안 하는 나머지 2개", report)
+        self.assertIn("핵심 hunk 2개 · 판정 안 하는 나머지 2개", report)
         self.assertIn("나머지: Src/Buffer.cpp#2 · Art/icon.png", report)   # 무엇을 접어 두는지 쓰는 쪽이 본다
         self.assertEqual([g["skipped"] for g in spec["groups"]], [False, False, True])
         self.assertEqual(decide.check_spec(spec)[0], [])
@@ -418,7 +418,7 @@ class DiffDoc(unittest.TestCase):
                 code = diffdoc.main([str(story), "--path", d, "--check"])
             self.assertEqual(code, 0, out.getvalue())
             self.assertIn("파일 2개", out.getvalue())
-            self.assertIn("핵심 2개 · 판정 안 하는 나머지 0개", out.getvalue())
+            self.assertIn("핵심 hunk 2개 · 판정 안 하는 나머지 0개", out.getvalue())
 
     def test_mixed_encoding_diff_is_decoded_line_by_line(self):
         raw = "Index: 소스/효과.cpp\n".encode("cp949") + "+// 피해 입구\n".encode("utf-8")
@@ -484,7 +484,7 @@ class ImplementationCycle(unittest.TestCase):
 
         again = [{"title": "창 길이를 테이블에서 읽는다", "match": ["a.txt#2"]}]
         check = self.run_doc("--check", groups=again)
-        self.assertIn("핵심 1개 · 판정 안 하는 나머지 0개 · 앞서 확인한 것 1개", check)  # 확인한 hunk 가 '나머지 변경' 으로 돌아오지 않는다
+        self.assertIn("핵심 hunk 1개 · 판정 안 하는 나머지 0개 · 앞서 확인한 것 1개", check)  # 확인한 hunk 가 '나머지 변경' 으로 돌아오지 않는다
         out = self.run_doc(groups=again, verdicts={"g1": {"verdict": "ok", "note": ""}})
         self.assertIn("확인 1 · 기각 0 · 미정 0 · 앞서 확인 1", out)
         self.assertIn("확인 누계: hunk 2/2", out)
@@ -509,7 +509,7 @@ class ImplementationCycle(unittest.TestCase):
         self.write({3: "new 3", 25: "renamed 25"})
         key = [{"title": "만료를 건너뛴다", "risk": "높음", "match": ["a.txt#1"]}]
         check = self.run_doc("--check", groups=key)
-        self.assertIn("핵심 1개 · 판정 안 하는 나머지 1개", check)
+        self.assertIn("핵심 hunk 1개 · 판정 안 하는 나머지 1개", check)
         self.assertIn("나머지: a.txt#2", check)
         out = self.run_doc(groups=key, verdicts={"g1": {"verdict": "ok", "note": ""}})
         self.assertIn("확인 1 · 기각 0 · 미정 0 · 나머지 hunk 1개는 보지 않음", out)
@@ -524,6 +524,37 @@ class ImplementationCycle(unittest.TestCase):
         status = self.run_doc("--status")
         self.assertIn("남은 것 1개", status)
         self.assertIn("동작이 바뀌는 hunk 는 그룹에 담아 확인받는다", status)
+
+    def test_line_range_shows_only_the_key_function_of_a_new_file(self):
+        """새 파일은 hunk 하나가 파일 전체다. 줄 범위로 핵심 함수만 보이고, 그 hunk 는 '핵심 줄만 봄' 으로 적힌다."""
+        (self.repo / "b.txt").write_text("\n".join(f"new {i}" for i in range(1, 201)) + "\n", encoding="utf-8", newline="\n")
+        whole = self.run_doc("--check", groups=[{"title": "새 파일", "match": ["b.txt"]}])
+        self.assertIn("점검: 그룹 '새 파일' 이 200줄이다 — 핵심 함수만 줄 범위로 고른다", whole)
+        self.assertIn("점검: --doc 이 없다", whole)
+
+        key = [{"title": "만료 판정", "risk": "높음", "match": ["b.txt:40-49"]}, {"title": "초기화", "match": ["b.txt:120-124"]}]
+        check = self.run_doc("--check", groups=key)
+        self.assertIn("핵심 그룹 2개 · 핵심 hunk 1개 · 판정 안 하는 나머지 0개 · 판정받을 줄 15", check)  # 그룹 둘이 hunk 하나를 나눠 본다
+        self.assertNotIn("줄 범위로 고른다", check)
+        files = diffdoc.collect(type("A", (), {"path": str(self.repo), "base": None, "patch": None, "add": [], "story": str(self.story)})())
+        spec, _, errors = diffdoc.build(files, {"title": "t", "groups": key})
+        self.assertEqual(errors, [])
+        self.assertEqual([h["header"] for h in spec["groups"][0]["files"][0]["hunks"]], ["@@ 40–49줄 @@"])
+        rest = spec["groups"][-1]
+        self.assertEqual([h["header"] for h in rest["files"][0]["hunks"]], ["@@ 1–39줄 @@", "@@ 50–119줄 @@", "@@ 125–200줄 @@"])  # 빠지는 줄은 없다
+        self.assertEqual((rest["fps"], rest["part_fps"], rest["skipped"]), ([], [], True))
+
+        out = self.run_doc(groups=key, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": "no", "note": "이름"}})
+        self.assertIn("확인 누계: hunk 0/1", out)                               # 그 hunk 를 담은 그룹이 하나라도 기각이면 본 것이 아니다
+        self.assertNotIn("구현이 확정됐다", out)
+        out = self.run_doc(groups=key, verdicts={"g1": {"verdict": "ok", "note": ""}, "g2": {"verdict": "ok", "note": ""}})
+        self.assertIn("확인 누계: hunk 1/1 · 그 가운데 1개는 핵심 줄만 봄", out)
+        self.assertIn("'hunk 1개는 핵심 줄만 확인' 도 적는다", out)
+        self.assertIn("hunk 1개 · 확인 1개(핵심 줄만 본 것 1개 포함) · 남은 것 0개", self.run_doc("--status"))
+
+        self.write({3: "new 3"})                                           # 다른 파일을 고쳐 다시 확인받아도 그 기록은 남는다
+        out = self.run_doc(groups=[{"title": "a 를 고쳤다", "match": ["a.txt"]}], verdicts={"g1": {"verdict": "ok", "note": ""}})
+        self.assertIn("확인 누계: hunk 2/2 · 그 가운데 1개는 핵심 줄만 봄", out)
 
     def test_feedback_on_the_folded_rest_reaches_the_session(self):
         self.write({3: "new 3", 25: "renamed 25"})
