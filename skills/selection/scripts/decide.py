@@ -58,6 +58,7 @@ ASSET_TYPES = {".js": "text/javascript", ".html": "text/html", ".svg": "image/sv
                ".png": "image/png", ".json": "application/json"}
 BLOCKED = {"selection": "선택지와 추천은 답에 글로 내고 멈춘다. 고른 것으로 치고 진행하지 않는다.",
            "diff": "사용자 확인 단계를 건너뛴다. 결과에 '구현 확인 안 받음 — 헤드리스 실행' 이라고 적는다.",
+           "review": "문서 확인 단계를 건너뛴다. 결과에 '문서 확인 안 받음 — 헤드리스 실행' 이라고 적는다.",
            "ledger": "표만 보려면 `decide.py list` 를 쓴다."}
 WHY = (("problem", "문제"), ("dropped", "버린 안"), ("cost", "대가"), ("flip", "뒤집는 조건"))
 
@@ -72,12 +73,21 @@ def check_spec(spec):
     """→ (오류, 경고). 오류가 있으면 폼을 띄우지 않는다."""
     errors, warns = [], []
     kind = spec.get("kind")
-    if kind not in ("selection", "diff", "ledger"):
-        return [f"kind 가 selection · diff · ledger 가 아니다: {kind!r}"], warns
+    if kind not in ("selection", "diff", "ledger", "review"):
+        return [f"kind 가 selection · diff · ledger · review 가 아니다: {kind!r}"], warns
     if not str(spec.get("title") or "").strip():
         errors.append("title 이 없다")
     if len(spec.get("context") or []) > 3:
         warns.append("context 는 3줄 이하로 쓴다")
+    if kind == "review":
+        docs = spec.get("docs") or []
+        if not docs:
+            errors.append("docs 가 비었다")
+        if any(not d.get("sections") for d in docs):
+            errors.append("sections 가 없는 문서가 있다")
+        if not _ids_ok([str(s.get("id") or "") for d in docs for s in d.get("sections") or []]):
+            errors.append("절의 id 가 비었거나 겹친다")
+        return errors, warns
     if kind != "selection":
         return errors, warns
     questions = spec.get("questions") or []
@@ -142,9 +152,10 @@ def blocked(kind, env=None):
 
 # ── 페이지 · 서버 ──────────────────────────────────────────────────────────
 
-def build_page(spec, state, token, served, name, doc=None):
-    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 폼만 나온다."""
-    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc}, ensure_ascii=False)
+def build_page(spec, state, token, served, name, doc=None, docs=None):
+    """doc: 같은 페이지 위쪽에 실을 문서의 주소. 없으면 폼만 나온다. docs: 문서 확인 페이지가 싣는 문서들의 주소."""
+    boot = json.dumps({"spec": spec, "state": state, "token": token, "served": served, "name": name, "doc": doc, "docs": docs or []},
+                      ensure_ascii=False)
     for bad, safe in (("</", "<\\/"), ("<!--", "<\\!--"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
         boot = boot.replace(bad, safe)  # <script> 안에서 끊기지 않게
     page = PAGE.read_text(encoding="utf-8").replace("__TITLE__", html.escape(str(spec.get("title") or "")))
@@ -186,8 +197,11 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
         assets[key] = Path(path)
         return f"/a/{quote(key)}?t={token}"
 
-    doc_html = doc(url_for) if doc else None
-    doc_url = f"/doc?t={token}" if doc_html else None
+    makers = list(doc) if isinstance(doc, (list, tuple)) else [doc] if doc else []
+    doc_pages = [make(url_for) for make in makers]
+    doc_html = doc_pages[0] if doc_pages else None
+    doc_urls = [f"/doc/{i}?t={token}" for i in range(len(doc_pages))]
+    doc_url = f"/doc?t={token}" if doc_html and spec.get("kind") != "review" else None  # 문서 확인 페이지는 문서를 여럿 싣는다
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -211,6 +225,8 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
                 return self.reply(403)
             if path == "/doc" and doc_html:
                 return self.reply(200, doc_html.encode("utf-8"), "text/html; charset=utf-8")
+            if path.startswith("/doc/") and path[5:].isdigit() and int(path[5:]) < len(doc_pages):
+                return self.reply(200, doc_pages[int(path[5:])].encode("utf-8"), "text/html; charset=utf-8")
             if path.startswith("/a/"):
                 asset = assets.get(unquote(path[3:]))
                 try:
@@ -222,7 +238,7 @@ def serve(spec, save_to, timeout_min=120, open_browser=True, port=0, on_ready=No
             if path != "/":
                 return self.reply(404)
             state["bye"], state["last"] = None, time.time()
-            self.reply(200, build_page(spec, state["answers"], token, True, name, doc_url).encode("utf-8"), "text/html; charset=utf-8")
+            self.reply(200, build_page(spec, state["answers"], token, True, name, doc_url, doc_urls).encode("utf-8"), "text/html; charset=utf-8")
 
         def do_POST(self):
             path = self.allowed()
@@ -353,6 +369,36 @@ def diff_summary(spec, answers):
              "| 그룹 | 판정 | 피드백 |", "|---|---|---|"]
     for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
         lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
+    return "\n".join(lines)
+
+
+# ── 문서 확인 ──────────────────────────────────────────────────────────────
+# 고를 것이 없는 보고 문서도 절마다 판정과 피드백을 받는다(사용자 결정 2026-11-26). 입력 칸 없는 문서는 답을 따로 적어 보내야 해서 검수가 느리다.
+REVIEW_VERDICTS = {"ok": "확인함", "no": "다시"}
+UNSEEN = "안 봄"
+
+
+def review_summary(spec, answers):
+    given = answers.get("s") or {}
+    rows, marks, noted = [], [], False
+    for d in spec["docs"]:
+        for s in d["sections"]:
+            a = given.get(s["id"]) or {}
+            mark = REVIEW_VERDICTS.get(a.get("verdict"), UNSEEN)
+            marks.append(mark)
+            noted = noted or (mark != "다시" and bool(str(a.get("note") or "").strip()))
+            rows.append(f"| {cell(d.get('title'))} | {cell(s.get('title'))} | {mark} | {cell(a.get('note'))} |")
+    count = marks.count
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 다시 {count('다시')} · 안 봄 {count(UNSEEN)}", "",
+             "| 문서 | 절 | 판정 | 피드백 |", "|---|---|---|---|", *rows, ""]
+    if count("다시"):
+        lines.append("다음: '다시' 인 절을 피드백대로 고친다. 고친 문서를 같은 명령으로 다시 띄운다.")
+    if noted:
+        lines.append("다음: '다시' 가 아닌 절에 적힌 피드백도 반영한다.")
+    if count(UNSEEN):
+        lines.append(f"다음: 안 본 절 {count(UNSEEN)}개는 확인받지 못했다. 확인받은 것으로 치지 않는다.")
+    if not count("다시") and not count(UNSEEN):
+        lines.append("다음: 문서가 전부 확인됐다.")
     return "\n".join(lines)
 
 
@@ -551,6 +597,8 @@ def finish(spec, answers, project, record=True):
         print(diff_summary(spec, answers))
         if any(g.get("fps") for g in spec["groups"]):
             print("\n" + confirm_diff(spec, answers, project))
+    elif spec["kind"] == "review":
+        print(review_summary(spec, answers))
     elif spec.get("mode") == "reject":
         picked = [(target, a.get("reason")) for target, a in (answers.get("r") or {}).items() if a.get("reject")]
         done, skipped = reject_decisions(ledger, picked)

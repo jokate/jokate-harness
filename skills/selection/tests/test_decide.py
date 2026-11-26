@@ -67,6 +67,24 @@ class SpecCheck(unittest.TestCase):
         self.assertEqual(page.count("</script>"), 2)  # 템플릿의 스크립트 둘뿐
 
 
+class ReviewSummary(unittest.TestCase):
+    SPEC = {"kind": "review", "title": "검수", "docs": [
+        {"id": "d1", "title": "검수", "name": "검수.md", "sections": [{"id": "d1s1", "title": "결론"}, {"id": "d1s2", "title": "근거 | 표"}]}]}
+
+    def test_spec_needs_docs_and_unique_sections(self):
+        self.assertEqual(decide.check_spec(self.SPEC)[0], [])
+        self.assertIn("docs 가 비었다", decide.check_spec({"kind": "review", "title": "t", "docs": []})[0])
+        twice = {"kind": "review", "title": "t", "docs": [{"sections": [{"id": "a", "title": "x"}, {"id": "a", "title": "y"}]}]}
+        self.assertIn("절의 id 가 비었거나 겹친다", decide.check_spec(twice)[0])
+
+    def test_unseen_sections_are_not_confirmed(self):
+        text = decide.review_summary(self.SPEC, {"s": {"d1s1": {"verdict": "ok", "note": ""}}})
+        self.assertIn("확인 1 · 다시 0 · 안 봄 1", text)
+        self.assertIn("| 검수 | 근거 \\| 표 | 안 봄 |  |", text)
+        self.assertIn("다음: 안 본 절 1개는 확인받지 못했다", text)
+        self.assertNotIn("문서가 전부 확인됐다", text)
+
+
 class ServerRoundTrip(unittest.TestCase):
     def serve(self, spec, save_to):
         ready, result = threading.Event(), {}
