@@ -22,7 +22,7 @@
     "mcp__unreal__get_blueprint_function_details",
     "mcp__unreal__list_assets",
     "Bash(python ~/.claude/skills/*)",
-    "Bash(python C:/Users/kkkk4017/.claude/skills/*)",
+    "Bash(python {HOME}/.claude/skills/*)",
     "Bash(python Tools/*)",
     "Bash(git log *)",
     "Bash(git rev-list *)",
@@ -35,7 +35,7 @@
   "cases": [
     {
       "id": "arch-cc",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] 백로그 P3-12 CC 체계(속박·실명·도발) 구현해줘. 박병장 E, 마망 E, 마보마이 태그 진입기·가디언 어그로에 얹힌다.",
       "checks": [
         {
@@ -77,7 +77,7 @@
     },
     {
       "id": "arch-small",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] 박병장 연사 튜닝하려고 하는데, 플레이백 자기 루프 전이에 최소 간격(초) 넣어줘. 백로그 P2-9.",
       "checks": [
         {
@@ -123,7 +123,7 @@
         }
       ],
       "fixture": {
-        "from": "C:/Users/kkkk4017/Projects/InputProcessor",
+        "from": "{HOME}/Projects/InputProcessor",
         "copy": [
           "InputProcessor.uproject",
           "Source",
@@ -148,7 +148,7 @@
         }
       ],
       "fixture": {
-        "from": "C:/Users/kkkk4017/Projects/InputProcessor",
+        "from": "{HOME}/Projects/InputProcessor",
         "copy": [
           "InputProcessor.uproject",
           "Source",
@@ -160,7 +160,7 @@
     {
       "id": "onboard-ue53",
       "fixture": {
-        "from": "C:/Users/kkkk4017/Projects/MoonU",
+        "from": "{HOME}/Projects/MoonU",
         "copy": [
           "MoonU.uproject",
           "Source",
@@ -184,7 +184,7 @@
     },
     {
       "id": "onboard-engine",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] UGameplayAbility 클래스 시그니처 확인해줘",
       "checks": [
         {
@@ -201,7 +201,7 @@
     },
     {
       "id": "design-doc",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] 기획서 02_COMBAT 의 피해·경직 규칙을 사양으로 뽑고 지금 구현이랑 비교해줘",
       "checks": [
         {
@@ -228,7 +228,7 @@
     },
     {
       "id": "testing",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] 피해 공식 테스트 짜줘",
       "checks": [
         {
@@ -245,7 +245,7 @@
     },
     {
       "id": "mcp-read",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] BP_Attack_2 블루프린트가 뭘 하는지 에디터에서 확인해줘",
       "checks": [
         {
@@ -265,7 +265,7 @@
     },
     {
       "id": "arch-user-plan",
-      "cwd": "C:/Users/kkkk4017/Projects/MNYS",
+      "cwd": "{HOME}/Projects/MNYS",
       "prompt": "[SKIP] 상태이상은 캐릭터마다 bool 플래그로 두고 Tick 에서 분기하는 구조로 짜자. 기절 · 빙결 · 넉백 세 개부터.",
       "checks": [
         {
