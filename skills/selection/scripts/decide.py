@@ -321,12 +321,26 @@ VERDICTS = {"ok": "확인함", "no": "기각"}
 
 
 KEPT_MARK = "앞서 확인"
+SKIP_MARK = "판정 안 함"   # 접혀 나온 나머지 변경 — 사용자는 핵심만 확인한다
+
+
+def _mark(g, given):
+    if g.get("locked"):
+        return KEPT_MARK
+
+    if g.get("skipped"):
+        return SKIP_MARK
+
+    return VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정")
 
 
 def diff_marks(spec, answers):
     given = answers.get("g") or {}
-    return [KEPT_MARK if g.get("locked") else VERDICTS.get((given.get(g["id"]) or {}).get("verdict"), "미정")
-            for g in spec["groups"]]
+    return [_mark(g, given) for g in spec["groups"]]
+
+
+def skipped_fps(spec):
+    return sorted({fp for g in spec["groups"] if g.get("skipped") for fp in g.get("fps") or []})
 
 
 def diff_summary(spec, answers):
@@ -334,7 +348,8 @@ def diff_summary(spec, answers):
     marks = diff_marks(spec, answers)
     count = marks.count
     kept = f" · 앞서 확인 {count(KEPT_MARK)}" if count(KEPT_MARK) else ""
-    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}", "",
+    unseen = f" · 나머지 hunk {len(skipped_fps(spec))}개는 보지 않음" if count(SKIP_MARK) else ""
+    lines = [f"검토 제출됨 — {spec['title']}", f"확인 {count('확인함')} · 기각 {count('기각')} · 미정 {count('미정')}{kept}{unseen}", "",
              "| 그룹 | 판정 | 피드백 |", "|---|---|---|"]
     for i, (g, mark) in enumerate(zip(spec["groups"], marks), 1):
         lines.append(f"| {i}. {cell(g['title'])} | {mark} | {cell((given.get(g['id']) or {}).get('note'))} |")
@@ -349,11 +364,20 @@ def confirmed_path(project):
     return Path(project) / ".claude" / "diff_confirmed.json"
 
 
-def load_confirmed(project):
+def _load_fps(project, key):
     try:
-        return set(json.loads(confirmed_path(project).read_text(encoding="utf-8")).get("fps") or [])
+        return set(json.loads(confirmed_path(project).read_text(encoding="utf-8")).get(key) or [])
     except (OSError, ValueError, AttributeError):
         return set()
+
+
+def load_confirmed(project):
+    return _load_fps(project, "fps")
+
+
+def load_skipped(project):
+    """접혀 나와 사용자가 판정하지 않은 hunk 의 해시."""
+    return _load_fps(project, "skipped")
 
 
 def confirm_diff(spec, answers, project):
@@ -361,21 +385,26 @@ def confirm_diff(spec, answers, project):
     marks = diff_marks(spec, answers)
     units = [fp for g in spec["groups"] for fp in g.get("fps") or []]
     done = sorted({fp for g, mark in zip(spec["groups"], marks) if mark in ("확인함", KEPT_MARK) for fp in g.get("fps") or []})
+    skipped = [fp for fp in skipped_fps(spec) if fp not in done]
     path = confirmed_path(project)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"updated": today(), "title": spec.get("title", ""), "fps": done}, ensure_ascii=False, indent=1),
-                        encoding="utf-8")
+        record = {"updated": today(), "title": spec.get("title", ""), "fps": done, "skipped": skipped}
+        path.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     except OSError as e:
         return f"확인 기록을 못 썼다: {e}"
-    lines = [f"확인 누계: hunk {len(done)}/{len(units)}"]
+    lines = [f"확인 누계: hunk {len(done)}/{len(units) - len(skipped)}" + (f" · 나머지 {len(skipped)}개는 보지 않음" if skipped else "")]
+    given = answers.get("g") or {}
+    if any(g.get("skipped") and str((given.get(g["id"]) or {}).get("note") or "").strip() for g in spec["groups"]):
+        lines.append("다음: 나머지 변경에 적힌 피드백을 반영한다. 반영해서 바뀐 hunk 는 그룹에 담아 확인받는다.")
     if marks.count("기각"):
         lines.append("다음: 기각한 그룹을 피드백대로 고친다. 고친 hunk 만 이야기에 담아 같은 명령으로 다시 띄운다. "
                      "확인받은 hunk 는 다시 묻지 않는다(고치다 바뀌면 다시 나온다).")
     if marks.count("미정"):
         lines.append(f"다음: 미정 {marks.count('미정')}그룹은 확인받지 못했다. 그 그룹을 다시 띄운다. 확인받은 것으로 치지 않는다.")
-    if len(done) == len(units):
-        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다.")
+    if len(done) + len(skipped) == len(units):
+        lines.append("다음: 구현이 확정됐다. 코드를 다시 쓰지 않는다. 이 뒤에 코드를 바꾸면 바뀐 hunk 만 다시 확인받는다."
+                     + (f" 결과에 '나머지 hunk {len(skipped)}개는 사용자가 보지 않음' 이라고 적는다." if skipped else ""))
     return "\n".join(lines)
 
 

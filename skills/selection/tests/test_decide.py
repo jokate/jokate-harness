@@ -357,13 +357,15 @@ class DiffDoc(unittest.TestCase):
         self.assertEqual([(g["id"], g["title"], g["added"], g["removed"]) for g in spec["groups"]],
                          [("g1", "버퍼 규칙을 한 곳으로", 2, 1), ("g2", "새 타입", 2, 0), ("rest", diffdoc.REST, 2, 1)])
         self.assertEqual([f["path"] for f in spec["groups"][2]["files"]], ["Src/Buffer.cpp", "Art/icon.png"])
-        self.assertIn("hunk 4개 · 묶은 것 2개 · 묶이지 않은 것 2개", report)
+        self.assertIn("hunk 4개 · 핵심 2개 · 판정 안 하는 나머지 2개", report)
+        self.assertIn("나머지: Src/Buffer.cpp#2 · Art/icon.png", report)   # 무엇을 접어 두는지 쓰는 쪽이 본다
+        self.assertEqual([g["skipped"] for g in spec["groups"]], [False, False, True])
         self.assertEqual(decide.check_spec(spec)[0], [])
         text = decide.diff_summary(spec, {"g": {"g1": {"verdict": "ok", "note": "경계 확인"}, "g2": {"verdict": "no", "note": "이름을 바꿔라"}}})
-        self.assertIn("확인 1 · 기각 1 · 미정 1", text)
+        self.assertIn("확인 1 · 기각 1 · 미정 0 · 나머지 hunk 2개는 보지 않음", text)
         self.assertIn("| 1. 버퍼 규칙을 한 곳으로 | 확인함 | 경계 확인 |", text)
         self.assertIn("| 2. 새 타입 | 기각 | 이름을 바꿔라 |", text)
-        self.assertIn("| 3. 묶이지 않은 변경 | 미정 |  |", text)
+        self.assertIn("| 3. 나머지 변경 | 판정 안 함 |  |", text)
 
     def test_story_pointing_outside_the_diff_is_an_error(self):
         story = {"title": "t", "groups": [{"title": "없는 변경", "match": ["Src/Ghost.cpp"]}, {"title": "", "match": ["x"]},
@@ -398,7 +400,7 @@ class DiffDoc(unittest.TestCase):
                 code = diffdoc.main([str(story), "--path", d, "--check"])
             self.assertEqual(code, 0, out.getvalue())
             self.assertIn("파일 2개", out.getvalue())
-            self.assertIn("묶은 것 2개 · 묶이지 않은 것 0개", out.getvalue())
+            self.assertIn("핵심 2개 · 판정 안 하는 나머지 0개", out.getvalue())
 
     def test_mixed_encoding_diff_is_decoded_line_by_line(self):
         raw = "Index: 소스/효과.cpp\n".encode("cp949") + "+// 피해 입구\n".encode("utf-8")
@@ -464,7 +466,7 @@ class ImplementationCycle(unittest.TestCase):
 
         again = [{"title": "창 길이를 테이블에서 읽는다", "match": ["a.txt#2"]}]
         check = self.run_doc("--check", groups=again)
-        self.assertIn("묶은 것 1개 · 묶이지 않은 것 0개 · 앞서 확인한 것 1개", check)  # 확인한 hunk 가 '묶이지 않은 변경' 으로 돌아오지 않는다
+        self.assertIn("핵심 1개 · 판정 안 하는 나머지 0개 · 앞서 확인한 것 1개", check)  # 확인한 hunk 가 '나머지 변경' 으로 돌아오지 않는다
         out = self.run_doc(groups=again, verdicts={"g1": {"verdict": "ok", "note": ""}})
         self.assertIn("확인 1 · 기각 0 · 미정 0 · 앞서 확인 1", out)
         self.assertIn("확인 누계: hunk 2/2", out)
@@ -483,6 +485,64 @@ class ImplementationCycle(unittest.TestCase):
         status = self.run_doc("--status")
         self.assertIn("hunk 2개 · 확인 1개 · 남은 것 1개", status)
         self.assertIn("- a.txt#2", status)
+
+    def test_only_key_hunks_are_judged_and_the_rest_is_recorded_as_unseen(self):
+        """핵심만 확인받는다(사용자 결정 2026-11-26). 나머지는 접혀 나오고, 보지 않았다는 것이 결과와 기록에 남는다."""
+        self.write({3: "new 3", 25: "renamed 25"})
+        key = [{"title": "만료를 건너뛴다", "risk": "높음", "match": ["a.txt#1"]}]
+        check = self.run_doc("--check", groups=key)
+        self.assertIn("핵심 1개 · 판정 안 하는 나머지 1개", check)
+        self.assertIn("나머지: a.txt#2", check)
+        out = self.run_doc(groups=key, verdicts={"g1": {"verdict": "ok", "note": ""}})
+        self.assertIn("확인 1 · 기각 0 · 미정 0 · 나머지 hunk 1개는 보지 않음", out)
+        self.assertIn("확인 누계: hunk 1/1 · 나머지 1개는 보지 않음", out)
+        self.assertIn("다음: 구현이 확정됐다", out)
+        self.assertIn("'나머지 hunk 1개는 사용자가 보지 않음' 이라고 적는다", out)
+        status = self.run_doc("--status")
+        self.assertIn("hunk 2개 · 확인 1개 · 보지 않은 나머지 1개 · 남은 것 0개", status)
+        self.assertIn("핵심 hunk 는 전부 확인됐다. 나머지 1개는 사용자가 보지 않았다", status)
+
+        self.write({3: "new 3", 25: "renamed again 25"})                   # 보지 않은 hunk 가 그 뒤에 바뀌었다
+        status = self.run_doc("--status")
+        self.assertIn("남은 것 1개", status)
+        self.assertIn("동작이 바뀌는 hunk 는 그룹에 담아 확인받는다", status)
+
+    def test_feedback_on_the_folded_rest_reaches_the_session(self):
+        self.write({3: "new 3", 25: "renamed 25"})
+        key = [{"title": "만료를 건너뛴다", "match": ["a.txt#1"]}]
+        out = self.run_doc(groups=key, verdicts={"g1": {"verdict": "ok", "note": ""}, "rest": {"verdict": None, "note": "25번 줄 이름이 이상하다"}})
+        self.assertIn("| 2. 나머지 변경 | 판정 안 함 | 25번 줄 이름이 이상하다 |", out)
+        self.assertIn("다음: 나머지 변경에 적힌 피드백을 반영한다", out)
+
+    def test_design_doc_is_served_above_the_groups(self):
+        """--doc: 설계 포인트 문서가 같은 페이지 맨 위에 실린다."""
+        self.write({3: "new 3"})
+        design = Path(self._td.name) / "설계.md"
+        design.write_text("# 선입력 창 설계\n\n## 설계 포인트\n\n| 클래스 | 책임 |\n|---|---|\n| InputBuffer | 창 길이를 갖는다 |\n", encoding="utf-8")
+        self.story.write_text(json.dumps({"title": "선입력 창", "groups": [{"title": "하나", "match": ["a.txt"]}]}, ensure_ascii=False), encoding="utf-8")
+        cmd = [sys.executable, "-u", str(Path(diffdoc.__file__)), str(self.story), "--doc", str(design), "--path", str(self.repo),
+               "--project", str(self.repo), "--no-open"]
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.repo,
+                                env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+        for raw in proc.stdout:
+            line = raw.decode("utf-8", "replace")
+            if line.startswith("폼: "):
+                base, token = line.split()[1].split("/?t=")
+                page = http(f"{base}/?t={token}")[1]
+                doc = http(f"{base}/doc?t={token}")
+                self.assertEqual(http(f"{base}/submit?t={token}", {"answers": {"g": {"g1": {"verdict": "ok", "note": ""}}}})[0], 204)
+                break
+        proc.communicate(timeout=30)
+        self.assertIn('"doc": "/doc?t=', page)
+        self.assertEqual(doc[0], 200)
+        self.assertIn("InputBuffer", doc[1])
+        self.assertFalse(design.with_suffix(".html").exists())             # 입력 칸 없는 HTML 을 따로 남기지 않는다
+
+    def test_missing_design_doc_stops_before_the_form(self):
+        self.write({3: "new 3"})
+        out = self.run_doc("--doc", str(Path(self._td.name) / "없음.md"), "--check", groups=[{"title": "하나", "match": ["a.txt"]}])
+        self.assertIn("설계 문서가 없다", out)
 
     def test_undecided_group_is_not_confirmed(self):
         self.write({3: "new 3", 25: "new 25"})
