@@ -24,7 +24,7 @@ import diffdoc  # noqa: E402
 
 WHY = {"problem": "입구가 넷이다", "dropped": ["A — 땜질"], "cost": "파일 하나가 는다", "flip": "입구가 하나로 줄면"}
 SPEC = {"kind": "selection", "title": "피해 입구", "context": ["입구가 넷이다"], "questions": [
-    {"id": "q1", "title": "구조는?", "why": WHY, "checks": ["선례와 같은 꼴인가", "기획자가 혼자 세팅하나"],
+    {"id": "q1", "title": "구조는?", "why": WHY, "checks": ["선례와 같은 패턴인가", "기획자가 혼자 세팅하나"],
      "asks": [{"id": "a1", "text": "NPC 도 받나?"}],
      "options": [{"id": "A", "name": "땜질 수정"}, {"id": "B", "name": "입구 하나", "recommended": True}]},
     {"id": "q2", "title": "이름은?", "options": [{"id": "A", "name": "Hit"}, {"id": "B", "name": "Damage"}]}]}
@@ -248,7 +248,7 @@ class LedgerFlow(unittest.TestCase):
         self.assertIn("- 2번 A. Hit — 엔진 이름과 겹친다", text)
         self.assertIn("- 2번 B. Damage — (이유 없음)", text)
         self.assertIn("- 1번: 기획자가 혼자 세팅하나", text)
-        self.assertNotIn("선례와 같은 꼴인가", text)
+        self.assertNotIn("선례와 같은 패턴인가", text)
         self.assertIn("- 1번 · NPC 도 받나? → 예", text)
 
     def test_only_chosen_questions_are_recorded_and_reject_keeps_history(self):

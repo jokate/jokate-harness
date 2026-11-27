@@ -25,7 +25,7 @@
 
 | 징후 | 게임에서의 모양 | 확인 | 그림 형식 |
 |---|---|---|---|
-| 개념 하나가 작은 클래스 · BP 여럿에 흩어짐 | 피격 하나에 BP 6개 · 컴포넌트 3개 | 호출을 따라 파일 수를 센다 | architecture-delta |
+| 개념 하나가 작은 클래스 · BP 여럿에 파편화 | 피격 하나에 BP 6개 · 컴포넌트 3개 | 호출을 따라 파일 수를 센다 | architecture-delta |
 | 얕은 모듈 | `Super` 만 부르는 매니저, 인터페이스 ≈ 구현 | 삭제 테스트 | architecture-delta |
 | 종류별 분기 반복 | 캐릭터 · 무기 타입 `switch` 가 여러 파일에 | 타입 이름 grep, 파일 수 | er · uml-class |
 | 숨은 결합 | co-change 높은데 include · 모듈 의존 없음 | `coupling` 과 정적 의존 대조 | dependency |
@@ -39,7 +39,7 @@
 
 - 파일: `<프로젝트>/Saved/ClaudeArch/<YYYYMMDD>-구조점검.md` (Unity 는 `Library/ClaudeArch/`)
 - 렌더: `python ~/.claude/skills/game-architecture/scripts/render.py <파일.md> --form --project <프로젝트 루트>` (백그라운드). 후보마다 고름 · 기각 · 피드백을 받는다.
-  - 후보 표 첫 칸은 `A. <후보>` 꼴이다. 숫자 칸으로 쓰면 선택 폼이 붙지 않고 절마다 판정하는 문서 확인 페이지로 뜬다.
+  - 후보 표 첫 칸은 `A. <후보>` 형식이다. 숫자 칸으로 쓰면 선택 폼이 붙지 않고 절마다 판정하는 문서 확인 페이지로 뜬다.
 - 원본의 Tailwind HTML 은 쓰지 않는다. 후보 절 제목은 `## 선택지` 로 시작해야 렌더러가 접는다.
 - 후보는 5개 이하, 한 행에 하나, 근거 센 순서. 카드나 줄글 설명을 붙이지 않는다.
 - 근거 세기: 강함 = hotspot 상위 + 땜질 흔적 + 코드로 확인 / 볼 만함 = 신호 하나나 코드만 / 추측 = 읽은 인상뿐

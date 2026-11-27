@@ -13,7 +13,7 @@ argument-hint: "[고를 주제]"
 
 ## 순서
 
-1. 폼 JSON 을 쓴다. 꼴은 [references/form-sample.json](references/form-sample.json) 그대로다.
+1. 폼 JSON 을 쓴다. 형식은 [references/form-sample.json](references/form-sample.json) 그대로다.
    - 위치: `<프로젝트>/Saved/ClaudeArch/decide/<YYYYMMDD>-<주제>.json`
    - Unity 는 `Library/ClaudeArch/decide/`.
    - 그 밖의 프로젝트는 파일을 쓰지 않는다. 2번의 명령에서 `<폼.json>` 자리에 `-` 를 쓰고 JSON 을 표준 입력으로 준다(`.claude/` 아래에 쓰면 권한을 묻는다).

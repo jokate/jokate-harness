@@ -54,7 +54,7 @@ def source_repo(root):
 def keeps_gq(root):
     """이 프로젝트가 gq 인덱스를 세션마다 갱신하는가 — `.claude/session_start.json` 이 없으면(세팅 전) 그렇다고 본다.
     MNYS 처럼 자기 조회 도구(Tools/mnys_q.py)를 CLAUDE.md 에 적고 gq 갱신을 끈 프로젝트에는 gq 를 권하지 않는다 —
-    낡은 인덱스를 권하게 되고, 같은 일을 하는 도구 둘을 함께 안내하게 된다(2026-10-22 감사: gq 25회 · mnys_q 441회)."""
+    stale 인덱스를 권하게 되고, 같은 일을 하는 도구 둘을 함께 안내하게 된다(2026-10-22 감사: gq 25회 · mnys_q 441회)."""
     f = root / ".claude" / "session_start.json"
     try:
         spec = json.loads(f.read_text(encoding="utf-8"))

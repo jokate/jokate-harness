@@ -51,7 +51,7 @@ index_view.bat        인덱스 웹뷰
    새 PC 에서는 같은 폴더 안에 나란히 받는다: `git clone https://github.com/jokate/jokate-harness.git game-harness` · `git clone https://github.com/jokate/jokate-wiki.git jokate-wiki`
    그림 스킬 [diagram-design](https://github.com/cathrynlavery/diagram-design)(MIT)도 옆에 받아 두면(`git clone --depth 1 https://github.com/cathrynlavery/diagram-design.git diagram-design`) 스킬로 연결한다 — game-architecture 의 구조 그림 · 위키의 보기용 그림을 그것으로 그린다. 처음 그릴 때 스타일을 한 번 묻는다
 3. 프로젝트 폴더를 물어보고 세팅한다 (`CLAUDE.local.md` + 인덱스 선언. `CLAUDE.md` 가 이미 있으면 라우팅 절만. 덮어쓰지 않는다).
-   위키 하네스가 있으면 그 프로젝트의 위키까지 만든다 — 면담 답 초안 · 위키(`~/.jokate-wiki/<프로젝트>`) · 뼈대 · 세션 시작 훅, AI 없음.
+   위키 하네스가 있으면 그 프로젝트의 위키까지 만든다 — 면담 답 초안 · 위키(`~/.jokate-wiki/<프로젝트>`) · 스켈레톤 · 세션 시작 훅, AI 없음.
    면담 다듬기 · 파트 묶기 · 설명 미리 채우기는 그 뒤 Claude Code 에서 `/wiki-bootstrap` (선택)
 4. clangd 프로젝트 인덱스(호출 · 참조 · 영향 범위)가 없으면 지금 만들지 묻는다 — 백그라운드로 처음 20–30분, 엔진 단계 없음(`index_all.py --project-only`), 로그는 `~/.claude/cache/game-harness/index_build_<프로젝트>.log`. `--clangd` 면 묻지 않고 시작, `--no-clangd` 면 안 한다. 그 뒤로는 세션 시작 때 바뀐 것만 갱신된다
 5. 사용법을 출력한다

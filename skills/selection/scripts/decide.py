@@ -168,7 +168,7 @@ def answers_path(spec_path):
 
 
 def read_answers(path):
-    """저장된 답. 서버가 쓴 꼴({"answers": …})과 사용자가 붙여 준 꼴(답만) 둘 다 읽는다."""
+    """저장된 답. 서버가 쓴 형식({"answers": …})과 사용자가 붙여 준 형식(답만) 둘 다 읽는다."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):

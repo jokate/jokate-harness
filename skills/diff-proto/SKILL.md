@@ -20,7 +20,7 @@ argument-hint: "[구현할 것 | 이미 바뀐 범위]"
    - 앞서 확인받던 중이면 남은 hunk 부터 본다: `python ~/.claude/skills/selection/scripts/diffdoc.py --status --path <저장소> --project <프로젝트 루트>`
 2. diff 를 읽는다. git 은 `git diff HEAD` 와 새 파일, svn 은 `svn diff`.
    파일마다 hunk(`@@` 한 덩어리)를 위에서부터 1번으로 센다.
-3. 이야기 JSON 을 쓴다. 꼴은 [references/story-sample.json](references/story-sample.json) 그대로다.
+3. 이야기 JSON 을 쓴다. 형식은 [references/story-sample.json](references/story-sample.json) 그대로다.
    - 위치: `<프로젝트>/Saved/ClaudeArch/decide/<YYYYMMDD>-<주제>-diff.json` (Unity 는 `Library/ClaudeArch/decide/`, 그 밖은 세션 임시 폴더 — `.claude/` 아래에 쓰면 권한을 묻는다).
    - 그룹은 핵심만 담는다. 설계가 드러나는 hunk 와 동작이 갈리는 hunk 다. 동작이 바뀌는 hunk 는 빠짐없이 담는다.
    - 이름 · 포맷 · 따라 바뀐 선언 · 기계적인 변경은 담지 않는다. '나머지 변경' 으로 접혀 나오고 사용자가 판정하지 않는다.
