@@ -334,7 +334,7 @@ def is_me(author, names):
 
 def cmd_precedent(args):
     """같은 종류를 이 프로젝트에서 누가 어떻게 넣어 왔나 — 넣은 커밋, 넣은 사람, 그때 같이 바뀐 곳.
-    내 시각이 아니라 프로젝트의 꼴을 기준으로 삼으려고 본다 (references/team-fit.md)."""
+    내 시각이 아니라 프로젝트의 컨벤션을 기준으로 삼으려고 본다 (references/team-fit.md)."""
     vcs, root, since, sets = load(args)
     q = args.query.replace("\\", "/").lower()
     mine = me_names(vcs, root, args.me)
@@ -358,7 +358,7 @@ def cmd_precedent(args):
         print(f"파일 {args.max_changeset}개 넘게 바꾼 커밋 {skipped}건은 뺐다 (통째 들여오기 · 일괄 정리).")
     if not cases:
         touched = Counter(s["author"] for s in sets if any(q in f.lower() for f in s["files"]))
-        print("\n기간 안에 새로 들어간 것이 없다. --months 를 늘리거나, 같은 종류의 기존 파일을 직접 읽어 꼴을 본다.")
+        print("\n기간 안에 새로 들어간 것이 없다. --months 를 늘리거나, 같은 종류의 기존 파일을 직접 읽어 패턴을 본다.")
         if touched:
             print("이 조각을 고친 사람: " + " · ".join(f"{a}{' (나)' if is_me(a, mine) else ''} {n}" for a, n in touched.most_common(6)))
         return 0
@@ -379,9 +379,9 @@ def cmd_precedent(args):
     print("\n넣은 사람: " + " · ".join(f"{a}{' (나)' if is_me(a, mine) else ''} {n}" for a, n in who.most_common(8)))
     if others:
         print("\n읽는 법: 비율이 높은 파일은 이 프로젝트에서 이 종류를 넣을 때 늘 같이 고치는 곳이다. "
-              "선례의 꼴을 따르는 안을 선택지에 넣고, 벗어나는 안은 벗어나는 이유를 적는다. 최근 선례 한두 개는 직접 열어 본다.")
+              "선례의 패턴을 따르는 안을 선택지에 넣고, 벗어나는 안은 벗어나는 이유를 적는다. 최근 선례 한두 개는 직접 열어 본다.")
     else:
-        print("\n다른 사람이 넣은 선례가 없다. 위 선례는 전부 내 것이다 — 팀의 꼴이라고 쓰지 않는다. "
+        print("\n다른 사람이 넣은 선례가 없다. 위 선례는 전부 내 것이다 — 팀의 컨벤션이라고 쓰지 않는다. "
               "같은 종류의 기존 파일을 직접 읽거나 사용자에게 팀의 방식을 묻는다.")
     return 0
 

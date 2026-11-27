@@ -19,7 +19,7 @@
 5. 캐릭터가 바라보는 방향에 따라 좌우 입력을 뒤집어야 하나요?
 
 ## 기존 확장 지점
-- **판정 로직 뼈대가 이미 있습니다.** 비어 있을 뿐입니다.
+- **판정 함수가 이미 있습니다.** 비어 있을 뿐입니다.
   - `FInputProcessingData` (`Variant_InputProcess/Data/InputProcessingData.h:14`): DataTable 행 구조체이고, 필드는 `InputTypeSequences`, `bExactMatch`, `ResultGameplayTag`입니다.
   - `UInputProcessingComponent` (`InputProcessingComponent.cpp`): `EnqueueInput`는 비어 있고, `ProcessInput`에는 `// Input Process.` 자리만 있습니다. `AInputProcessingController`가 이 컴포넌트를 소유합니다.
 - **GAS 쪽 태그 입력 경로:** `UYSAbilitySystemComponent::TriggerPressedTag`는 어빌리티가 재생 중이면 입력을 `OnInputTagPressed`로 넘기고, 아니면 어빌리티를 활성화합니다. `UYSGameplayAbility_Combo`가 이 경로를 씁니다.
@@ -36,7 +36,7 @@ VCS가 없어서 변경 이력 신호(hotspot, co-change)는 뽑지 않았습니
 - **트레이드오프:** 가장 빨리 돌아가게 만들 수 있지만, 이미 있는 `FInputProcessingData`를 쓰지 않게 되고, 커맨드를 늘릴 때마다 C++을 고치고 다시 빌드해야 합니다.
 - **근거:** 데이터 구조체가 이미 정의돼 있습니다. 이걸 무시하는 방향입니다.
 
-### B. 기존 뼈대 채우기: DataTable에서 판정
+### B. 기존 판정 함수 채우기: DataTable에서 판정
 - **내용:** 컴포넌트에 `UDataTable*`(행 타입 `FInputProcessingData`)과 입력 히스토리 버퍼를 둡니다. `EnqueueInput`은 큐에 넣고, `ProcessInput`은 FIFO로 버퍼에 옮긴 뒤 행마다 대조하고, 결과 태그를 내보냅니다.
 - **다음 커맨드를 추가할 때 고칠 곳:** DataTable 행 1개만 추가하면 됩니다. 코드는 0곳입니다. 새로운 *판정 방식*이 필요할 때만 컴포넌트 1곳을 고칩니다.
 - **트레이드오프:** 커맨드 추가가 데이터 작업이 됩니다. 대신 판정 규칙이 컴포넌트 한 곳에 묶이고, 판정 방식을 바꿀 때 그 코드가 바뀝니다. 입력 사이 시간 창, 홀드 같은 규칙이 해당합니다.

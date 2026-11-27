@@ -81,7 +81,7 @@ LSP 파일럿 설계: 모델·프롬프트·과제를 고정하고 도구 표면
 
 - 전제(인덱스 존재·엔진 경로·엔진 소스 유무·버전 일치)는 `ue_q.py` 가 조회 직전에 맞추고 경고한다 (조회 첫 회 자동 생성, 헤더 1000개 미만 경고, 버전 경고).
 - 인덱스 **품질**은 위 A·B 를 웹뷰 검증 탭 또는 `cindex.py eval` 로 잰다. clangd 인덱스가 있으면 정규식 인덱스를 컴파일러 기준으로 대조할 수 있다.
-- `ue_q.py` 인덱스의 **신선도**는 여전히 조회 시점에 비교하지 않는다 (`index` 를 돌릴 때만). 웹뷰 자체 검사가 파일 표본으로 낡음을 보여 준다.
+- `ue_q.py` 인덱스의 **신선도**는 여전히 조회 시점에 비교하지 않는다 (`index` 를 돌릴 때만). 웹뷰 자체 검사가 파일 표본으로 stale 을 보여 준다.
 
 ## 5. 속도 — clangd 의 약점을 무엇으로 메웠나 (2026-10-06 추가)
 
@@ -110,7 +110,7 @@ LSP 파일럿 설계: 모델·프롬프트·과제를 고정하고 도구 표면
 
 | 기법 | 근거 | 반영 | 합성 측정 (175 TU, 4코어) |
 |---|---|---|---|
-| **증분 — 배경 색인 샤드** | clangd 배경 색인: 파일마다 샤드, 내용 다이제스트로 낡음 판정 (`index/Background.cpp`, `BackgroundIndexLoader.cpp`, `BackgroundIndexStorage.cpp`); clangd 원격 색인 문서 "clangd-indexer 는 비싸고 증분이 아니다" (https://github.com/llvm/clangd-www design/remote-index.md) | `cindex.py build --mode bg` | 변경 없음 0.6s, `.cpp` 1.2s, 헤더(79 TU) 11.2s — 전체 24.8s 대비 |
+| **증분 — 배경 색인 샤드** | clangd 배경 색인: 파일마다 샤드, 내용 다이제스트로 stale 판정 (`index/Background.cpp`, `BackgroundIndexLoader.cpp`, `BackgroundIndexStorage.cpp`); clangd 원격 색인 문서 "clangd-indexer 는 비싸고 증분이 아니다" (https://github.com/llvm/clangd-www design/remote-index.md) | `cindex.py build --mode bg` | 변경 없음 0.6s, `.cpp` 1.2s, 헤더(79 TU) 11.2s — 전체 24.8s 대비 |
 | clangd 증분의 구멍 메우기 | `Background.cpp` FIXME (헤더 → TU 하나만), `BackgroundQueue.cpp` (플래그 무시), `Background.h` (세션 안 재색인 없음) | `cindex_speed.py` 무효화 계획: include 그래프·강제 포함·명령 해시·내용 해시 | 결과 = 처음부터 만든 색인 (5절 위 표) |
 | 파일 단위 소유 (Glean "units") | Glean incrementality 문서: 사실을 파일 단위로 소유 → 바뀐 단위만 교체 https://github.com/facebookincubator/Glean (glean/website/docs/implementation/incrementality.md) | 샤드가 곧 단위. **sqlite 는 아직 매번 전체 다시 적재** (175 TU 샤드 658개 읽기 0.3s) | — |
 | **유니티 묶음** | Chromium jumbo 문서 (공용 헤더가 많아 총 작업량이 크게 준다, 대가: 내부 링크 이름 충돌·묶음 단위 재빌드) https://github.com/chromium/chromium/blob/70.0.3515.0/docs/jumbo.md; UE 의 UBT 유니티 빌드와 같은 원리 | `--unity N` (실패 묶음은 원래 TU 로) | 23s → 4s (N=8), 8s (N=4), 결과 동일 |

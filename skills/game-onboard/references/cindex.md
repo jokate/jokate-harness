@@ -67,7 +67,7 @@ sqlite 에 담는다. 설계 근거와 검증 기준: [indexing-research.md](ind
   `.vscode/compileCommands_<이름>.json` 에도 엔진 `.cpp` 항목은 없다(UE 5.7 에서 0개 — 예전 안내가 틀렸다). 대신 생성기는 타깃이 쓰는 모든 모듈의
   응답 파일(`compileCommands_<이름>/<모듈>.<번호>.rsp`)을 쓴다. `engine_cdb.py` 가 그것으로 엔진 항목을 합성한다:
   ```
-  python ~/.claude/skills/game-onboard/scripts/engine_cdb.py --root <프로젝트>      # 뼈대 복사본에서 UBT -VSCode → 엔진 cdb
+  python ~/.claude/skills/game-onboard/scripts/engine_cdb.py --root <프로젝트>      # 소스 복사본에서 UBT -VSCode → 엔진 cdb
   python ~/.claude/skills/game-onboard/scripts/cindex.py build --scope engine --cdb ~/.claude/cache/game-harness/engine-cdb/<이름>/engine/compile_commands.json --mode bg --unity 8 --jobs 6 --keep-error-batches
   ```
   `--keep-error-batches`: UE 5.7 엔진에서는 묶음의 24%(Engine · Core · UnrealEd 에 몰림)가 오류였고, 풀어서 다시 하면 TU 1만 개 · 약 13시간이 더 든다.
@@ -121,7 +121,7 @@ cdb 에 엔진 TU 가 없으면(런처 설치 엔진) 엔진 단계는 빈 인�
   (`--compile-commands-dir` 를 주면 모든 파일이 그 CDB 프로젝트에 속해 샤드가 그 아래로 간다 — clangd GlobalCompilationDatabase.cpp, 실행으로 확인).
 - 범위는 `--filter`(번역 단위 경로 정규식)로 자른다. 기본: project = 프로젝트 루트 아래 TU, engine = 엔진 루트 아래 TU.
   **프로젝트 범위 인덱스에도 프로젝트가 포함한 엔진 헤더의 심볼이 들어간다** — "내 프로젝트가 쓰는 엔진 API" 를 바로 조회할 수 있다.
-- 세션 시작 훅은 이것을 돌리지 않는다 (컴파일이라 오래 걸린다). `status` 가 `[낡음]` 을 내면 다시 만든다.
+- 세션 시작 훅은 이것을 돌리지 않는다 (컴파일이라 오래 걸린다). `status` 가 `[stale]` 을 내면 다시 만든다.
 
 ### `--mode bg` 가 clangd 위에 더하는 것
 clangd 배경 색인은 파일마다 샤드를 남기고 내용 다이제스트가 바뀐 파일만 다시 색인한다. 하지만 혼자서는 다음을 놓친다
@@ -211,7 +211,7 @@ r Source/…/X.cpp:3:48  in Tick  │ <그 줄 원문>
 1. **종료 코드 0 이어도 오류가 있을 수 있다.** TU 에 오류가 있어도 0 이다 → `build` 가 stderr 의 `Error while processing` 을 세어
    "오류 있던 TU" 로 낸다 (배경 색인은 샤드의 오류 표시로 센다). 오류가 있어도 심볼은 대부분 들어간다 — include 를 못 찾아도 그 뒤 선언까지
    색인된다. 예외는 2번: UE 매크로 구조에서 `.generated.h` 가 없으면 UCLASS 클래스 선언과 멤버가 빠진다 (테스트, 2026-10-07).
-2. **`.generated.h` 누락·낡음이면 UCLASS 타입과 멤버가 조용히 빠진다** (`FID_…_PROLOG` 미정의 — .cpp 의 메서드 정의만 남는다). 에디터 빌드(UHT) 한 번 뒤 다시 build. `build` 가 경고한다.
+2. **`.generated.h` 누락·stale 이면 UCLASS 타입과 멤버가 조용히 빠진다** (`FID_…_PROLOG` 미정의 — .cpp 의 메서드 정의만 남는다). 에디터 빌드(UHT) 한 번 뒤 다시 build. `build` 가 경고한다.
 3. **멤버 시그니처는 기록되지 않는다** — clangd 는 클래스 멤버에 Signature·ReturnType 을 저장하지 않는다. `members` 는 선언 줄 원문을, 시그니처는 `ue_q.py api` 를 쓴다.
 4. **Call 비트는 "호출"이 아니다** — 함수류 심볼에 대한 모든 참조(선언, `&Fn` 포함)에 붙는다. callers/callees 는 Reference 비트 + 참조의 Container 로 계산한 **근사 호출 그래프**다. 호출 관계(relation)는 clangd 에 없다.
 5. 기록되지 않는 것: 지역 변수, 매크로 심볼 자체. cpp 안의 `static`·익명 namespace 함수에 대한 참조는 indexer 모드에서 빠지고 bg 모드에는 있다 (배경 색인은 CollectMainFileRefs 를 켠다).

@@ -10,7 +10,7 @@
 이 스크립트는 그 rsp 에 엔진 모듈 폴더의 .cpp 를 붙여 항목을 합성한다 — `cl.exe @<모듈>.rsp <파일>`.
 
 순서:
-  1. 프로젝트 뼈대(.uproject · Config · Source · Plugins 의 소스만)를 <out>/<이름> 에 복사한다 — 프로젝트 폴더에 .vscode 를 만들지 않으려고.
+  1. 프로젝트 소스 복사본(.uproject · Config · Source · Plugins 의 소스만)를 <out>/<이름> 에 복사한다 — 프로젝트 폴더에 .vscode 를 만들지 않으려고.
   2. 거기서 UBT `-projectfiles -VSCode -game -engine -rocket` 를 돌린다 (--no-generate 면 이미 있는 것을 쓴다).
   3. 엔진의 *.Build.cs 로 모듈 폴더를 찾고, rsp 가 있는 엔진 모듈의 .cpp 로 <out>/<이름>/engine/compile_commands.json 을 쓴다.
      항목마다 /std:c++20 (rsp 에 없다)과 빈 .gen.cpp 폴더(/I, gen_stubs 참고)를 붙인다.
@@ -47,7 +47,7 @@ CACHE = Path.home() / ".claude" / "cache" / "game-harness" / "engine-cdb"
 
 
 def skeleton(root, dst):
-    """프로젝트 뼈대를 복사한다 — 모듈 그래프(.uproject · .uplugin · Build.cs · Target.cs)와 소스만. 애셋·빌드 산출물은 뺀다."""
+    """프로젝트 소스 복사본을 만든다 — 모듈 그래프(.uproject · .uplugin · Build.cs · Target.cs)와 소스만. 애셋·빌드 산출물은 뺀다."""
     n = 0
     up = next(root.glob("*.uproject"))
     dst.mkdir(parents=True, exist_ok=True)
@@ -147,7 +147,7 @@ def main():
     ap.add_argument("--root", default=".", help="프로젝트 폴더")
     ap.add_argument("--out", default=None, help=f"작업 폴더 (기본 {CACHE})")
     ap.add_argument("--modules", default=None, help="이 모듈만 (쉼표로 구분) — 테스트용")
-    ap.add_argument("--no-generate", action="store_true", help="뼈대 복사와 UBT 를 건너뛰고 이미 만든 .vscode 를 쓴다")
+    ap.add_argument("--no-generate", action="store_true", help="소스 복사와 UBT 를 건너뛰고 이미 만든 .vscode 를 쓴다")
     a = ap.parse_args()
     root, kind, _ = gq.detect(a.root)
     if root is None or kind != "ue":
@@ -160,7 +160,7 @@ def main():
     work = (Path(a.out) if a.out else CACHE) / root.name
     if not a.no_generate:
         uproject, n = skeleton(root, work)
-        print(f"뼈대 복사 {n}개 → {work}")
+        print(f"소스 복사 {n}개 → {work}")
         rc = generate(uproject, eng)
         if rc != 0:
             print(f"UBT 프로젝트 파일 생성 실패 (종료 {rc})")

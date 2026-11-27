@@ -631,7 +631,7 @@ def attach(targets, project=None, remove=False):
 
 def render_html(md, out, title, js_dir=None, full=False, src=None, url_for=None, hide=(), project=None):
     """HTML 글. src(원본 .md 경로)를 주면 옆의 diagram-design 구조도(<이름>-구조*.html)를 '그림' 절에 끼워 넣는다.
-    url_for 를 주면 폼 페이지에 싣는 꼴이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다.
+    url_for 를 주면 폼 페이지에 싣는 형식이다: 스크립트 · 구조도를 그 주소로 부르고, 제목 줄과 테마 단추를 감춘다.
     문서 메모 칸은 파일로 남는 HTML 에만 싣는다. 폼 페이지에는 기각 이유 · 답 칸이 따로 있다."""
     md = embed_figs(md, dd_figs(src, exclude=out), Path(out).parent, url_for)
     md = md if full else readable(md, hide)
@@ -794,7 +794,7 @@ def doc_form(md, title):
     if single:
         options = _row_options(sec) or _column_options(sec) or _heading_options(sec)
         if len(options) < 2:
-            return None, [f"'선택지' 절에서 안을 {len(options)}개만 읽었다 — 표 첫 칸을 `A. 이름` 꼴로 쓴다"]
+            return None, [f"'선택지' 절에서 안을 {len(options)}개만 읽었다 — 표 첫 칸을 `A. 이름` 형식으로 쓴다"]
         questions = [{"id": "q1", "title": "어느 안으로 가나", "options": options}]
     main, asks = questions[0], []
     ids = [o["id"] for o in main["options"]]

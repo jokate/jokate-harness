@@ -8,7 +8,7 @@
    clangd·clangd-indexer 는 못 찾을 때만 ~/.claude/tools/clangd 에 내려받는다 (Windows 약 63MB). 실패해도 계속한다.
 2) 위키 하네스(jokate-wiki) 설치 — 있을 때만. 찾는 곳: 환경변수 JOKATE_WIKI_DIR → 이 폴더 옆 jokate-wiki → 이 폴더 안 jokate-wiki.
 3) 프로젝트 세팅 (bootstrap.py --auto). 폴더를 안 주면 물어본다.
-   위키 하네스가 있으면 이어서 그 프로젝트의 위키까지 (wq.py setup — 면담 답 초안 · 위키 · 뼈대 · 세션 시작 훅, AI 없음).
+   위키 하네스가 있으면 이어서 그 프로젝트의 위키까지 (wq.py setup — 면담 답 초안 · 위키 · 스켈레톤 · 세션 시작 훅, AI 없음).
    clangd 프로젝트 인덱스(호출 · 참조 · 영향 범위)가 없으면 처음 만들지 묻고(--clangd 면 묻지 않고, --no-clangd 면 안 함)
    백그라운드로 index_all.py --project-only 를 띄운다 — 처음 20–30분, 엔진 단계 없음. 그 뒤로는 세션 시작 때 바뀐 것만 갱신된다.
 4) 사용법 출력
@@ -156,7 +156,7 @@ def main(argv=None):
         wait()
         return rc
     if wiki:
-        print("\n위키 세팅 (면담 답 초안 · 위키 · 뼈대 · 세션 시작 훅, AI 없음)")
+        print("\n위키 세팅 (면담 답 초안 · 위키 · 스켈레톤 · 세션 시작 훅, AI 없음)")
         env = dict(os.environ, PYTHONIOENCODING="utf-8")
         r = subprocess.run([sys.executable, str(wiki / "scripts" / "wq.py"), "setup", "--project", target], env=env)
         if r.returncode != 0:

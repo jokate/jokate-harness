@@ -1190,7 +1190,7 @@ def finish_build(root, kind, a, scope, db, src, info, roots):
         return 0
     errors = info.get("errors") if isinstance(info.get("errors"), dict) else {}
     if errors.get("generated_h"):
-        print("  [경고] .generated.h 누락·낡음 — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
+        print("  [경고] .generated.h 누락·stale — UCLASS 타입이 인덱스에서 빠진다. 에디터 빌드(UHT) 한 번 뒤 다시 build.")
     edb = db_for("engine", root, kind) if scope == "project" else None
     counts = ingest(src, db, roots, info, dedupe_refs=a.mode != "bg" and isinstance(src, list),
                     engine_db=edb if edb and edb.exists() and edb != db else None)
@@ -1217,7 +1217,7 @@ PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\] Processing file")
 
 def summarize_errors(err_path, keep=30):
     """clangd-indexer 는 번역 단위(TU)가 실패해도 종료 코드 0 이다 → stderr 로 판정한다.
-    'Error while processing <파일>' = 오류가 있던 TU (심볼은 대부분 남는다). UE 에서 가장 흔한 원인은 .generated.h 누락·낡음(UHT 미실행)이고,
+    'Error while processing <파일>' = 오류가 있던 TU (심볼은 대부분 남는다). UE 에서 가장 흔한 원인은 .generated.h 누락·stale(UHT 미실행)이고,
     그러면 UCLASS 타입과 그 멤버가 인덱스에서 조용히 빠진다."""
     count, generated, failed, sample, failed_all, tus = 0, 0, 0, [], [], 0
     try:
@@ -1875,7 +1875,7 @@ def cmd_status(ix):
                                    " — 옛 모양: `cindex.py optimize` 로 바꾸면 참조·호출자 조회가 빨라진다 (색인은 다시 안 한다)"))
     stale = [p for (p, m) in ix.q("SELECT path, mtime FROM files ORDER BY RANDOM() LIMIT 300")
              if not os.path.exists(p) or int(os.stat(p).st_mtime) != m]
-    print(f"[낡음] 표본 파일 {len(stale)}개가 인덱스 뒤 바뀌었다 → build" if stale else "신선도: 표본 300 파일 OK")
+    print(f"[stale] 표본 파일 {len(stale)}개가 인덱스 뒤 바뀌었다 → build" if stale else "신선도: 표본 300 파일 OK")
     return 0
 
 
@@ -2148,7 +2148,7 @@ class CindexSource:
                                   f".generated.h 관련 {'-' if bg else errors.get('generated_h', 0)}",
                         "pass": not errors.get("failed_tu") and errors.get("count") in (0, None),
                         "why": "clangd-indexer 는 TU 에 오류가 있어도 종료 코드 0 이라 stderr 로 센다 (배경 색인은 샤드의 오류 표시). "
-                               "오류가 있어도 심볼은 대부분 들어간다. UE 에서 .generated.h 누락·낡음(UHT 미실행)이면 UCLASS 클래스 선언과 멤버가 "
+                               "오류가 있어도 심볼은 대부분 들어간다. UE 에서 .generated.h 누락·stale(UHT 미실행)이면 UCLASS 클래스 선언과 멤버가 "
                                "빠진다 (.cpp 의 메서드 정의만 남는다) — 에디터 빌드 뒤 다시 build.",
                         "samples": errors.get("failed_sample", []) + errors.get("sample", [])})
         n_sym = ix.q("SELECT COUNT(*) FROM symbols")[0][0]

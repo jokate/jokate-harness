@@ -29,7 +29,7 @@
 문서에 적힌 규칙을 모은다. 있는 파일은 전부 넣는다.
 - 프로젝트 `CLAUDE.md` · `CLAUDE.local.md`
 - 코딩 표준 문서 (`CODING_STANDARDS.md`, `CONTRIBUTING.md` 등)
-- 하네스 코드 규칙 `~/.claude/rules/game-harness-code.md` (함수 꼴 · 주석). 새로 더한 주석이 코드를 다시 말하거나 바꾼 기록이면 위반이다.
+- 하네스 코드 규칙 `~/.claude/rules/game-harness-code.md` (함수 형식 · 주석). 새로 더한 주석이 코드를 다시 말하거나 바꾼 기록이면 위반이다.
 - 프로젝트가 문서로 남긴 엔진 관례 (네이밍 접두사, 모듈 · asmdef 경계, BP 와 C++ 역할 나눔)
 
 그 위에 고정 기준선을 얹는다. Fowler 의 냄새(smell) 12개이고 change amplification 과 직결된다.

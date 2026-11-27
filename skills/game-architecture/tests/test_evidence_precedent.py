@@ -63,13 +63,13 @@ class Precedent(unittest.TestCase):
         self.assertIn("다른 사람 선례 2건 기준", out)
         shape = out.split("넣을 때 같이 바뀌어 온 곳")[1]
         self.assertIn("| 2 | 100% | `Src/Registry.{h,cpp}` |", shape)      # 두 사람 다 등록부를 고쳤다
-        self.assertNotIn("Character", shape)                                # 내 선례의 꼴은 기준에 넣지 않는다
+        self.assertNotIn("Character", shape)                                # 내 선례의 패턴은 기준에 넣지 않는다
         self.assertIn("벗어나는 이유", out)
 
     def test_only_my_precedents_are_not_called_team_shape(self):
         out = run_precedent(self.root, "Effect_Knock", "kim")
         self.assertIn("다른 사람 0 · 나 1", out)
-        self.assertIn("팀의 꼴이라고 쓰지 않는다", out)
+        self.assertIn("팀의 컨벤션이라고 쓰지 않는다", out)
 
     def test_nothing_added_in_window_says_so(self):
         out = run_precedent(self.root, "Registry", "kim")

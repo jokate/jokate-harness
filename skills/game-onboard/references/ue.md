@@ -21,7 +21,7 @@
 
 ## 2. 진입점 찾기
 
-`gq.py find` 로 아래를 차례로 찾는다. 이 목록에 걸리는 클래스가 게임 흐름의 뼈대다.
+`gq.py find` 로 아래를 차례로 찾는다. 이 목록에 걸리는 클래스가 게임 흐름의 중심 클래스다.
 
 - 게임 규칙: `AGameModeBase` / `AGameStateBase` 파생 → `DefaultEngine.ini` 의 `GlobalDefaultGameMode`, 맵별 WorldSettings 오버라이드
 - 수명 단위 서비스: `UGameInstanceSubsystem` / `UWorldSubsystem` / `ULocalPlayerSubsystem` 파생 — 전역 상태가 여기 있으면 Service Locator 성격

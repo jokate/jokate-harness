@@ -354,7 +354,7 @@ def cmd_status(root, kind, meta):
         return 1
     print(f"루트 {root} · 엔진 {kind or '미감지'} {meta.get('version') or ''} · VCS {meta.get('vcs') or '없음'} · 인덱스 {meta['built']}")
     s = stale_reason(root, kind, meta)
-    print(f"[낡음] {s} → index" if s else "신선도: OK (애셋은 index 로만 갱신된다)")
+    print(f"[stale] {s} → index" if s else "신선도: OK (애셋은 index 로만 갱신된다)")
     return 0
 
 
@@ -365,7 +365,7 @@ def cmd_map(root, kind, meta, q, full):
     lines = [f"# {root.name} · {kind or '엔진 미감지'} {meta.get('version') or ''} · VCS {meta.get('vcs') or '없음'}"]
     s = stale_reason(root, kind, meta)
     if s:
-        lines.append(f"[낡음] {s}")
+        lines.append(f"[stale] {s}")
     lines.append(f"\n## 모듈 {len(mods)} ({'Build.cs' if kind == 'ue' else 'asmdef'})")
     owner = {}
     for x in syms:

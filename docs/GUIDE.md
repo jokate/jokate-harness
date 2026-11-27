@@ -204,7 +204,7 @@ python install.py --link     # 스킬을 저장소로 링크 (이 저장소를 �
 
 | 실패 | 고칠 곳 |
 |---|---|
-| 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 스킬 description 의 트리거 문구에 그 요청 꼴을 한 구절 넣는다 (2026-11-10: 한 구절로 0/4 → 4/4) |
+| 스킬이 안 불림 | 먼저 프로젝트 규칙 파일이 있는지(bootstrap). 있는데도 안 불리면 스킬 description 의 트리거 문구에 그 요청 문구를 한 구절 넣는다 (2026-11-10: 한 구절로 0/4 → 4/4) |
 | 스킬은 불렸는데 절차를 건너뜀 | SKILL.md 본문 (references 는 안 읽힐 수 있다 — 핵심 규칙은 본문으로) |
 | 에디터 MCP 로 같은 함정 두 번 | 프로젝트 `.claude/mcp_guards.json` 규칙 한 줄 — 실패는 훅이 `.claude/mcp_guards.pending.json` 에 후보로 모은다 |
 | 조회 도구가 틀린 좌표·누락 | 웹뷰 검증 탭(또는 `cindex.py eval`)으로 먼저 잰다 → `gq.py` / `ue_q.py` / `cindex.py`, 제외 경로는 `.claude/gq.json` |
